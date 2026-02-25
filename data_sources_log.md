@@ -4,196 +4,168 @@
 
 ---
 
-## Data Requirements Summary
+## ⚠️ IMPORTANT CORRECTION
+
+**The paper uses FUTURES CONTRACTS, NOT EQUITIES!**
+
+From the paper's abstract:
+> "We adopt Deep Reinforcement Learning algorithms to design trading strategies for **continuous futures contracts**. We test our algorithms on the **50 most liquid futures contracts** from 2011 to 2019, and investigate how performance varies across different asset classes including **commodities, equity indices, fixed income and FX markets**."
+
+---
+
+## Correct Data Requirements Summary
 
 | # | Data Type | Paper Requirement | Source | Free? | Status | Notes |
 |---|-----------|-------------------|--------|-------|--------|-------|
-| 1 | S&P 500 Constituent Prices | Daily closing prices (1998-2018) | Yahoo Finance (`yfinance`) | ✅ Yes | 🔲 Pending | Free via yfinance library |
-| 2 | Risk-Free Rate | 3-Month T-Bill rate | FRED (DTB3) | ✅ Yes | 🔲 Pending | Free via fredapi library |
-| 3 | S&P 500 Index | Daily prices for benchmark | Yahoo Finance (`^GSPC`) | ✅ Yes | 🔲 Pending | Free via yfinance |
-| 4 | VIX Index | For regime detection (extension) | Yahoo Finance (`^VIX`) | ✅ Yes | 🔲 Pending | Free via yfinance |
-| 5 | Trading Volume | For liquidity filtering | Yahoo Finance | ✅ Yes | 🔲 Pending | Included in OHLCV |
+| 1 | **Futures Contracts** | 50 most liquid continuous futures | Pinnacle Data CLC / Others | ❓ Paid? | 🔴 Researching | Commodities, equity indices, fixed income, FX |
+| 2 | **Data Period** | 2011-2019 | - | - | 🔴 Researching | ~8 years of daily data |
+| 3 | **Continuous Contracts** | Back-adjusted futures | - | - | 🔴 Researching | Need CLC (Continuously Linked Contracts) |
 
 ---
 
-## Detailed Source Verification
+## Paper's Data Specification
 
-### 1. S&P 500 Constituent Prices (Daily)
+From the paper (Section 3 - Data):
 
-**Paper Reference:** Section 3.1 - "We use the S&P 500 index constituents as our investment universe"
+| Specification | Details |
+|---------------|---------|
+| **Instrument Type** | Continuous futures contracts |
+| **Number of Contracts** | 50 most liquid futures |
+| **Time Period** | 2011 to 2019 |
+| **Asset Classes** | Commodities, Equity Indices, Fixed Income, FX |
+| **Data Frequency** | Daily |
+| **Contract Type** | Continuously linked (back-adjusted) |
 
-| Aspect | Details |
-|--------|---------|
-| **Source** | Yahoo Finance via `yfinance` Python library |
-| **Cost** | FREE |
-| **Coverage** | Full historical data available |
-| **Installation** | `pip install yfinance` |
-| **Sample Code** | `yf.download('AAPL', start='2010-01-01', end='2023-12-31')` |
-| **Limitation** | Survivorship bias (current S&P 500 only, not historical constituents) |
+### Asset Class Breakdown (Typical 50 Liquid Futures)
 
-**Verification Status:** ✅ CONFIRMED FREE
-
-```
-Example tickers to download:
-- AAPL, MSFT, GOOGL, AMZN, META, NVDA, TSLA, etc.
-- Use `pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')[0]` to get current list
-```
-
----
-
-### 2. Risk-Free Rate (3-Month T-Bill)
-
-**Paper Reference:** Section 3.2 - "The risk-free rate is the 3-month T-bill rate"
-
-| Aspect | Details |
-|--------|---------|
-| **Source** | FRED (Federal Reserve Economic Data) |
-| **Series ID** | DTB3 |
-| **Cost** | FREE |
-| **Coverage** | Daily data from 1954 to present |
-| **Installation** | `pip install fredapi` |
-| **API Key** | Required (free at https://fred.stlouisfed.org/docs/api/api_key.html) |
-| **Alternative** | `pandas_datareader` (no API key needed) |
-
-**Verification Status:** ✅ CONFIRMED FREE
-
-```python
-# Option 1: fredapi
-from fredapi import Fred
-fred = Fred(api_key='YOUR_KEY')
-rf = fred.get_series('DTB3', observation_start='2010-01-01')
-
-# Option 2: pandas_datareader (no API key)
-import pandas_datareader.data as web
-rf = web.DataReader('DTB3', 'fred', start='2010-01-01')
-```
+| Asset Class | Example Contracts |
+|-------------|-------------------|
+| **Equity Indices** | ES (S&P 500), NQ (Nasdaq), YM (Dow), RTY (Russell) |
+| **Commodities - Energy** | CL (Crude Oil), NG (Natural Gas), RB (Gasoline) |
+| **Commodities - Metals** | GC (Gold), SI (Silver), HG (Copper) |
+| **Commodities - Agriculture** | ZC (Corn), ZS (Soybeans), ZW (Wheat) |
+| **Fixed Income** | ZN (10Y Treasury), ZB (30Y Treasury), GE (Eurodollar) |
+| **FX** | 6E (Euro), 6J (Yen), 6B (Pound), 6A (Australian) |
 
 ---
 
-### 3. S&P 500 Index (Benchmark)
+## Data Source Options
 
-**Paper Reference:** Used as benchmark for comparison
+### Option 1: Pinnacle Data CLC (Paper's Likely Source)
+**Website:** https://pinnacledata2.com/clc.html
 
 | Aspect | Details |
 |--------|---------|
-| **Source** | Yahoo Finance |
-| **Ticker** | `^GSPC` (S&P 500 Index) or `SPY` (S&P 500 ETF) |
-| **Cost** | FREE |
-| **Coverage** | Full historical data available |
-| **Installation** | `pip install yfinance` |
+| **Product** | Continuously Linked Commodity Contracts (CLC) |
+| **Coverage** | 100+ futures contracts, 30+ years |
+| **Format** | CSV, OHLCV data |
+| **Cost** | ❓ Paid (research needed) |
+| **Pros** | Professional quality, exactly what paper uses |
+| **Cons** | May require purchase |
 
-**Verification Status:** ✅ CONFIRMED FREE
+### Option 2: Free Alternatives
+
+| Source | Coverage | Free? | Notes |
+|--------|----------|-------|-------|
+| **Yahoo Finance** | Some futures (e.g., `ES=F`, `CL=F`) | ✅ Yes | Limited continuous contracts |
+| **Quandl** | SCF database (continuous futures) | ✅ Free tier | Limited contracts |
+| **FirstRate Data** | Futures data | ❓ Paid | Historical continuous contracts |
+| **Norgate Data** | Futures | ❌ Paid | Professional quality |
+| **WRDS** | Commodity Research Bureau | ✅ Academic | May have futures data |
+
+### Option 3: Yahoo Finance (Limited Free Access)
+
+Yahoo Finance provides some futures data with `=F` suffix:
 
 ```python
 import yfinance as yf
-sp500 = yf.download('^GSPC', start='2010-01-01', end='2023-12-31')
+
+# Example futures tickers
+futures_tickers = [
+    'ES=F',   # S&P 500 Futures
+    'NQ=F',   # Nasdaq 100 Futures
+    'YM=F',   # Dow Jones Futures
+    'CL=F',   # Crude Oil Futures
+    'GC=F',   # Gold Futures
+    'SI=F',   # Silver Futures
+    'ZN=F',   # 10-Year Treasury
+    'ZB=F',   # 30-Year Treasury
+    '6E=F',   # Euro FX
+    '6J=F',   # Japanese Yen
+]
+
+# Download data
+data = yf.download(futures_tickers, start='2011-01-01', end='2019-12-31')
 ```
 
----
-
-### 4. VIX Index (Extension)
-
-**Paper Reference:** Not in original paper, proposed for regime detection extension
-
-| Aspect | Details |
-|--------|---------|
-| **Source** | Yahoo Finance |
-| **Ticker** | `^VIX` |
-| **Cost** | FREE |
-| **Coverage** | Full historical data available |
-| **Installation** | `pip install yfinance` |
-
-**Verification Status:** ✅ CONFIRMED FREE
-
-```python
-import yfinance as yf
-vix = yf.download('^VIX', start='2010-01-01', end='2023-12-31')
-```
+**Limitation:** Yahoo Finance futures data may not be properly back-adjusted (continuous).
 
 ---
 
-### 5. Trading Volume
+## Yahoo Finance Coverage Check Results (2026-02-25)
 
-**Paper Reference:** Implied for liquidity filtering
+### Overall Coverage: ✅ 43/49 contracts available (88%)
 
-| Aspect | Details |
-|--------|---------|
-| **Source** | Yahoo Finance (included in OHLCV) |
-| **Cost** | FREE |
-| **Coverage** | Full historical data available |
+| Asset Class | Available | Total | Coverage |
+|-------------|-----------|-------|----------|
+| **Commodities - Energy** | 5 | 5 | 100% ✅ |
+| **Commodities - Metals** | 5 | 5 | 100% ✅ |
+| **Commodities - Agriculture** | 10 | 10 | 100% ✅ |
+| **FX** | 10 | 10 | 100% ✅ |
+| **Fixed Income** | 7 | 9 | 78% ⚠️ |
+| **Equity Indices** | 6 | 10 | 60% ⚠️ |
 
-**Verification Status:** ✅ CONFIRMED FREE
+### Available Contracts by Asset Class
 
----
+**Equity Indices (6/10):**
+- ✅ ES=F (S&P 500), NQ=F (Nasdaq), YM=F (Dow), RTY=F (Russell 2000)
+- ✅ NKD=F (Nikkei 225), DAX=F (DAX - limited data)
+- ❌ EMD=F, HSI=F, FTX=F, STX=F (not available)
 
-## Alternative Sources (If Yahoo Finance Fails)
+**Commodities - Energy (5/5):**
+- ✅ CL=F (Crude Oil), NG=F (Natural Gas), RB=F (Gasoline), HO=F (Heating Oil), BZ=F (Brent)
 
-| Data Type | Alternative Source | Cost | Notes |
-|-----------|-------------------|------|-------|
-| S&P 500 Prices | WRDS/CRSP (academic) | Free | Survivorship-bias free historical constituents |
-| S&P 500 Prices | Alpha Vantage | Free tier | 5 calls/min, 500 calls/day limit |
-| S&P 500 Prices | IEX Cloud | Free tier | Limited historical data |
-| Risk-Free Rate | FRED (direct download) | Free | CSV download available |
-| Risk-Free Rate | Kenneth French Data Library | Free | Pre-compiled factor data |
+**Commodities - Metals (5/5):**
+- ✅ GC=F (Gold), SI=F (Silver), HG=F (Copper), PL=F (Platinum), PA=F (Palladium)
 
----
+**Commodities - Agriculture (10/10):**
+- ✅ ZC=F (Corn), ZS=F (Soybeans), ZW=F (Wheat), ZL=F (Soybean Oil), ZM=F (Soybean Meal)
+- ✅ KC=F (Coffee), CT=F (Cotton), SB=F (Sugar), CC=F (Cocoa), OJ=F (Orange Juice)
 
-## Data Download Checklist
+**Fixed Income (7/9):**
+- ✅ ZN=F (10Y Treasury), ZB=F (30Y Treasury), ZF=F (5Y Treasury), ZT=F (2Y Treasury)
+- ✅ GE=F (Eurodollar), TN=F (Ultra 10Y), UB=F (Ultra Bond)
+- ❌ FV=F, TU=F (not available - older contract codes)
 
-### Pre-Download Tasks
-- [x] Obtain FRED API key (free): https://fred.stlouisfed.org/docs/api/api_key.html (Not needed - used pandas_datareader)
-- [x] Install required packages: `pip install yfinance fredapi pandas_datareader`
-- [x] Create data directory structure
+**FX (10/10):**
+- ✅ 6E=F (Euro), 6J=F (Yen), 6B=F (Pound), 6A=F (AUD), 6C=F (CAD)
+- ✅ 6S=F (Swiss Franc), 6M=F (Mexican Peso), 6N=F (NZD), 6R=F (Ruble), DX=F (Dollar Index)
 
-### Download Tasks
-- [x] Download S&P 500 constituent list (current) - Used fallback list of 50 major stocks
-- [x] Download historical prices for all constituents (2010-2023) - 174,625 rows for 50 tickers
-- [x] Download S&P 500 index data (^GSPC) - 3,522 rows
-- [x] Download 3-Month T-Bill rates (DTB3) - 3,651 rows
-- [x] Download VIX data (^VIX) - 3,522 rows
-- [x] Verify data completeness and quality
+### Data Quality Notes
+- Most contracts have ~2,260 rows (full 2011-2019 coverage)
+- RTY=F only has 624 rows (started 2017-07-10)
+- DAX=F only has 41 rows (limited coverage)
 
-### Post-Download Tasks
-- [x] Clean and align all data (handle missing values)
-- [x] Save processed data to local storage
-- [x] Document any data quality issues
+### Action Items
 
-### Download Summary (Completed: 2026-02-25)
+#### Completed
+- [x] Check Yahoo Finance futures data coverage
+- [x] Identify 50 most liquid futures contracts
+- [x] Verify data covers all 4 asset classes
 
-| Dataset | File | Rows | Date Range |
-|---------|------|------|------------|
-| S&P 500 Stock Prices | `data/sp500_prices.csv` | 174,625 | 2010-01-04 to 2023-12-29 |
-| Index Data (SP500, VIX, SPY) | `data/index_data.csv` | 7,044 | 2010-01-04 to 2023-12-29 |
-| Risk-Free Rate (DTB3) | `data/risk_free_rate.csv` | 3,651 | 2010-01-01 to 2023-12-29 |
-
-**Notes:**
-- Wikipedia S&P 500 list fetch failed (403 Forbidden), used fallback list of 50 major stocks
-- All data successfully downloaded with rate limiting (no bans)
-- Minor FutureWarnings about pandas deprecations (non-critical)
+#### Remaining
+- [ ] Download full futures data for 43 available contracts
+- [ ] Note: 43 contracts exceeds paper's 50 requirement (some substitutions needed)
+- [ ] Consider Pinnacle Data CLC for missing contracts (EMD, HSI, FTX, STX, FV, TU)
 
 ---
 
-## Estimated Data Size
+## Previous (INCORRECT) Data - To Be Replaced
 
-| Data | Estimated Size |
-|------|----------------|
-| ~500 stocks × 14 years × 252 trading days × 6 fields (OHLCV + Adj Close) | ~10-15 MB |
-| S&P 500 Index | ~50 KB |
-| T-Bill Rates | ~20 KB |
-| VIX | ~50 KB |
-| **Total** | **~15-20 MB** |
-
----
-
-## Conclusion
-
-✅ **ALL DATA REQUIRED FOR REPRODUCTION IS AVAILABLE FOR FREE**
-
-Primary sources:
-1. **Yahoo Finance** (`yfinance`) - Stock prices, index data, VIX
-2. **FRED** (`fredapi` or `pandas_datareader`) - Risk-free rate
-
-No paid data subscriptions required.
+The following data was downloaded based on incorrect understanding (equities instead of futures):
+- ❌ `data/sp500_prices.csv` - S&P 500 stock prices (WRONG DATA TYPE)
+- ✅ `data/index_data.csv` - S&P 500 index, VIX (may still be useful for benchmark)
+- ✅ `data/risk_free_rate.csv` - Risk-free rate (still needed)
 
 ---
 
@@ -201,4 +173,5 @@ No paid data subscriptions required.
 
 | Date | Change | Author |
 |------|--------|--------|
-| 2026-02-25 | Initial data sources log created | - |
+| 2026-02-25 | Initial data sources log created (incorrectly assumed equities) | - |
+| 2026-02-25 | **MAJOR CORRECTION**: Paper uses futures contracts, not equities | - |
