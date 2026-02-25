@@ -81,17 +81,42 @@ Deep Q-learning Networks (DQN) [34, 49], Policy Gradients (PG) [52] and Advantag
 
 ### Data
 
+> **IMPORTANT:** The paper uses **continuous futures contracts**, NOT equities!
+
 | Data Type | Source | Period | Paper Reference |
 |-----------|--------|--------|-----------------|
-| S&P 500 constituent prices | Yahoo Finance | 2010-2023 | Section 3.1: "S&P 500 index constituents" |
-| Risk-free rate (3M T-Bill) | FRED (DTB3) | 2010-2023 | Section 3.2: "3-month T-bill rate" |
-| S&P 500 Index (benchmark) | Yahoo Finance (^GSPC) | 2010-2023 | Benchmark comparison |
-| VIX (regime detection) | Yahoo Finance (^VIX) | 2010-2023 | Extension: market regime |
+| **50 Liquid Futures Contracts** | Pinnacle Data CLC / Yahoo Finance | 2011-2019 | "50 most liquid futures contracts from 2011 to 2019" |
+| **Asset Classes:** | | | "Commodities, equity indices, fixed income and FX markets" |
+| - Equity Index Futures | ES, NQ, YM, RTY | 2011-2019 | S&P 500, Nasdaq, Dow, Russell |
+| - Commodity Futures | CL, GC, SI, NG, ZC, ZS | 2011-2019 | Crude, Gold, Silver, Natural Gas, Corn, Soybeans |
+| - Fixed Income Futures | ZN, ZB, GE | 2011-2019 | 10Y, 30Y Treasury, Eurodollar |
+| - FX Futures | 6E, 6J, 6B, 6A | 2011-2019 | Euro, Yen, Pound, AUD |
+
+**Yahoo Finance Coverage Check (2026-02-25): ✅ 43/49 contracts available (88%)**
+
+| Asset Class | Available | Coverage |
+|-------------|-----------|----------|
+| Commodities - Energy | 5/5 | 100% ✅ |
+| Commodities - Metals | 5/5 | 100% ✅ |
+| Commodities - Agriculture | 10/10 | 100% ✅ |
+| FX | 10/10 | 100% ✅ |
+| Fixed Income | 7/9 | 78% ⚠️ |
+| Equity Indices | 6/10 | 60% ⚠️ |
+
+**Available Tickers (43 contracts):**
+- **Equity Indices:** ES=F, NQ=F, YM=F, RTY=F, NKD=F, DAX=F
+- **Energy:** CL=F, NG=F, RB=F, HO=F, BZ=F
+- **Metals:** GC=F, SI=F, HG=F, PL=F, PA=F
+- **Agriculture:** ZC=F, ZS=F, ZW=F, ZL=F, ZM=F, KC=F, CT=F, SB=F, CC=F, OJ=F
+- **Fixed Income:** ZN=F, ZB=F, ZF=F, ZT=F, GE=F, TN=F, UB=F
+- **FX:** 6E=F, 6J=F, 6B=F, 6A=F, 6C=F, 6S=F, 6M=F, 6N=F, 6R=F, DX=F
+
+**Not Available (6 contracts):** EMD=F, HSI=F, FTX=F, STX=F, FV=F, TU=F
 
 **Data Splits (per paper):**
-- Training: ~60-70% of data
-- Validation: ~15-20% of data
-- Test: ~15-20% of data (out-of-sample)
+- Training: 2011-2017 (~6 years)
+- Validation: 2017-2018 (~1 year)
+- Test: 2018-2019 (~1 year, out-of-sample)
 
 ### Methodology (Reproduction Plan)
 
