@@ -51,15 +51,14 @@ This paper represents a massive paradigm shift from the previous two papers.
   - ✅ Download risk-free rate (DTB3) → `data/risk_free_rate.csv` (still needed)
   - ✅ Download VIX data → `data/index_data.csv` (still useful)
   
-  **Yahoo Finance Coverage Summary:**
+  **Yahoo Finance Coverage (Paper's Exact 50 Contracts from Appendix A):**
   | Asset Class | Available | Coverage |
   |-------------|-----------|----------|
-  | Commodities - Energy | 5/5 | 100% ✅ |
-  | Commodities - Metals | 5/5 | 100% ✅ |
-  | Commodities - Agriculture | 10/10 | 100% ✅ |
-  | FX | 10/10 | 100% ✅ |
-  | Fixed Income | 7/9 | 78% ⚠️ |
-  | Equity Indices | 6/10 | 60% ⚠️ |
+  | Commodities | 22/25 | 88% ✅ |
+  | Forex | 9/9 | 100% ✅ |
+  | Fixed Income | 3/5 | 60% ⚠️ |
+  | Equity Indexes | 6/11 | 55% ⚠️ |
+  | **Total** | **40/50** | **80%** |
 
 ### Phase 2: Post-Mid Term (After 3/10/2026)
 

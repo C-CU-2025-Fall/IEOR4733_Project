@@ -92,26 +92,25 @@ Deep Q-learning Networks (DQN) [34, 49], Policy Gradients (PG) [52] and Advantag
 | - Fixed Income Futures | ZN, ZB, GE | 2011-2019 | 10Y, 30Y Treasury, Eurodollar |
 | - FX Futures | 6E, 6J, 6B, 6A | 2011-2019 | Euro, Yen, Pound, AUD |
 
-**Yahoo Finance Coverage Check (2026-02-25): ✅ 43/49 contracts available (88%)**
+**Yahoo Finance Coverage (Paper's Exact 50 Contracts from Appendix A): ✅ 40/50 (80%)**
 
-| Asset Class | Available | Coverage |
-|-------------|-----------|----------|
-| Commodities - Energy | 5/5 | 100% ✅ |
-| Commodities - Metals | 5/5 | 100% ✅ |
-| Commodities - Agriculture | 10/10 | 100% ✅ |
-| FX | 10/10 | 100% ✅ |
-| Fixed Income | 7/9 | 78% ⚠️ |
-| Equity Indices | 6/10 | 60% ⚠️ |
+| Asset Class | Available | No Yahoo Mapping | Coverage |
+|-------------|-----------|------------------|----------|
+| **Commodities** | 22/25 | 3 | 88% ✅ |
+| **Forex** | 9/9 | 0 | 100% ✅ |
+| **Fixed Income** | 3/5 | 2 | 60% ⚠️ |
+| **Equity Indexes** | 6/11 | 5 | 55% ⚠️ |
 
-**Available Tickers (43 contracts):**
-- **Equity Indices:** ES=F, NQ=F, YM=F, RTY=F, NKD=F, DAX=F
-- **Energy:** CL=F, NG=F, RB=F, HO=F, BZ=F
-- **Metals:** GC=F, SI=F, HG=F, PL=F, PA=F
-- **Agriculture:** ZC=F, ZS=F, ZW=F, ZL=F, ZM=F, KC=F, CT=F, SB=F, CC=F, OJ=F
-- **Fixed Income:** ZN=F, ZB=F, ZF=F, ZT=F, GE=F, TN=F, UB=F
-- **FX:** 6E=F, 6J=F, 6B=F, 6A=F, 6C=F, 6S=F, 6M=F, 6N=F, 6R=F, DX=F
+**Available on Yahoo Finance (40 contracts):**
+- **Commodities:** CC=F, OJ=F, KC=F, LBS=F, ZR=F, SB=F, PA=F, ZC=F, GF=F, GC=F, HO=F, SI=F, HG=F, ZL=F, NG=F, ZO=F, PL=F, LE=F, CL=F, ZW=F, HE=F
+- **Equity Indexes:** NQ=F, RTY=F, ES=F, YM=F, NKD=F
+- **Fixed Income:** ZF=F, ZN=F, ZB=F
+- **FX:** 6A=F, 6B=F, 6C=F, DX=F, 6E=F, 6J=F, 6M=F, NKD=F, 6S=F
 
-**Not Available (6 contracts):** EMD=F, HSI=F, FTX=F, STX=F, FV=F, TU=F
+**Not Available on Yahoo (10 contracts):**
+- MILK III, GOLDMAN SAKS C.I., WHEAT KC (Commodities)
+- CAC40, FTSE 100, S&P 400 MINI, EUROSTOXX50, STOXX 50 (Equity Indexes)
+- EURO BOND BUND, EURO BOBL (Fixed Income - German bonds)
 
 **Data Splits (per paper):**
 - Training: 2011-2017 (~6 years)
