@@ -41,10 +41,12 @@ This paper represents a massive paradigm shift from the previous two papers.
   - [ ] Configure GPU access (Colab Pro or cloud GPU)
   - [ ] Set up version control (Git repository)
 
-- [ ] **Data Sourcing**
-  - [ ] Identify data sources (daily/minute-level OHLCV data)
-  - [ ] Download or access required datasets
-  - [ ] Perform initial data exploration
+- [x] **Data Sourcing** (see [data_sources_log.md](data_sources_log.md) for details)
+  - [x] Install packages: `yfinance`, `fredapi`, `pandas_datareader`
+  - [x] Download S&P 500 constituent prices → `data/sp500_prices.csv` (174,625 rows, 50 tickers)
+  - [x] Download risk-free rate (DTB3) → `data/risk_free_rate.csv` (3,651 rows)
+  - [x] Download S&P 500 index and VIX data → `data/index_data.csv` (7,044 rows)
+  - [x] Verify data completeness and quality
 
 ### Phase 2: Post-Mid Term (After 3/10/2026)
 
