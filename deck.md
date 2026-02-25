@@ -30,6 +30,14 @@ The paper addresses portfolio optimization using three DRL algorithms:
 | **PPO** (Proximal Policy Optimization) | Policy Gradient | Stable updates with clipped objective |
 | **A2C** (Advantage Actor-Critic) | Actor-Critic | Parallel training, synchronous updates |
 
+Deep Q-learning Networks (DQN) [34, 49], Policy Gradients (PG) [52] and Advantage Actor-Critic (A2C) [33]
+
+原文文献综述
+| **Fundamental analysis** | CAN-SLIM [43] compare current price with expectation to see if it is undervalued or overvalued | timing of enter and exit of trades is not specified|
+| **Technical analysis** | Combination of indicators (e.g. Relative Strength Index (RSI), Bollinger Bands) | weak predictability due to lack of analysis of market|
+| **Algorithum Trading** | Time series momentum strategies (baseline) | weak predictability due to market move sideways|
+| **RL for Finance** | DQN (critic-approach,discrete,a state-action value function, Q, is constructed to represent how good a particular action is in a state); offline batch gradient ascent methods (actor-approach,continuous,e.g. max profits or Sharpe ratio)| suffers from large action spaces; NA|
+
 ### Paper's Methodology Framework
 
 ```
