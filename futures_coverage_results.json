@@ -1,0 +1,353 @@
+{
+  "available": [
+    "ES=F",
+    "NQ=F",
+    "YM=F",
+    "RTY=F",
+    "NKD=F",
+    "DAX=F",
+    "CL=F",
+    "NG=F",
+    "RB=F",
+    "HO=F",
+    "BZ=F",
+    "GC=F",
+    "SI=F",
+    "HG=F",
+    "PL=F",
+    "PA=F",
+    "ZC=F",
+    "ZS=F",
+    "ZW=F",
+    "ZL=F",
+    "ZM=F",
+    "KC=F",
+    "CT=F",
+    "SB=F",
+    "CC=F",
+    "OJ=F",
+    "ZN=F",
+    "ZB=F",
+    "ZF=F",
+    "ZT=F",
+    "GE=F",
+    "TN=F",
+    "UB=F",
+    "6E=F",
+    "6J=F",
+    "6B=F",
+    "6A=F",
+    "6C=F",
+    "6S=F",
+    "6M=F",
+    "6N=F",
+    "6R=F",
+    "DX=F"
+  ],
+  "not_available": [
+    "EMD=F",
+    "HSI=F",
+    "FTX=F",
+    "STX=F",
+    "FV=F",
+    "TU=F"
+  ],
+  "by_asset_class": {
+    "Equity Indices": {
+      "available": [
+        {
+          "ticker": "ES=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "NQ=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "YM=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "RTY=F",
+          "rows": 624,
+          "start": "2017-07-10",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "NKD=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "DAX=F",
+          "rows": 41,
+          "start": "2014-04-14",
+          "end": "2019-11-05"
+        }
+      ],
+      "not_available": [
+        "EMD=F",
+        "HSI=F",
+        "FTX=F",
+        "STX=F"
+      ]
+    },
+    "Commodities - Energy": {
+      "available": [
+        {
+          "ticker": "CL=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "NG=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "RB=F",
+          "rows": 2260,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "HO=F",
+          "rows": 2260,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "BZ=F",
+          "rows": 2231,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        }
+      ],
+      "not_available": []
+    },
+    "Commodities - Metals": {
+      "available": [
+        {
+          "ticker": "GC=F",
+          "rows": 2260,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "SI=F",
+          "rows": 2260,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "HG=F",
+          "rows": 2260,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "PL=F",
+          "rows": 2259,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "PA=F",
+          "rows": 2259,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        }
+      ],
+      "not_available": []
+    },
+    "Commodities - Agriculture": {
+      "available": [
+        {
+          "ticker": "ZC=F",
+          "rows": 2259,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "ZS=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "ZW=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "ZL=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "ZM=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "KC=F",
+          "rows": 2259,
+          "start": "2011-01-04",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "CT=F",
+          "rows": 2260,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "SB=F",
+          "rows": 2260,
+          "start": "2011-01-04",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "CC=F",
+          "rows": 2260,
+          "start": "2011-01-04",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "OJ=F",
+          "rows": 2260,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        }
+      ],
+      "not_available": []
+    },
+    "Fixed Income": {
+      "available": [
+        {
+          "ticker": "ZN=F",
+          "rows": 2259,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "ZB=F",
+          "rows": 2259,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "ZF=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "ZT=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "GE=F",
+          "rows": 2259,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "TN=F",
+          "rows": 1297,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "UB=F",
+          "rows": 2259,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        }
+      ],
+      "not_available": [
+        "FV=F",
+        "TU=F"
+      ]
+    },
+    "FX": {
+      "available": [
+        {
+          "ticker": "6E=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "6J=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "6B=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "6A=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "6C=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "6S=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "6M=F",
+          "rows": 2259,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "6N=F",
+          "rows": 2261,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "6R=F",
+          "rows": 2256,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        },
+        {
+          "ticker": "DX=F",
+          "rows": 2259,
+          "start": "2011-01-03",
+          "end": "2019-12-30"
+        }
+      ],
+      "not_available": []
+    }
+  }
+}

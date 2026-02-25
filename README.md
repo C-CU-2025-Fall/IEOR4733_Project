@@ -41,12 +41,25 @@ This paper represents a massive paradigm shift from the previous two papers.
   - [ ] Configure GPU access (Colab Pro or cloud GPU)
   - [ ] Set up version control (Git repository)
 
-- [x] **Data Sourcing** (see [data_sources_log.md](data_sources_log.md) for details)
+- [ ] **Data Sourcing** (see [data_sources_log.md](data_sources_log.md) for details)
+  > ⚠️ **CORRECTION**: Paper uses **futures contracts**, not equities!
   - [x] Install packages: `yfinance`, `fredapi`, `pandas_datareader`
-  - [x] Download S&P 500 constituent prices → `data/sp500_prices.csv` (174,625 rows, 50 tickers)
-  - [x] Download risk-free rate (DTB3) → `data/risk_free_rate.csv` (3,651 rows)
-  - [x] Download S&P 500 index and VIX data → `data/index_data.csv` (7,044 rows)
-  - [x] Verify data completeness and quality
+  - [x] Check Yahoo Finance futures coverage → **43/49 contracts available (88%)**
+  - [x] Verify data covers: commodities ✅, equity indices ⚠️, fixed income ⚠️, FX ✅
+  - [ ] Download 43 available futures contracts (2011-2019)
+  - ❌ ~~Download S&P 500 constituent prices~~ (WRONG DATA TYPE)
+  - ✅ Download risk-free rate (DTB3) → `data/risk_free_rate.csv` (still needed)
+  - ✅ Download VIX data → `data/index_data.csv` (still useful)
+  
+  **Yahoo Finance Coverage Summary:**
+  | Asset Class | Available | Coverage |
+  |-------------|-----------|----------|
+  | Commodities - Energy | 5/5 | 100% ✅ |
+  | Commodities - Metals | 5/5 | 100% ✅ |
+  | Commodities - Agriculture | 10/10 | 100% ✅ |
+  | FX | 10/10 | 100% ✅ |
+  | Fixed Income | 7/9 | 78% ⚠️ |
+  | Equity Indices | 6/10 | 60% ⚠️ |
 
 ### Phase 2: Post-Mid Term (After 3/10/2026)
 
