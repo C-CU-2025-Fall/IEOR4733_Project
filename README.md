@@ -36,20 +36,21 @@ This paper represents a massive paradigm shift from the previous two papers.
   - [ ] Slide 3: Strategy Overview (Data, Methodology, Evaluation Metrics)
   - [ ] Slide 4: Identified Weaknesses & Tentative Timeline
 
-- [ ] **Environment Setup**
-  - [ ] Set up development environment (Python, required libraries)
-  - [ ] Configure GPU access (Colab Pro or cloud GPU)
-  - [ ] Set up version control (Git repository)
+- [x] **Environment Setup**
+  - [x] Set up development environment (Python, required libraries)
+  - [ ] Configure GPU access (Colab Pro or cloud GPU) - *Optional for full DRL*
+  - [x] Set up version control (Git repository)
 
-- [ ] **Data Sourcing** (see [data_sources_log.md](data_sources_log.md) for details)
+- [x] **Data Sourcing** (see [data_sources_log.md](data_sources_log.md) for details)
   > ⚠️ **CORRECTION**: Paper uses **futures contracts**, not equities!
   - [x] Install packages: `yfinance`, `fredapi`, `pandas_datareader`
-  - [x] Check Yahoo Finance futures coverage → **43/49 contracts available (88%)**
+  - [x] Check Yahoo Finance futures coverage → **40/50 contracts available (80%)**
   - [x] Verify data covers: commodities ✅, equity indices ⚠️, fixed income ⚠️, FX ✅
-  - [ ] Download 43 available futures contracts (2011-2019)
+  - [x] Download 37 unique futures contracts (2011-2019) → `data/futures/`
   - ❌ ~~Download S&P 500 constituent prices~~ (WRONG DATA TYPE)
   - ✅ Download risk-free rate (DTB3) → `data/risk_free_rate.csv` (still needed)
   - ✅ Download VIX data → `data/index_data.csv` (still useful)
+  - [x] Run pilot test with baseline strategies + simple DQN → `pilot_test.py`
   
   **Yahoo Finance Coverage (Paper's Exact 50 Contracts from Appendix A):**
   | Asset Class | Available | Coverage |
