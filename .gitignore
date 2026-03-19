@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Data files (too large)
+data/futures/
+data/futures_processed/
+models/
+
+# Logs
+*.log
+download_log.txt
+
+# Old results
+drl_results_*.csv
+drl_results_*.json
+drl_quick_results.csv
+drl_results_gpu.csv
+pilot_test_results.csv
+results_aligned_*.csv
+results_lstm_*.csv
+
+# Images (optional - can include if small)
+# *.png
