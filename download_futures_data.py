@@ -3,7 +3,8 @@
 Download Futures Data for IEOR4733 Project
 Paper: "Deep Reinforcement Learning for Trading" by Zhang, Zohren, and Roberts (2019)
 
-Downloads the 40 available futures contracts from Yahoo Finance with rate limiting.
+Downloads 45 available futures contracts from Yahoo Finance with rate limiting.
+Updated to use futures_coverage_results.json format.
 """
 
 import os
@@ -27,9 +28,11 @@ END_DATE = '2019-12-31'
 DATA_DIR = 'data/futures'
 os.makedirs(DATA_DIR, exist_ok=True)
 
-# Load coverage results to get available tickers
-with open('futures_coverage_paper_exact.json', 'r') as f:
-    coverage_results = json.load(f)
+# Additional contracts found during quality check (not in original JSON)
+ADDITIONAL_CONTRACTS = [
+    {"ticker": "KE=F", "name": "Kansas Wheat", "asset_class": "Commodities - Agriculture", "rows": 2261},
+    {"ticker": "DC=F", "name": "Class III Milk", "asset_class": "Commodities - Agriculture", "rows": 2243},
+]
 
 def random_delay(min_sec=None, max_sec=None):
     """Add random delay to avoid getting banned."""
@@ -41,15 +44,24 @@ def random_delay(min_sec=None, max_sec=None):
 
 def get_available_tickers():
     """Extract list of available Yahoo tickers from coverage results."""
+    # Load coverage results
+    with open('futures_coverage_results.json', 'r') as f:
+        coverage_results = json.load(f)
+    
     tickers = []
     for asset_class, data in coverage_results['by_asset_class'].items():
         for item in data['available']:
             tickers.append({
-                'yahoo': item['yahoo'],
-                'pinnacle': item['pinnacle'],
-                'name': item['name'],
-                'asset_class': asset_class
+                'ticker': item['ticker'],
+                'name': item.get('name', item['ticker']),
+                'asset_class': asset_class,
+                'rows': item.get('rows', 0)
             })
+    
+    # Add additional contracts
+    for item in ADDITIONAL_CONTRACTS:
+        tickers.append(item)
+    
     return tickers
 
 def download_futures_data():
@@ -66,15 +78,16 @@ def download_futures_data():
     
     # Check for already downloaded files (resume capability)
     already_downloaded = set()
-    for f in os.listdir(DATA_DIR):
-        if f.endswith('.csv'):
-            ticker = f.replace('.csv', '')
-            already_downloaded.add(ticker)
+    if os.path.exists(DATA_DIR):
+        for f in os.listdir(DATA_DIR):
+            if f.endswith('.csv'):
+                ticker = f.replace('.csv', '')
+                already_downloaded.add(ticker)
     
     if already_downloaded:
         print(f"\n✅ Already downloaded: {len(already_downloaded)} contracts")
     
-    to_download = [t for t in tickers if t['yahoo'] not in already_downloaded]
+    to_download = [t for t in tickers if t['ticker'] not in already_downloaded]
     
     if not to_download:
         print("\n✅ All contracts already downloaded!")
@@ -94,30 +107,29 @@ def download_futures_data():
         print(f"\n📦 Batch {batch_num + 1}/{total_batches}")
         
         for i, ticker_info in enumerate(batch):
-            yahoo_ticker = ticker_info['yahoo']
-            pinnacle_ticker = ticker_info['pinnacle']
-            name = ticker_info['name']
+            ticker = ticker_info['ticker']
+            name = ticker_info.get('name', ticker)
             asset_class = ticker_info['asset_class']
             
-            print(f"\n  [{start_idx + i + 1}/{len(to_download)}] {yahoo_ticker} ({name}) - {asset_class}")
+            print(f"\n  [{start_idx + i + 1}/{len(to_download)}] {ticker} ({name}) - {asset_class}")
             
             try:
                 # Download data
-                df = yf.download(yahoo_ticker, start=START_DATE, end=END_DATE, 
+                df = yf.download(ticker, start=START_DATE, end=END_DATE, 
                                progress=False, auto_adjust=True)
                 
                 if df is not None and not df.empty:
                     # Save to CSV
-                    output_file = os.path.join(DATA_DIR, f"{yahoo_ticker}.csv")
+                    output_file = os.path.join(DATA_DIR, f"{ticker}.csv")
                     df.to_csv(output_file)
                     print(f"    ✅ Downloaded {len(df)} rows → {output_file}")
                 else:
                     print(f"    ❌ No data available")
-                    failed.append(yahoo_ticker)
+                    failed.append(ticker)
                     
             except Exception as e:
                 print(f"    ❌ Error: {str(e)[:50]}")
-                failed.append(yahoo_ticker)
+                failed.append(ticker)
             
             # Rate limiting between downloads
             if start_idx + i + 1 < len(to_download):
@@ -142,7 +154,7 @@ def download_futures_data():
     
     # Save manifest
     manifest = {
-        'downloaded': [t['yahoo'] for t in tickers if t['yahoo'] in [f.replace('.csv', '') for f in downloaded_files]],
+        'downloaded': [t['ticker'] for t in tickers if t['ticker'] in [f.replace('.csv', '') for f in downloaded_files]],
         'failed': failed,
         'date_range': f"{START_DATE} to {END_DATE}",
         'total_contracts': len(tickers)

@@ -1,0 +1,529 @@
+{
+  "check_date": "2026-03-19 13:06:10",
+  "date_range": "2011-01-01 to 2019-12-31",
+  "summary": {
+    "total": 44,
+    "available": 44,
+    "high_quality": 42,
+    "medium_quality": 0,
+    "low_quality": 2
+  },
+  "asset_stats": {
+    "Equity Indices": {
+      "total": 5,
+      "available": 5,
+      "avg_coverage": 85.55752212389382
+    },
+    "Commodities - Energy": {
+      "total": 5,
+      "available": 5,
+      "avg_coverage": 99.76106194690266
+    },
+    "Commodities - Metals": {
+      "total": 5,
+      "available": 5,
+      "avg_coverage": 99.98230088495575
+    },
+    "Commodities - Agriculture": {
+      "total": 12,
+      "available": 12,
+      "avg_coverage": 99.94837758112095
+    },
+    "Fixed Income": {
+      "total": 7,
+      "available": 7,
+      "avg_coverage": 93.90012642225031
+    },
+    "FX": {
+      "total": 10,
+      "available": 10,
+      "avg_coverage": 100.00442477876106
+    }
+  },
+  "details": [
+    {
+      "ticker": "ES=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "NQ=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "YM=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "RTY=F",
+      "available": true,
+      "rows": 624,
+      "start_date": "2017-07-10",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 27.61061946902655,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "NKD=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "CL=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "NG=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "RB=F",
+      "available": true,
+      "rows": 2260,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.0,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "HO=F",
+      "available": true,
+      "rows": 2260,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.0,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "BZ=F",
+      "available": true,
+      "rows": 2231,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 98.71681415929203,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "GC=F",
+      "available": true,
+      "rows": 2260,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.0,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "SI=F",
+      "available": true,
+      "rows": 2260,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.0,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "HG=F",
+      "available": true,
+      "rows": 2260,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.0,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "PL=F",
+      "available": true,
+      "rows": 2259,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 99.95575221238938,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "PA=F",
+      "available": true,
+      "rows": 2259,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 99.95575221238938,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "ZC=F",
+      "available": true,
+      "rows": 2259,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 99.95575221238938,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "ZS=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "ZW=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "ZL=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "ZM=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "KC=F",
+      "available": true,
+      "rows": 2259,
+      "start_date": "2011-01-04",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 99.95575221238938,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "CT=F",
+      "available": true,
+      "rows": 2260,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.0,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "SB=F",
+      "available": true,
+      "rows": 2260,
+      "start_date": "2011-01-04",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.0,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "CC=F",
+      "available": true,
+      "rows": 2260,
+      "start_date": "2011-01-04",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.0,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "OJ=F",
+      "available": true,
+      "rows": 2260,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.0,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "KE=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "DC=F",
+      "available": true,
+      "rows": 2243,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 99.24778761061947,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "ZN=F",
+      "available": true,
+      "rows": 2259,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 99.95575221238938,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "ZB=F",
+      "available": true,
+      "rows": 2259,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 99.95575221238938,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "ZF=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "ZT=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "GE=F",
+      "available": true,
+      "rows": 2259,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 99.95575221238938,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "TN=F",
+      "available": true,
+      "rows": 1297,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 57.389380530973455,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "UB=F",
+      "available": true,
+      "rows": 2259,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 99.95575221238938,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "6E=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "6J=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "6B=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "6A=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "6C=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "6S=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "6M=F",
+      "available": true,
+      "rows": 2259,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 99.95575221238938,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "6N=F",
+      "available": true,
+      "rows": 2261,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 100.04424778761063,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "6R=F",
+      "available": true,
+      "rows": 2256,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 99.82300884955752,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    },
+    {
+      "ticker": "DX=F",
+      "available": true,
+      "rows": 2259,
+      "start_date": "2011-01-03",
+      "end_date": "2019-12-30",
+      "missing_pct": 0.0,
+      "price_issues": [],
+      "coverage_pct": 99.95575221238938,
+      "error": "The truth value of a Series is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all()."
+    }
+  ]
+}
