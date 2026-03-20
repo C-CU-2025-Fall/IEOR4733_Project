@@ -20,8 +20,10 @@ MAX_DELAY = 4.0
 BATCH_SIZE = 10
 BATCH_DELAY = 15  # Longer delay between batches
 
-# Date range (per paper)
-START_DATE = '2011-01-01'
+# Date range - 尝试获取更早数据
+# 论文：2005-2019
+# 目标：2005-2019（如果 Yahoo Finance 有数据）
+START_DATE = '2005-01-01'
 END_DATE = '2019-12-31'
 
 # Output directory
@@ -64,7 +66,7 @@ def get_available_tickers():
     
     return tickers
 
-def download_futures_data():
+def download_futures_data(force_redownload=False):
     """Download all available futures data with rate limiting."""
     tickers = get_available_tickers()
     
@@ -74,10 +76,13 @@ def download_futures_data():
     print(f"Total contracts to download: {len(tickers)}")
     print(f"Date range: {START_DATE} to {END_DATE}")
     print(f"Output directory: {DATA_DIR}/")
+    if force_redownload:
+        print("⚠️  Force re-download mode (overwriting existing files)")
     print("="*70)
     
     # Check for already downloaded files (resume capability)
     already_downloaded = set()
+    if not force_redownload:
     if os.path.exists(DATA_DIR):
         for f in os.listdir(DATA_DIR):
             if f.endswith('.csv'):
@@ -165,4 +170,6 @@ def download_futures_data():
     print(f"\n💾 Manifest saved to {DATA_DIR}/manifest.json")
 
 if __name__ == "__main__":
-    download_futures_data()
+    import sys
+    force = '--force' in sys.argv or '-f' in sys.argv
+    download_futures_data(force_redownload=force)
