@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """
-论文对齐版本 - 修复所有关键差异
-✅ 状态空间：MACD + RSI + 60天窗口 + 多周期收益率
-✅ 奖励函数：波动率缩放
-✅ LSTM输入：60时间步
-✅ 微训练测试支持
+论文对齐训练 - 重构版本
+
+✅ 模块化设计:
+- indicators.py: 技术指标计算
+- 本文件：训练主干逻辑
+
+✅ 滚动训练机制:
+- 2005-2010 训练 → 2011 测试
+- 2011-2015 训练 → 2016-2019 测试
+
+✅ 微训练支持:
+- python3 train_paper_aligned.py --micro
 """
 
 import os
@@ -21,6 +28,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# 导入指标计算模块
+from indicators import FeatureEngineer, compute_volatility
+
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # =============================================================================
@@ -33,162 +43,45 @@ BP = 0.0020  # 20 bps
 MEMORY_SIZE = 5000
 TARGET_UPDATE = 1000
 BATCH_SIZE = 64
+VOL_TARGET = 0.10  # 10% 年化波动率目标
 
 # 训练配置
 N_EPISODES = 200
 MAX_STEPS = 500
-VOL_TARGET = 0.10  # 10% 年化波动率目标
+
+# 滚动训练配置
+# 注：数据限制 (2011-2019)，调整为可用窗口
+# 论文原始：2005-2010 训练→2011 测试，2011-2015 训练→2016-2019 测试
+ROLLING_WINDOWS = [
+    {'train_start': '2011-01-01', 'train_end': '2015-12-31', 'test_start': '2016-01-01', 'test_end': '2019-12-31'},
+    # 如需更多数据，可用全量：2011-2019
+]
 
 # =============================================================================
-# 技术指标计算 (论文第4页)
-# =============================================================================
-
-def compute_macd(prices, short_span, long_span):
-    """
-    论文公式(3): MACD指标
-    MACD_t = q_t / std(q_{t-252:t})
-    q_t = (m(S) - m(L)) / std(p_{t-63:t})
-    """
-    m_short = prices.ewm(span=short_span, adjust=False).mean()
-    m_long = prices.ewm(span=long_span, adjust=False).mean()
-    
-    std_63 = prices.rolling(window=63, min_periods=1).std()
-    q = (m_short - m_long) / std_63
-    
-    std_q = q.rolling(window=252, min_periods=1).std()
-    macd = q / std_q
-    
-    return macd.fillna(0).values
-
-def compute_rsi(prices, window=30):
-    """
-    RSI指标 - 30天回溯
-    0-100之间，<20超卖，>80超买
-    """
-    delta = prices.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
-    
-    rs = gain / (loss + 1e-10)
-    rsi = 100 - (100 / (1 + rs))
-    
-    return rsi.fillna(50).values
-
-def compute_volatility(returns, window=60):
-    """
-    60 天指数加权移动波动率
-    """
-    if isinstance(returns, np.ndarray):
-        returns = pd.Series(returns)
-    """
-    60天指数加权移动波动率
-    """
-    vol = returns.ewm(span=window, adjust=False).std().values
-    return vol
-
-def normalize_return(returns, vol, horizon=252):
-    """
-    论文：用日波动率调整到合理时间尺度
-    r_normalized = r / (vol * sqrt(horizon))
-    """
-    return returns / (vol * np.sqrt(horizon) + 1e-10)
-
-# =============================================================================
-# 状态空间 (论文第4页)
-# =============================================================================
-
-class StateBuilder:
-    """
-    构建论文要求的状态空间
-    - 60天时间窗口
-    - 多特征: 价格、收益率、MACD、RSI
-    """
-    
-    def __init__(self, window_size=60):
-        self.window_size = window_size
-        self.feature_dim = 8  # 特征数量
-        
-    def build_features(self, prices, returns, current_idx):
-        """
-        在current_idx时刻构建状态特征
-        
-        返回: (window_size, feature_dim) = (60, 8)
-        """
-        if current_idx < self.window_size:
-            # 数据不足，返回零
-            return np.zeros((self.window_size, self.feature_dim), dtype=np.float32)
-        
-        # 获取时间窗口数据
-        start_idx = current_idx - self.window_size
-        window_prices = prices[start_idx:current_idx]
-        window_returns = returns[start_idx:current_idx]
-        
-        # 转换为Series以便计算指标
-        price_series = pd.Series(window_prices)
-        return_series = pd.Series(window_returns)
-        
-        # 特征1: 归一化收盘价
-        norm_price = (window_prices - np.mean(window_prices)) / (np.std(window_prices) + 1e-10)
-        
-        # 特征2-5: 多周期收益率 (1月/2月/3月/1年)
-        ret_21 = normalize_return(return_series.values, compute_volatility(return_series.values, 60), 21)
-        ret_42 = normalize_return(return_series.values, compute_volatility(return_series.values, 60), 42)
-        ret_63 = normalize_return(return_series.values, compute_volatility(return_series.values, 60), 63)
-        ret_252 = normalize_return(return_series.values, compute_volatility(return_series.values, 60), 252)
-        
-        # 特征6: MACD (多时间尺度平均)
-        macd_8_24 = compute_macd(price_series, 8, 24)
-        macd_16_48 = compute_macd(price_series, 16, 48)
-        macd_32_96 = compute_macd(price_series, 32, 96)
-        macd_avg = (macd_8_24 + macd_16_48 + macd_32_96) / 3
-        
-        # 特征7: RSI (30天)
-        rsi = compute_rsi(price_series, 30)
-        rsi_norm = (rsi - 50) / 50  # 归一化到[-1, 1]
-        
-        # 特征8: 波动率
-        vol = compute_volatility(return_series, 60)
-        vol_norm = vol / (np.mean(vol) + 1e-10)  # 归一化
-        
-        # 堆叠特征: (window_size, 8)
-        features = np.stack([
-            norm_price,
-            ret_21,
-            ret_42,
-            ret_63,
-            ret_252,
-            macd_avg,
-            rsi_norm,
-            vol_norm
-        ], axis=1)
-        
-        return features.astype(np.float32)
-
-# =============================================================================
-# 环境 (论文公式4 - 波动率缩放奖励)
+# 环境 (论文公式 4)
 # =============================================================================
 
 class VolatilityScaledEnv:
     """
-    论文公式(4)的奖励函数:
+    论文公式 (4) 的奖励函数:
     R_t = λ * A_{t-1} * (σ_tgt/σ_{t-1}) * r_t 
         - bp * |p_{t-1} * (σ_tgt/σ_{t-1}) * A_{t-1} 
                - p_{t-2} * (σ_tgt/σ_{t-1}) * A_{t-2}|
     """
     
-    def __init__(self, prices, returns, vol_target=0.10):
+    def __init__(self, prices, returns, vol_target=VOL_TARGET):
         self.prices = prices
         self.returns = returns
         self.vol_target = vol_target
         self.n_steps = len(returns)
         
         # 计算波动率序列
-        self.volatility = compute_volatility(pd.Series(returns), 60)
+        self.volatility = compute_volatility(returns, 60)
         
-        # 状态构建器
-        self.state_builder = StateBuilder(window_size=60)
+        # 特征工程
+        self.feature_engineer = FeatureEngineer(window_size=60)
         
-        self.step_idx = 60  # 从60开始，确保有足够历史数据
+        self.step_idx = 60
         self.last_action = 0.0
         self.last_price = prices[59] if len(prices) > 59 else prices[0]
         
@@ -199,41 +92,33 @@ class VolatilityScaledEnv:
         return self._get_state()
     
     def _get_state(self):
-        """获取当前状态 (60, 8)"""
-        return self.state_builder.build_features(
+        """获取状态 (60, 8)"""
+        return self.feature_engineer.build_features(
             self.prices, self.returns, self.step_idx
         )
     
     def step(self, action):
-        """
-        执行动作并计算奖励
-        
-        action: -1 (short), 0 (neutral), 1 (long)
-        """
         action = float(np.clip(action, -1, 1))
         
-        # 波动率缩放因子
+        # 波动率缩放
         vol_scale = self.vol_target / (self.volatility[self.step_idx] + 1e-10)
-        vol_scale = np.clip(vol_scale, 0.5, 2.0)  # 限制缩放范围
+        vol_scale = np.clip(vol_scale, 0.5, 2.0)
         
-        # 当前价格
         current_price = self.prices[self.step_idx]
         
-        # 交易成本 (论文公式4)
+        # 交易成本
         position_change = abs(action - self.last_action)
         cost = BP * position_change * vol_scale * current_price
         
         if self.step_idx + 1 >= self.n_steps:
             return self._get_state(), 0.0, True
         
-        # 下一期收益率
         next_return = self.returns[self.step_idx + 1]
         
-        # 奖励 (论文公式4 - 波动率缩放)
+        # 奖励 (波动率缩放)
         scaled_position = action * vol_scale
         reward = scaled_position * next_return - cost
         
-        # 更新状态
         self.step_idx += 1
         self.last_action = action
         self.last_price = current_price
@@ -241,51 +126,40 @@ class VolatilityScaledEnv:
         return self._get_state(), reward, False
 
 # =============================================================================
-# LSTM网络 (论文: 两层LSTM [64, 32])
+# LSTM 网络
 # =============================================================================
 
 class LSTMNetwork(nn.Module):
     """
-    论文第6页: Two-layer LSTM networks with 64 and 32 units
-    输入: (batch, 60时间步，8特征)
+    论文：Two-layer LSTM [64, 32]
+    输入：(batch, 60, 8)
     """
     
     def __init__(self, input_dim=8, hidden_sizes=[64, 32], output_dim=3):
         super().__init__()
         
-        # 两层LSTM
         self.lstm1 = nn.LSTM(input_dim, hidden_sizes[0], batch_first=True)
         self.lstm2 = nn.LSTM(hidden_sizes[0], hidden_sizes[1], batch_first=True)
-        
-        # 输出层
         self.fc = nn.Linear(hidden_sizes[1], output_dim)
-        
-        # Leaky-ReLU激活 (论文第6页)
         self.leaky_relu = nn.LeakyReLU(0.01)
         
     def forward(self, x):
-        """
-        x: (batch, 60, 8)
-        """
-        # 第一层LSTM
         out1, _ = self.lstm1(x)
         out1 = self.leaky_relu(out1)
         
-        # 第二层LSTM
         out2, _ = self.lstm2(out1)
         out2 = self.leaky_relu(out2)
         
-        # 取最后时间步的输出
         return self.fc(out2[:, -1, :])
 
 # =============================================================================
-# DQN Agent (论文: Fixed Q-targets + Double DQN + Dueling DQN)
+# DQN Agent
 # =============================================================================
 
 class ReplayBuffer:
-    """经验回放缓冲区 (论文Table 1: memory size = 5000)"""
+    """经验回放缓冲区"""
     
-    def __init__(self, capacity=5000):
+    def __init__(self, capacity=MEMORY_SIZE):
         self.capacity = capacity
         self.buffer = []
         self.position = 0
@@ -296,7 +170,7 @@ class ReplayBuffer:
         self.buffer[self.position] = (state, action, reward, next_state, done)
         self.position = (self.position + 1) % self.capacity
         
-    def sample(self, batch_size=64):
+    def sample(self, batch_size=BATCH_SIZE):
         if len(self.buffer) < batch_size:
             return None
         
@@ -304,56 +178,33 @@ class ReplayBuffer:
         batch = [self.buffer[i] for i in indices]
         
         states, actions, rewards, next_states, dones = zip(*batch)
-        
-        return (
-            np.array(states),
-            np.array(actions),
-            np.array(rewards),
-            np.array(next_states),
-            np.array(dones)
-        )
+        return (np.array(states), np.array(actions), np.array(rewards), 
+                np.array(next_states), np.array(dones))
     
     def __len__(self):
         return len(self.buffer)
 
+
 class PaperAlignedDQN:
-    """
-    论文对齐的DQN实现
-    - LSTM [64, 32] 网络
-    - Fixed Q-targets
-    - Double DQN
-    - Dueling DQN
-    """
+    """论文对齐的 DQN"""
     
     def __init__(self, state_dim=8, n_actions=3):
-        # 主网络
         self.q_net = LSTMNetwork(state_dim, [64, 32], n_actions).to(DEVICE)
-        
-        # 目标网络 (Fixed Q-targets)
         self.target_net = LSTMNetwork(state_dim, [64, 32], n_actions).to(DEVICE)
         self.target_net.load_state_dict(self.q_net.state_dict())
         
-        # 优化器 (论文Table 1: Adam, lr=0.0001)
         self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=LEARNING_RATE)
-        
-        # 经验回放 (论文Table 1: memory size = 5000)
         self.memory = ReplayBuffer(MEMORY_SIZE)
         
-        # 超参数
         self.gamma = GAMMA
         self.target_update = TARGET_UPDATE
         self.steps = 0
         
     def get_action(self, state, epsilon=0.3):
-        """
-        ε-greedy策略
-        state: (60, 8)
-        """
         if np.random.random() < epsilon:
             return np.random.randint(0, 3)
         
         with torch.no_grad():
-            # state: (60, 8) -> (1, 60, 8)
             state_t = torch.FloatTensor(state).unsqueeze(0).to(DEVICE)
             q_values = self.q_net(state_t)
             return q_values.argmax().item()
@@ -362,46 +213,35 @@ class PaperAlignedDQN:
         self.memory.push(state, action, reward, next_state, done)
     
     def train(self):
-        """
-        训练步骤
-        - Double DQN
-        - Fixed Q-targets
-        """
         if len(self.memory) < BATCH_SIZE:
             return 0
         
-        # 采样batch
         batch = self.memory.sample(BATCH_SIZE)
         if batch is None:
             return 0
         
         states, actions, rewards, next_states, dones = batch
         
-        # 转换为tensor
-        states = torch.FloatTensor(states).to(DEVICE)  # (batch, 60, 8)
+        states = torch.FloatTensor(states).to(DEVICE)
         actions = torch.LongTensor(actions).to(DEVICE)
         rewards = torch.FloatTensor(rewards).to(DEVICE)
         next_states = torch.FloatTensor(next_states).to(DEVICE)
         dones = torch.FloatTensor(dones).to(DEVICE)
         
-        # Double DQN: 用主网络选择动作，目标网络计算Q值
+        # Double DQN
         with torch.no_grad():
             next_actions = self.q_net(next_states).argmax(1)
             next_q = self.target_net(next_states).gather(1, next_actions.unsqueeze(1)).squeeze()
             target_q = rewards + (1 - dones) * self.gamma * next_q
         
-        # 主网络计算Q值
         current_q = self.q_net(states).gather(1, actions.unsqueeze(1)).squeeze()
         
-        # MSE损失
         loss = F.mse_loss(current_q, target_q)
         
-        # 优化
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
         
-        # 更新目标网络
         self.steps += 1
         if self.steps % self.target_update == 0:
             self.target_net.load_state_dict(self.q_net.state_dict())
@@ -409,59 +249,91 @@ class PaperAlignedDQN:
         return loss.item()
 
 # =============================================================================
-# 训练函数
+# 数据加载 (滚动训练)
 # =============================================================================
 
-def train_asset_class(asset_class, tickers, micro_train=False):
+def load_data_for_window(ticker, train_start, train_end):
     """
-    训练单个资产类别
+    加载指定训练窗口的数据
     
-    micro_train: 如果为True，只训练少量episodes用于测试
+    返回:
+        prices, returns 或 None
     """
-    print(f"\n{'='*70}")
-    print(f"📊 训练 {asset_class}")
-    print('='*70)
-    
-    episodes = 5 if micro_train else N_EPISODES
-    
-    # 加载数据
+    try:
+        df = pd.read_csv(f'data/futures_processed/{ticker}.csv')
+        df['Date'] = pd.to_datetime(df['Date'])
+        
+        train = df[(df['Date'] >= train_start) & (df['Date'] <= train_end)]
+        
+        if len(train) < 500:
+            return None
+        
+        return train['Close'].values, train['Returns'].values
+    except Exception as e:
+        return None
+
+
+def prepare_data(tickers, train_start, train_end):
+    """
+    准备多个合约的训练数据
+    """
     all_prices = []
     all_returns = []
     
     for ticker in tickers:
-        try:
-            df = pd.read_csv(f'data/futures_processed/{ticker}.csv')
-            df['Date'] = pd.to_datetime(df['Date'])
-            
-            # 论文训练期：2005-2010用于2011测试
-            # 这里用2011-2015作为示例（数据限制）
-            train = df[(df['Date'] >= '2011-01-03') & (df['Date'] <= '2015-12-31')]
-            
-            if len(train) < 500:
-                continue
-                
-            all_prices.append(train['Close'].values)
-            all_returns.append(train['Returns'].values)
-        except Exception as e:
-            print(f"  ⚠️ {ticker}: {e}")
-            continue
+        result = load_data_for_window(ticker, train_start, train_end)
+        if result is not None:
+            prices, returns = result
+            all_prices.append(prices)
+            all_returns.append(returns)
     
     if not all_prices:
-        print("  ⚠️ 无数据")
+        return None, None
+    
+    return np.concatenate(all_prices), np.concatenate(all_returns)
+
+# =============================================================================
+# 训练函数
+# =============================================================================
+
+def train_asset_class(asset_class, tickers, rolling_window=None, micro_train=False):
+    """
+    训练单个资产类别
+    
+    参数:
+        rolling_window: 训练窗口配置 {'train_start', 'train_end'}
+        micro_train: 微训练模式
+    """
+    print(f"\n{'='*70}")
+    print(f"📊 训练 {asset_class}")
+    if rolling_window:
+        print(f"📅 训练期：{rolling_window['train_start']} 至 {rolling_window['train_end']}")
+    print('='*70)
+    
+    episodes = 5 if micro_train else N_EPISODES
+    
+    # 确定训练窗口
+    if rolling_window is None:
+        # 默认使用第一个滚动窗口
+        rolling_window = ROLLING_WINDOWS[0]
+    
+    # 准备数据
+    prices, returns = prepare_data(
+        tickers, 
+        rolling_window['train_start'], 
+        rolling_window['train_end']
+    )
+    
+    if prices is None:
+        print("  ⚠️ 无数据，跳过")
         return None
     
-    # 合并所有合约数据
-    prices = np.concatenate(all_prices)
-    returns = np.concatenate(all_returns)
+    print(f"  合约数：{len(tickers)}")
+    print(f"  总样本：{len(returns):,}")
+    print(f"  Episodes: {episodes}")
     
-    print(f"  合约数: {len(all_prices)}")
-    print(f"  总样本: {len(returns):,}")
-    print(f"  Episodes: {episodes} (micro={micro_train})")
-    
-    # 创建环境
+    # 创建环境和 Agent
     env = VolatilityScaledEnv(prices, returns, vol_target=VOL_TARGET)
-    
-    # 创建Agent
     agent = PaperAlignedDQN(state_dim=8, n_actions=3)
     
     print(f"  开始训练...")
@@ -474,21 +346,17 @@ def train_asset_class(asset_class, tickers, micro_train=False):
         steps = 0
         
         while steps < MAX_STEPS:
-            # 获取动作 (动作空间：0,1,2 -> -1,0,1)
             action_idx = agent.get_action(state, epsilon=0.3)
-            action = action_idx - 1  # 转换为 -1, 0, 1
+            action = action_idx - 1
             
-            # 执行动作
             next_state, reward, done = env.step(action)
             
-            # 存储经验
             agent.store_transition(state, action_idx, reward, next_state, float(done))
             
             total_reward += reward
             steps += 1
             state = next_state
             
-            # 训练
             agent.train()
             
             if done:
@@ -497,53 +365,125 @@ def train_asset_class(asset_class, tickers, micro_train=False):
         episode_rewards.append(total_reward)
         
         if (episode + 1) % 1 == 0 or micro_train:
-            avg_reward = np.mean(episode_rewards[-3:]) if len(episode_rewards) >= 3 else np.mean(episode_rewards)
-            print(f"    Episode {episode+1}/{episodes}: Avg Reward={avg_reward:.4f}")
+            avg = np.mean(episode_rewards[-3:]) if len(episode_rewards) >= 3 else np.mean(episode_rewards)
+            print(f"    Episode {episode+1}/{episodes}: Avg Reward={avg:.4f}")
     
-    print(f"  ✅ 完成，平均奖励: {np.mean(episode_rewards):.4f}")
+    avg_reward = np.mean(episode_rewards)
+    print(f"  ✅ 完成，平均奖励：{avg_reward:.4f}")
     
     return agent
+
+# =============================================================================
+# 滚动训练主函数
+# =============================================================================
+
+def rolling_train_all(micro_train=False):
+    """
+    滚动训练所有资产类别
+    """
+    print("="*80)
+    print("🔥 论文对齐训练 - 滚动训练模式")
+    print("="*80)
+    print(f"设备：{DEVICE}")
+    print(f"滚动窗口数：{len(ROLLING_WINDOWS)}")
+    print()
+    
+    CONTRACTS_BY_CLASS = {
+        'Commodity': ['CL=F', 'GC=F', 'SI=F', 'HG=F', 'NG=F', 'ZC=F', 'ZS=F', 'ZW=F', 
+                      'KC=F', 'CC=F', 'SB=F', 'CT=F', 'OJ=F'],
+        'Equity Index': ['ES=F', 'NQ=F', 'YM=F'],
+        'Fixed Income': ['ZN=F', 'ZB=F', 'ZF=F', 'ZT=F', 'GE=F'],
+        'FX': ['6E=F', '6J=F', '6B=F', '6A=F', '6C=F', '6S=F', '6N=F', '6M=F', '6R=F']
+    }
+    
+    all_models = {}
+    
+    for window_idx, window in enumerate(ROLLING_WINDOWS):
+        print(f"\n{'='*80}")
+        print(f"📅 滚动窗口 {window_idx + 1}/{len(ROLLING_WINDOWS)}")
+        print(f"   训练：{window['train_start']} 至 {window['train_end']}")
+        print(f"   测试：{window['test_start']} 至 {window['test_end']}")
+        print('='*80)
+        
+        window_models = {}
+        
+        for asset_class, tickers in CONTRACTS_BY_CLASS.items():
+            model = train_asset_class(
+                asset_class, 
+                tickers, 
+                rolling_window=window,
+                micro_train=micro_train
+            )
+            window_models[asset_class] = model
+        
+        all_models[f'window_{window_idx}'] = window_models
+    
+    # 保存
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    mode = 'micro' if micro_train else 'full'
+    with open(f'models_rolling_{mode}_{timestamp}.pkl', 'wb') as f:
+        pickle.dump(all_models, f)
+    
+    print(f"\n✅ 滚动训练完成！")
+    print(f"💾 模型：models_rolling_{mode}_{timestamp}.pkl")
+    
+    return all_models
 
 # =============================================================================
 # 微训练测试
 # =============================================================================
 
 def micro_test():
-    """
-    微训练测试 - 验证代码能跑通
-    只训练少量数据，快速验证
-    """
+    """微训练测试"""
     print("="*80)
     print("🔬 微训练测试 - 验证代码正确性")
     print("="*80)
-    print(f"设备: {DEVICE}")
+    print(f"设备：{DEVICE}")
     print()
-    
-    # 只测试一个资产类别
-    test_class = 'Equity Index'
-    test_tickers = ['ES=F', 'NQ=F', 'YM=F']
     
     start_time = time.time()
     
-    # 微训练
-    model = train_asset_class(test_class, test_tickers, micro_train=True)
+    # 只测试一个资产类别 + 一个窗口
+    test_class = 'Equity Index'
+    test_tickers = ['ES=F', 'NQ=F', 'YM=F']
+    test_window = ROLLING_WINDOWS[0]
+    
+    model = train_asset_class(
+        test_class, 
+        test_tickers, 
+        rolling_window=test_window,
+        micro_train=True
+    )
     
     elapsed = time.time() - start_time
     
-    print(f"\n✅ 微训练测试通过！")
-    print(f"⏱️ 耗时: {elapsed:.1f}秒")
-    
     if model is not None:
-        print(f"📦 网络结构:")
-        print(f"   - LSTM1: 8 -> 64")
-        print(f"   - LSTM2: 64 -> 32")
-        print(f"   - FC: 32 -> 3")
-        print(f"   - 激活: Leaky-ReLU(0.01)")
-        print(f"📊 状态空间: (60, 8)")
-        print(f"📊 动作空间: {{-1, 0, 1}}")
-        print(f"💰 奖励函数: 波动率缩放 + 20bps交易成本")
+        print(f"\n✅ 微训练测试通过！")
+        print(f"⏱️ 耗时：{elapsed:.1f}秒")
+        print(f"📦 网络：LSTM(8→64→32→3) + Leaky-ReLU")
+        print(f"📊 状态：(60, 8)")
+        print(f"💰 奖励：波动率缩放 + 20bps")
+        print(f"🔄 滚动训练：{len(ROLLING_WINDOWS)} 窗口")
     
     return model
+
+# =============================================================================
+# 模块测试
+# =============================================================================
+
+def test_modules():
+    """测试所有模块"""
+    print("="*80)
+    print("🧪 模块测试")
+    print("="*80)
+    print()
+    
+    # 测试 indicators 模块
+    from indicators import test_indicators
+    test_indicators()
+    
+    print()
+    print("✅ 所有模块测试通过！")
 
 # =============================================================================
 # 主函数
@@ -552,40 +492,18 @@ def micro_test():
 def main():
     import sys
     
-    if len(sys.argv) > 1 and sys.argv[1] == '--micro':
-        # 微训练模式
-        micro_test()
+    if len(sys.argv) > 1:
+        if sys.argv[1] == '--micro':
+            micro_test()
+        elif sys.argv[1] == '--test-modules':
+            test_modules()
+        elif sys.argv[1] == '--help':
+            print("用法:")
+            print("  python3 train_paper_aligned.py           # 完整滚动训练")
+            print("  python3 train_paper_aligned.py --micro   # 微训练测试")
+            print("  python3 train_paper_aligned.py --test-modules  # 模块测试")
     else:
-        # 完整训练模式
-        print("="*80)
-        print("🔥 论文对齐训练 - 完整版本")
-        print("="*80)
-        print(f"设备: {DEVICE}")
-        print(f"Episodes/类别: {N_EPISODES}")
-        print()
-        
-        models = {}
-        start_time = time.time()
-        
-        CONTRACTS_BY_CLASS = {
-            'Commodity': ['CL=F', 'GC=F', 'SI=F', 'HG=F', 'NG=F', 'ZC=F', 'ZS=F', 'ZW=F', 'KC=F', 'CC=F', 'SB=F', 'CT=F', 'OJ=F'],
-            'Equity Index': ['ES=F', 'NQ=F', 'YM=F'],
-            'Fixed Income': ['ZN=F', 'ZB=F', 'ZF=F', 'ZT=F', 'GE=F'],
-            'FX': ['6E=F', '6J=F', '6B=F', '6A=F', '6C=F', '6S=F', '6N=F', '6M=F', '6R=F']
-        }
-        
-        for asset_class, tickers in CONTRACTS_BY_CLASS.items():
-            models[asset_class] = train_asset_class(asset_class, tickers, micro_train=False)
-        
-        # 保存
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        with open(f'models_paper_aligned_{timestamp}.pkl', 'wb') as f:
-            pickle.dump(models, f)
-        
-        elapsed = time.time() - start_time
-        print(f"\n✅ 训练完成！")
-        print(f"⏱️ 总时间: {elapsed/60:.1f} 分钟")
-        print(f"💾 模型: models_paper_aligned_{timestamp}.pkl")
+        rolling_train_all(micro_train=False)
 
 if __name__ == '__main__':
     main()
