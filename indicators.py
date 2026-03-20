@@ -229,6 +229,9 @@ class FeatureEngineer:
         window_prices = prices[start_idx:current_idx]
         window_returns = returns[start_idx:current_idx]
         
+        # 处理 NaN：用 0 填充
+        window_returns = np.nan_to_num(window_returns, nan=0.0, posinf=0.0, neginf=0.0)
+        
         # 计算波动率
         vol = compute_volatility(window_returns, 60)
         vol_mean = np.mean(vol) + 1e-10
