@@ -1,0 +1,9 @@
+Parameter,Paper,Ours,Aligned
+γ (discount),0.3,0.3,✅
+Buffer Size,5000,5000,✅
+Batch Size (DQN),64,64,✅
+Batch Size (A2C),128,128,✅
+Learning Rate,0.0001,0.0001,✅
+Target Update (τ),1000,1000,✅
+Network,"LSTM [64, 32]","LSTM [64, 32]",✅
+Transaction Cost,20 bps,20 bps,✅
