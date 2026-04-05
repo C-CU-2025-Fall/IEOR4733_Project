@@ -1,65 +1,70 @@
 """
 vol_scaling.py — Per-contract and portfolio-level volatility scaling
-Reference: [27] Lim et al. 2019 Eq 1; Zhang et al. 2019 Eq 4, 13
+Reference: Zhang et al. 2019 Eq 4, 13; [17] Harvey; [27] Lim; [37] Moskowitz
+
+Framework: additive profits r_t = p_t - p_{t-1}
+σ_t = EWMA(60) std of daily price diffs (same units as r_t)
+σ_tgt = same units as σ_t (constant across all contracts)
+σ_tgt/σ_t is dimensionless → normalises each contract to same daily vol
+
+The specific value of σ_tgt doesn't affect Sharpe, Sortino, % +ve, Ave P/L.
+It only scales E(R), std(R), DD, MDD proportionally.
 """
 import numpy as np
 import pandas as pd
 from config import EWMA_SPAN, PORT_TGT_STD, TRADING_DAYS
 
 
-def compute_ewma_vol(returns, span=EWMA_SPAN):
+def compute_ewma_vol(values, span=EWMA_SPAN):
     """
-    Compute σ_t = EWMA(span) std of daily returns.
-    Returns array of same length. NaN filled with first valid value.
+    σ_t = EWMA(span) std of daily values.
+    Works with additive price diffs (units: price/day).
+    Returns array of same length. NaN/zero filled with first valid value.
     """
-    vol = pd.Series(returns).ewm(span=span, adjust=False).std().values
-    # Fill NaN/zero with first valid volatility
+    vol = pd.Series(values).ewm(span=span, adjust=False).std().values
     first_valid = None
     for v in vol:
         if not np.isnan(v) and v > 0:
             first_valid = v
             break
     if first_valid is None:
-        first_valid = 0.01  # fallback
+        first_valid = 1e-6
     vol = np.nan_to_num(vol, nan=first_valid, posinf=first_valid, neginf=first_valid)
     vol[vol == 0] = first_valid
     return vol
 
 
-def scale_per_contract(returns, sigma_tgt_annual, span=EWMA_SPAN):
+def scale_per_contract(price_diffs, sigma_tgt_daily, span=EWMA_SPAN, max_leverage=None):
     """
     Per-contract volatility scaling (Formula 4 inner scaling).
 
-    [27]: "annualised volatility target σ_tgt = 15%"
-    σ_t = EWMA(60) std of daily returns (NOT annualised)
-    scaling_factor = σ_tgt_annual / (σ_t × √252)
-    → = σ_tgt_annual / annualised_σ_t
+    For ADDITIVE price diffs:
+      σ_t = EWMA(60) std of (p_t - p_{t-1})  [price units/day]
+      scaling = σ_tgt_daily / σ_t             [dimensionless]
+
+    After scaling, each contract's daily vol ≈ σ_tgt_daily.
+    σ_tgt_daily is the same for all contracts → normalises to same scale.
 
     Args:
-        returns:        daily return series
-        sigma_tgt_annual: annualised volatility target (e.g. 0.15)
-        span:          EWMA span
+        price_diffs:     daily price differences r_t = p_t - p_{t-1}
+        sigma_tgt_daily: target daily volatility (same units as r_t)
+        span:            EWMA span
+        max_leverage:    optional cap on |scaling| to prevent extreme leverage
 
     Returns:
-        scaling factor array c_t = σ_tgt / σ_t_annualised
+        scaling factor array (same length as input)
     """
-    vol_daily = compute_ewma_vol(returns, span)
-    vol_annual = vol_daily * np.sqrt(TRADING_DAYS)
-    return sigma_tgt_annual / vol_annual
+    vol = compute_ewma_vol(price_diffs, span)
+    scaling = sigma_tgt_daily / vol
+    if max_leverage is not None:
+        scaling = np.clip(scaling, -max_leverage, max_leverage)
+    return scaling
 
 
 def scale_portfolio(returns, target_std=PORT_TGT_STD):
     """
     Portfolio-level volatility scaling (Eq 13).
-
-    Scale portfolio returns so that annualised std = target_std.
-
-    Args:
-        returns:    portfolio daily returns
-        target_std: target annualised std (default 0.97 for Table 2)
-
-    Returns:
-        scaled returns
+    Scale portfolio returns so annualised std = target_std.
     """
     current_std = np.std(returns) * np.sqrt(TRADING_DAYS)
     if current_std > 0:
