@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """
-table2_table3_unified.py — Modular baseline reproduction
+table2_table3_unified.py — Baseline reproduction (additive profits framework)
 
-Usage:
-    python table2_table3_unified.py                         # Table 3 (no vol scaling)
-    python table2_table3_unified.py --per-contract           # Table 3 + per-contract scaling
-    python table2_table3_unified.py --per-contract --portfolio  # Table 2 (both layers)
-    python table2_table3_unified.py --sigma-tgt 0.15         # custom σ_tgt (default from [27])
+Paper: Zhang, Zohren, Roberts (2019) "Deep Reinforcement Learning for Trading"
+
+Key decisions (documented in config.py):
+  - r_t = p_t - p_{t-1}  (additive profits, paper Section 3.2)
+  - σ_t = EWMA(60) std of r_t  (same units: price-diff/day)
+  - σ_tgt = same units, constant across all contracts
+  - σ_tgt/σ_t is dimensionless → normalises contracts to same daily vol
+  - Cost = bp × p_{t-1} × |c_{t-1} − c_{t-2}|  (paper Formula 4, exact)
+  - Table 3 = per-contract vol scaling only (Eq.4)
+  - Table 2 = Table 3 + portfolio-level scaling (Eq.13)
 
 Structure:
-    config.py       — parameters, contract lists, paper target values
+    config.py       — parameters, contract lists, paper targets
     data_loader.py  — CLC data loading
     strategies.py   — signal functions (Long, Sign(R), MACD)
     vol_scaling.py  — volatility scaling (per-contract + portfolio)
@@ -19,76 +24,75 @@ Structure:
 import argparse
 import math
 import numpy as np
+import pandas as pd
 
 from config import (
-    BP, TRADING_DAYS, SIGMA_TGT_ANNUAL, PORT_TGT_STD,
+    BP, SIGMA_TGT_DAILY, PORT_TGT_STD, MAX_LEVERAGE,
     ASSET_CLASSES, PAPER_TABLE3, PAPER_TABLE2, METRIC_NAMES,
     TEST_START, TEST_END,
 )
-from data_loader import load_clc_full, extract_test_period, get_returns
+from data_loader import load_clc_full, extract_test_period, get_price_diffs, get_pct_returns
 from strategies import strategy_long_only, strategy_sign_r, strategy_macd
 from vol_scaling import scale_per_contract, scale_portfolio
 from metrics import compute_all_metrics
 
 
 # =============================================================================
-# Trade return computation — paper Formula 4
+# Trade return computation — paper Formula 4 (additive profits)
 # =============================================================================
-def compute_trade_returns(returns, prices, positions, bp=BP,
-                          per_contract_sigma=None):
+def compute_trade_returns(price_diffs, prices, positions, bp=BP,
+                          sigma_tgt_daily=SIGMA_TGT_DAILY):
     """
-    Compute per-contract trade returns.
-
     Paper Formula 4:
-        R_t = c_{t-1} × r_t − bp × |c_{t-1} − c_{t-2}|
 
-    where c_t = A_t × scaling_factor (if per-contract vol scaling applied)
-          c_t = A_t              (if no per-contract vol scaling)
+      R_t = A_{t-1} × (σ_tgt / σ_{t-1}) × r_t
+            − bp × p_{t-1} × |σ_tgt/σ_{t-1} × A_{t-1} − σ_tgt/σ_{t-2} × A_{t-2}|
 
-    Note on transaction cost:
-        For Long Only, c_t changes slowly (only via σ_t drift), so cost ≈ 0.
-        The paper does not special-case Long Only; the same formula applies.
-        bp is applied to |position change|, not multiplied by price level,
-        because returns are already in percentage terms.
-
-    Args:
-        returns:            daily percentage returns (full history)
-        prices:             close prices (full history)
-        positions:          signal positions A_t (full history)
-        bp:                 transaction cost rate
-        per_contract_sigma: annualised σ_tgt for per-contract scaling (None = no scaling)
+    where:
+      r_t = p_t − p_{t-1}           (additive profits)
+      σ_t = EWMA(60) std of r_t     (price-diff/day units)
+      σ_tgt = same units, constant  (normalises all contracts to same daily vol)
+      σ_tgt / σ_t = dimensionless
+      bp = 0.0020                    (20 bps)
     """
-    n = len(returns)
+    n = len(prices)
 
-    if per_contract_sigma is not None:
-        # Per-contract vol scaling: c_t = A_t × (σ_tgt / σ_t_annualised)
-        scaling = scale_per_contract(returns, per_contract_sigma)
-        scaled = positions * scaling
-    else:
-        scaled = positions.copy()
+    # Per-contract vol scaling: c_t = A_t × (σ_tgt / σ_t)
+    scaling = scale_per_contract(price_diffs, sigma_tgt_daily)
+    scaled = positions * scaling
 
-    # R_t = c_{t-1} × r_t − bp × |c_{t-1} − c_{t-2}|
+    # R_t = c_{t-1} × r_t − bp × p_{t-1} × |c_{t-1} − c_{t-2}|
     trade_rets = np.zeros(n)
     for t in range(2, n):
-        trade_rets[t] = scaled[t - 1] * returns[t] - bp * abs(scaled[t - 1] - scaled[t - 2])
+        trade_rets[t] = (scaled[t - 1] * price_diffs[t]
+                         - bp * prices[t - 1] * abs(scaled[t - 1] - scaled[t - 2]))
 
     return trade_rets
 
 
 # =============================================================================
-# Portfolio construction
+# Portfolio construction with date alignment
 # =============================================================================
-def build_portfolio(contract_returns_list):
-    """Equal-weight average of per-contract returns."""
-    min_len = min(len(r) for r in contract_returns_list)
-    return np.mean([r[:min_len] for r in contract_returns_list], axis=0)
+def build_portfolio(contract_data):
+    """
+    Equal-weight average of per-contract returns, aligned by date.
+    """
+    if not contract_data:
+        return None, None
+
+    dfs = []
+    for dates, rets in contract_data:
+        s = pd.Series(rets, index=dates, name='ret')
+        dfs.append(s)
+
+    merged = pd.concat(dfs, axis=1, join='inner').dropna()
+    return merged.index, merged.mean(axis=1).values
 
 
 # =============================================================================
 # Display helpers
 # =============================================================================
 def status_icon(ours, paper, metric):
-    """Generate ✅/⚠️/❌ based on % difference."""
     if paper == 0:
         return '  ' if abs(ours) < 0.01 else '❌'
     pct = abs(ours - paper) / abs(paper) * 100
@@ -103,7 +107,6 @@ def status_icon(ours, paper, metric):
 
 
 def print_comparison(ours_dict, paper_dict):
-    """Print side-by-side comparison of 9 metrics."""
     print(f"    {'Metric':<10} {'Ours':>8}  {'Paper':>8}  {'Diff':>8}  {'%':>7}  Status")
     print(f"    {'-' * 60}")
     for mn in METRIC_NAMES:
@@ -123,30 +126,27 @@ def print_comparison(ours_dict, paper_dict):
 # =============================================================================
 def main():
     parser = argparse.ArgumentParser(description='Table 2/3 Baseline Reproduction')
-    parser.add_argument('--per-contract', action='store_true',
-                        help='Apply per-contract volatility scaling')
     parser.add_argument('--portfolio', action='store_true',
-                        help='Apply portfolio-level volatility scaling (Table 2)')
-    parser.add_argument('--sigma-tgt', type=float, default=SIGMA_TGT_ANNUAL,
-                        help=f'Annualised σ_tgt (default: {SIGMA_TGT_ANNUAL} from [27])')
+                        help='Add portfolio-level vol scaling (Table 2)')
+    parser.add_argument('--sigma-tgt', type=float, default=SIGMA_TGT_DAILY,
+                        help=f'Daily σ_tgt in price-diff units (default: {SIGMA_TGT_DAILY})')
+    parser.add_argument('--no-scaling', action='store_true',
+                        help='Disable ALL vol scaling (debugging)')
     args = parser.parse_args()
 
     paper_targets = PAPER_TABLE2 if args.portfolio else PAPER_TABLE3
     table_name = "Table 2" if args.portfolio else "Table 3"
 
-    # Config description
-    parts = [table_name]
-    if args.per_contract:
-        parts.append(f"per-contract σ_tgt={args.sigma_tgt}")
-    else:
-        parts.append("no per-contract scaling")
-    if args.portfolio:
-        parts.append(f"portfolio → std={PORT_TGT_STD}")
-
     print("=" * 100)
-    print(f"  {' | '.join(parts)}")
-    print(f"  Data: CLC ratio-adjusted | Test: {TEST_START}–{TEST_END} | "
-          f"BP={BP} | EWMA=60")
+    if args.no_scaling:
+        print(f"  {table_name} (DEBUG: NO vol scaling)")
+    elif args.portfolio:
+        print(f"  {table_name}: per-contract σ_tgt={args.sigma_tgt} daily "
+              f"+ portfolio → std={PORT_TGT_STD}")
+    else:
+        print(f"  {table_name}: per-contract σ_tgt={args.sigma_tgt} daily")
+    print(f"  r_t = p_t − p_{{t-1}} (additive) | cost = bp × p_{{t-1}} × |Δc|")
+    print(f"  Test: {TEST_START}–{TEST_END} | BP={BP} | EWMA=60")
     print("=" * 100)
 
     for ac, tickers in ASSET_CLASSES.items():
@@ -154,7 +154,7 @@ def main():
         print(f"  {ac} ({len(tickers)} contracts)")
         print(f"{'=' * 100}")
 
-        strat_rets = {'Long': [], 'Sign(R)': [], 'MACD': []}
+        strat_data = {'Long': [], 'Sign(R)': [], 'MACD': []}
         loaded = []
 
         for tk in tickers:
@@ -163,28 +163,36 @@ def main():
                 continue
 
             prices = df['Close'].values
-            returns = get_returns(prices)
+            dates = df['Date']
 
-            t0, t1 = extract_test_period(df)
+            price_diffs = get_price_diffs(prices)
+            pct_returns = get_pct_returns(prices)
+
+            t0, t1, _ = extract_test_period(df)
             if t0 is None:
                 continue
 
-            # Compute positions on FULL history (warmup from 1988+)
             pos_long = strategy_long_only(len(prices))
-            pos_sign = strategy_sign_r(returns)
+            pos_sign = strategy_sign_r(pct_returns)
             pos_macd = strategy_macd(prices)
-
-            sigma = args.sigma_tgt if args.per_contract else None
 
             for pos, key in [(pos_long, 'Long'), (pos_sign, 'Sign(R)'),
                              (pos_macd, 'MACD')]:
-                all_tr = compute_trade_returns(
-                    returns, prices, pos,
-                    per_contract_sigma=sigma,
-                )
-                # Extract test period only (skip first 252 days for warmup)
-                start = max(t0, 252)
-                strat_rets[key].append(all_tr[start:t1 + 1])
+                if args.no_scaling:
+                    n = len(prices)
+                    raw_rets = np.zeros(n)
+                    for t in range(2, n):
+                        raw_rets[t] = (pos[t-1] * price_diffs[t]
+                                       - BP * abs(pos[t-1] - pos[t-2]))
+                    start = max(t0, 252)
+                    strat_data[key].append((dates.iloc[start:t1+1], raw_rets[start:t1+1]))
+                else:
+                    all_tr = compute_trade_returns(
+                        price_diffs, prices, pos,
+                        sigma_tgt_daily=args.sigma_tgt,
+                    )
+                    start = max(t0, 252)
+                    strat_data[key].append((dates.iloc[start:t1+1], all_tr[start:t1+1]))
 
             loaded.append(tk)
 
@@ -195,20 +203,19 @@ def main():
         pp = paper_targets.get(ac, {})
 
         for strat in ['Long', 'Sign(R)', 'MACD']:
-            if not strat_rets[strat]:
+            if not strat_data[strat]:
                 continue
 
-            port_raw = build_portfolio(strat_rets[strat])
+            port_dates, port_raw = build_portfolio(strat_data[strat])
+            if port_raw is None:
+                continue
 
-            # Portfolio-level scaling (Table 2 only)
-            if args.portfolio:
+            if args.portfolio and not args.no_scaling:
                 port_scaled = scale_portfolio(port_raw)
             else:
                 port_scaled = port_raw
 
-            # Compute metrics on scaled returns
             metrics = compute_all_metrics(port_scaled)
-
             paper = pp.get(strat, {})
             print(f"\n  {strat}:")
             print_comparison(metrics, paper)

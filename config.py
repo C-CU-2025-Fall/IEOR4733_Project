@@ -2,53 +2,113 @@
 config.py — Paper parameters and contract definitions
 References: Zhang, Zohren, Roberts (2019); [4] Baz et al. 2015; [27] Lim et al. 2019
 """
+import math
 
 # =============================================================================
 # Paper Parameters (Table 1 + references)
 # =============================================================================
-BP = 0.0020              # Transaction cost rate (20 bps)
+BP = 0.0020              # Transaction cost rate (20 bps), Table 1
 TRADING_DAYS = 252        # Trading days per year
-SIGMA_TGT_ANNUAL = 0.15   # Annualised volatility target [27]: "15%"
-PORT_TGT_STD = 0.97       # Table 2 portfolio-level target std
-EWMA_SPAN = 60            # EWMA span for σ_t estimation
+EWMA_SPAN = 60            # EWMA span for σ_t estimation (Formula 4)
 SIGN_LOOKBACK = 252       # Sign(R) lookback window
 MACD_PAIRS = [(8,24),(16,48),(32,96)]  # MACD time-scale pairs [4]
-MACD_VOL_WINDOW = 63      # MACD price volatility normalisation window
-MACD_STD_WINDOW = 252     # MACD signal standardisation window
+MACD_VOL_WINDOW = 63      # MACD price volatility normalisation window [4]
+MACD_STD_WINDOW = 252     # MACD signal standardisation window [4]
+WARMUP_DAYS = 252         # Minimum warmup days before test period
+
+# =============================================================================
+# σ_tgt — Per-contract daily volatility target (additive framework)
+#
+# Paper Formula 4: r_t = p_t - p_{t-1} (additive profits)
+# σ_t = EWMA(60) std of r_t (same units: price/day)
+# σ_tgt = same units, constant across all contracts
+# σ_tgt/σ_t is dimensionless → normalises each contract to same daily vol
+#
+# The specific value does NOT affect ratio metrics (Sharpe, Sortino, % +ve, Ave P/L).
+# It only scales E(R), std(R), DD, MDD proportionally.
+#
+# σ_tgt = 0.10 daily was reverse-engineered to match Table 3 std(R).
+# This value is NOT from the paper — it is calibrated.
+# =============================================================================
+SIGMA_TGT_DAILY = 0.10  # Daily target volatility (additive price-diff units)
+MAX_LEVERAGE = 10.0     # Cap on per-contract scaling factor
+
+# =============================================================================
+# Portfolio-level volatility target (Table 2 only)
+#
+# Paper says Table 2 adds portfolio-level vol scaling so "different methods
+# are evaluated at the same target volatility." The specific target is NOT given.
+# PORT_TGT_STD = 0.97 is reverse-engineered from Table 2 output where
+# std(R) ≈ 0.97 for all strategies/asset classes.
+# =============================================================================
+PORT_TGT_STD = 0.97
 
 # =============================================================================
 # Test Period
 # =============================================================================
 TEST_START = '2011-01-01'
 TEST_END   = '2019-12-31'
-# Warmup: need at least 252 trading days before test start for indicators
-# Using ALL available CLC data (from 1988+) for warmup
 
 # =============================================================================
-# CLC Contracts — 50 paper contracts minus 3 with no 2011-2019 data
-# ZH (Heating Oil Electronic): all zeros in 2011-2019
-# ZU (Crude Oil Electronic): all zeros in 2011-2019
-# US (T-Bonds Composite): all NaN in 2011-2019
+# CLC Contracts — Updated based on data_quality_check.py (2026-04-05)
+#
+# Paper: 50 most liquid futures contracts (Zhang et al. 2020)
+# Data Quality Check Results:
+#   - Grade A: 28 contracts (56%) — Excellent quality
+#   - Grade B: 17 contracts (34%) — Good quality
+#   - Grade C: 1 contract (2%) — US (data too short)
+#   - Grade D: 3 contracts (6%) — ZH, ZI, ZN (severe roll issues)
+#   - Grade F: 1 contract (2%) — ZU (no valid test period data)
+#
+# Excluded contracts (documented in data_quality_report_50contracts.md):
+#   ZH (Heating Oil Electronic): 0 rows in test period, 0.8% roll issues
+#   ZI (Soybean Oil Electronic): 4676% max gap, 0.58% roll issues
+#   ZN (10-Year T-Note): 10451x price ratio, 1.01% roll issues
+#   ZU (Crude Oil Electronic): 0 rows in test period
+#   US (T-Bonds Composite): 0 rows in test period (data exists but outside test period)
+#
+# This gives 45/50 contracts usable for replication.
 # =============================================================================
 ASSET_CLASSES = {
-    'Commodity': [t for t in [
-        'CC','DA','GI','JO','KC','KW','LB','NR','SB','ZA',
-        'ZC','ZF','ZG','ZH','ZI','ZK','ZL','ZN','ZO','ZP',
-        'ZR','ZT','ZU','ZW','ZZ'
-    ] if t not in ['ZH','ZU']],
-    'Equity Index': ['CA','EN','ER','ES','LX','MD','SC','SP','XU','XX','YM'],
-    'Fixed Income': [t for t in ['DT','FB','TY','UB','US'] if t != 'US'],
-    'Forex': ['AN','BN','CN','DX','FN','JN','MP','NK','SN'],
+    'Commodity': [
+        'CC', 'DA', 'GI', 'JO', 'KC', 'KW', 'LB', 'NR', 'SB',  # Grade B/A
+        'ZA', 'ZC', 'ZF', 'ZG', 'ZK', 'ZL',  # Grade B/A (exclude ZH, ZI, ZU)
+        'ZO', 'ZP', 'ZR', 'ZT', 'ZW', 'ZZ',  # Grade B/A
+    ],
+    'Equity Index': [
+        'CA', 'EN', 'ER', 'ES', 'LX', 'MD', 'SC', 'SP', 'XU', 'XX', 'YM',  # All Grade B/A
+    ],
+    'Fixed Income': [
+        'DT', 'FB', 'TY', 'UB',  # Grade A (exclude US)
+    ],
+    'Forex': [
+        'AN', 'BN', 'CN', 'DX', 'FN', 'JN', 'MP', 'NK', 'SN',  # All Grade A
+    ],
 }
 
 EXCLUDED_CONTRACTS = {
-    'ZH': 'Heating Oil Electronic — all zeros in 2011-2019',
-    'ZU': 'Crude Oil Electronic — all zeros in 2011-2019',
-    'US': 'T-Bonds Composite — all NaN in 2011-2019',
+    'ZH': 'Heating Oil Electronic — 0 rows in test period, 0.8% roll issues (Grade D)',
+    'ZI': 'Soybean Oil Electronic — 4676% max gap, 0.58% roll issues (Grade D)',
+    'ZN': '10-Year T-Note — 10451x price ratio, 1.01% roll issues (Grade D)',
+    'ZU': 'Crude Oil Electronic — 0 rows in test period (Grade F)',
+    'US': 'T-Bonds Composite — 0 rows in test period (Grade C)',
+}
+
+# Quality summary
+DATA_QUALITY_SUMMARY = {
+    'total_paper_contracts': 50,
+    'usable_contracts': 45,
+    'excluded_contracts': 5,
+    'grade_A': 28,
+    'grade_B': 17,
+    'grade_C': 1,
+    'grade_D': 3,
+    'grade_F': 1,
+    'check_date': '2026-04-05',
 }
 
 # =============================================================================
-# Paper Target Values — Table 3 (Appendix B, "Raw Signal")
+# Paper Target Values — Table 3 (Appendix B, per-contract vol scaling only)
 # =============================================================================
 PAPER_TABLE3 = {
     'Commodity': {
@@ -74,7 +134,7 @@ PAPER_TABLE3 = {
 }
 
 # =============================================================================
-# Paper Target Values — Table 2 (with portfolio-level vol scaling)
+# Paper Target Values — Table 2 (per-contract + portfolio-level vol scaling)
 # =============================================================================
 PAPER_TABLE2 = {
     'Commodity': {
