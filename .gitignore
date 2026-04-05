@@ -8,9 +8,10 @@ env/
 venv/
 .venv/
 
-# Data files (too large)
+# Data files (too large, do not commit)
 data/futures/
 data/futures_processed/
+data/CLC/
 models/
 
 # Logs

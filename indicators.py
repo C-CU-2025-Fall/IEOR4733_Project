@@ -234,6 +234,7 @@ class FeatureEngineer:
         
         # 计算波动率
         vol = compute_volatility(window_returns, 60)
+        vol = np.nan_to_num(vol, nan=0.01, posinf=1.0, neginf=0.001)  # ✅ 处理 vol 的 NaN
         vol_mean = np.mean(vol) + 1e-10
         
         # 特征 1: 归一化收盘价
@@ -266,6 +267,9 @@ class FeatureEngineer:
             rsi_norm,
             vol_norm
         ], axis=1)
+        
+        # ✅ 最终 NaN 处理：确保没有 NaN
+        features = np.nan_to_num(features, nan=0.0, posinf=1.0, neginf=-1.0)
         
         return features.astype(np.float32)
     
