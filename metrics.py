@@ -43,21 +43,17 @@ def calc_sortino(port_returns, annual_factor=TRADING_DAYS):
     return er / dd if dd > 0 else 0.0
 
 
-def calc_mdd(port_returns, window=252):
+def calc_mdd(port_returns):
     """
-    Rolling Maximum Drawdown: average of max drawdown over rolling windows.
+    Maximum Drawdown: max peak-to-trough decline over entire period.
 
-    MDD = max((Peak_t - Trough_t) / Peak_t) over window, averaged across windows.
-    Uses cumprod(1 + R) as wealth curve within each window.
+    MDD = max((Peak - Trough) / Peak)
+    Wealth = cumprod(1 + R), standard for pct returns.
     """
-    mdds = []
-    for i in range(len(port_returns) - window + 1):
-        w = port_returns[i:i + window]
-        wealth = np.cumprod(1 + w)
-        peak = np.maximum.accumulate(wealth)
-        dd = (peak - wealth) / peak
-        mdds.append(float(np.max(dd)))
-    return float(np.mean(mdds)) if mdds else 0.0
+    wealth = np.cumprod(1 + port_returns)
+    peak = np.maximum.accumulate(wealth)
+    drawdown = (peak - wealth) / peak
+    return float(np.nanmax(drawdown))
 
 
 def calc_calmar(port_returns, annual_factor=TRADING_DAYS):
