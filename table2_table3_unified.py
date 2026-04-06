@@ -57,15 +57,20 @@ def compute_trade_returns(price_diffs, prices, positions, bp=BP,
     """
     n = len(prices)
 
+    # Convert to percentage returns for consistent vol scaling across contracts
+    pct_returns = np.zeros(n)
+    pct_returns[1:] = price_diffs[1:] / prices[:-1]
+
     # Per-contract vol scaling: c_t = A_t × (σ_tgt / σ_t)
-    scaling = scale_per_contract(price_diffs, sigma_tgt_daily)
+    # σ_tgt = 0.10/√252 (daily percentage vol target)
+    scaling = scale_per_contract(pct_returns, sigma_tgt_daily, max_leverage=MAX_LEVERAGE)
     scaled = positions * scaling
 
-    # R_t = c_{t-1} × r_t − bp × p_{t-1} × |c_{t-1} − c_{t-2}|
+    # R_t = c_{t-1} × r_t − bp × |c_{t-1} − c_{t-2}| (percentage framework)
     trade_rets = np.zeros(n)
     for t in range(2, n):
-        trade_rets[t] = (scaled[t - 1] * price_diffs[t]
-                         - bp * prices[t - 1] * abs(scaled[t - 1] - scaled[t - 2]))
+        trade_rets[t] = (scaled[t - 1] * pct_returns[t]
+                         - bp * abs(scaled[t - 1] - scaled[t - 2]))
 
     return trade_rets
 
