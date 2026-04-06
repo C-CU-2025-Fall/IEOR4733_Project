@@ -24,9 +24,22 @@ def calc_std(port_returns, annual_factor=TRADING_DAYS):
 
 
 def calc_downside_deviation(port_returns, annual_factor=TRADING_DAYS):
-    """DD: downside deviation = sqrt(1/n * sum(min(0, R_i)^2)), annualized."""
-    n = len(port_returns)
-    return np.sqrt(np.mean(np.minimum(port_returns, 0) ** 2)) * np.sqrt(annual_factor)
+    """
+    DD: Downside Deviation — only downside deviations from zero are counted.
+    
+    Formula: sqrt(1/n × Σ(deviation_i²)) × √annual_factor
+    
+    where deviation_i = min(0, R_i)  [positive deviations are zeroed out]
+    
+    Example:
+      R = [+1%, -2%, +3%, -1%]
+      deviations = [0, -2%, 0, -1%]  ← positive returns zeroed out
+      DD = sqrt(mean([0, 0.02², 0, 0.01²])) × √252
+    """
+    # Compute deviations from zero, zero out positive deviations
+    downside_deviations = np.minimum(port_returns, 0)  # positive → 0, negative → keep
+    # Square, mean, sqrt, annualize
+    return np.sqrt(np.mean(downside_deviations ** 2)) * np.sqrt(annual_factor)
 
 
 def calc_sharpe(port_returns, annual_factor=TRADING_DAYS):
@@ -47,8 +60,8 @@ def calc_mdd(port_returns):
     """
     Maximum Drawdown: max peak-to-trough decline over entire period.
 
+    Uses cumprod(1 + R) for percentage returns framework.
     MDD = max((Peak - Trough) / Peak)
-    Wealth = cumprod(1 + R), standard for pct returns.
     """
     wealth = np.cumprod(1 + port_returns)
     peak = np.maximum.accumulate(wealth)

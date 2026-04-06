@@ -4,7 +4,7 @@ Reference: Zhang et al. 2019 Eq 4, 13; [17] Harvey; [27] Lim; [37] Moskowitz
 
 Framework: additive profits r_t = p_t - p_{t-1}
 σ_t = EWMA(60) std of daily price diffs (same units as r_t)
-σ_tgt = same units as σ_t (constant across all contracts)
+σ_tgt = 0.10 (in price-diff units, constant across all contracts)
 σ_tgt/σ_t is dimensionless → normalises each contract to same daily vol
 
 The specific value of σ_tgt doesn't affect Sharpe, Sortino, % +ve, Ave P/L.

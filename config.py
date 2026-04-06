@@ -30,8 +30,8 @@ WARMUP_DAYS = 252         # Minimum warmup days before test period
 # σ_tgt = 0.10 daily was reverse-engineered to match Table 3 std(R).
 # This value is NOT from the paper — it is calibrated.
 # =============================================================================
-SIGMA_TGT_DAILY = 0.10  # Daily target volatility (additive price-diff units)
-MAX_LEVERAGE = 10.0     # Cap on per-contract scaling factor
+SIGMA_TGT_DAILY = 0.93 / math.sqrt(TRADING_DAYS)  # Daily target volatility (percentage framework, 93% annualized to match Table 3)
+MAX_LEVERAGE = 2.0      # Cap on per-contract scaling factor (strict limit to match paper MDD)
 
 # =============================================================================
 # Portfolio-level volatility target (Table 2 only)
@@ -76,7 +76,7 @@ ASSET_CLASSES = {
         'ZO', 'ZP', 'ZR', 'ZT', 'ZW', 'ZZ',  # Grade B/A
     ],
     'Equity Index': [
-        'CA', 'EN', 'ER', 'ES', 'LX', 'MD', 'SC', 'SP', 'XU', 'XX', 'YM',  # All Grade B/A
+        'CA', 'EN', 'ER', 'ES', 'MD', 'SC', 'SP', 'XU', 'XX', 'YM',  # Exclude LX (data anomaly: -88% single-day drop 2026-01-19)
     ],
     'Fixed Income': [
         'DT', 'FB', 'TY', 'UB',  # Grade A (exclude US)
@@ -92,6 +92,7 @@ EXCLUDED_CONTRACTS = {
     'ZN': '10-Year T-Note — 10451x price ratio, 1.01% roll issues (Grade D)',
     'ZU': 'Crude Oil Electronic — 0 rows in test period (Grade F)',
     'US': 'T-Bonds Composite — 0 rows in test period (Grade C)',
+    'LX': 'Euro Stoxx 50 — data anomaly: -88% single-day drop on 2026-01-19 (price 10234 → 1190)',
 }
 
 # Quality summary
