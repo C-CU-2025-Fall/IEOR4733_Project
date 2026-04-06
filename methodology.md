@@ -7,29 +7,102 @@
 
 ---
 
-## 关键发现 ⚠️
+## 当前实现状态 (2026-04-06)
 
-### Portfolio-level Volatility Scaling
+### 方程4 实现（已完成）
 
-论文 Table 2 的结果经过 **portfolio-level volatility scaling**：
+```
+R_t = A_{t-1} × (σ_tgt / σ_{t-1}) × r_t − bp × p_{t-1} × |Δ(scaled position)|
+```
 
-> "We present our results in Table 2 where an additional layer of portfolio-level volatility scaling is applied for each model. This brings the volatility of different methods to a **same target** so we can directly compare metrics."
-
-**目标 std(R) = 0.97 (97% 年化)**
-
-### 计算流程
-
-1. **训练时**: 使用 σ_tgt = 10% 年化目标波动率
-2. **评估时**: 应用 portfolio-level scaling 使 std(R) ≈ 0.97
-3. **所有指标**: 都基于缩放后的收益计算（包括 MDD）
-
-### 验证结果 (Equity Index Long Only)
-
-| 指标 | 我们 | 论文 | 差异 |
+| 变量 | 定义 | 实现 | 量纲 |
 |------|------|------|------|
-| E(R) | 0.678 | 0.668 | +1.5% ✅ |
-| std(R) | 0.970 | 0.970 | 0% ✅ |
-| Sharpe | 0.699 | 0.688 | +1.6% ✅ |
+| `p_t` | `Close[t] / Close[0]` (p0-normalized) | ✅ | 无量纲 |
+| `r_t` | `p_t - p_{t-1}` (additive on normalized) | ✅ | 无量纲 |
+| `σ_t` | `EWMA(span=60) std of r_t` | ✅ | 无量纲 |
+| `σ_tgt` | `0.10 / √252 ≈ 0.0063` (daily, = 10% annual) | ✅ | 无量纲 |
+| `A_t` | 策略 position ∈ {-1, 0, +1} | ✅ | 无量纲 |
+| `bp` | `0.0020` (20 bps) | ✅ | 无量纲 |
+| `cost` | `bp × p_{t-1} × |Δ(scaled_pos)|` | ✅ | 无量纲 |
+
+### 指标计算（metrics.py，唯一来源）
+
+| 指标 | 公式 | 备注 |
+|------|------|------|
+| E(R) | `mean(R) × 252` | 年化 |
+| std(R) | `std(R) × √252` | 年化 |
+| DD | `√mean(min(0,R)²) × √252` | 标准下方差 |
+| Sharpe | `E(R) / std(R)` | |
+| Sortino | `E(R) / DD` | |
+| MDD | **rolling 252-day max** on NAV | max across all 1-year windows |
+| Calmar | `E(R) / MDD` | |
+| % +ve | `count(R>0) / count(R)` | |
+| Ave P/L | `mean(R>0) / |mean(R<0)|` | |
+
+### Portfolio 构建
+
+```
+每个合约: NAV_i = 100 × cumprod(1 + R_t^i)
+总 NAV: NAV_total = Σ NAV_i
+Portfolio returns: NAV_total.pct_change()
+```
+
+### Table 2 vs Table 3
+
+| | Table 3 | Table 2 |
+|---|---|---|
+| Per-contract vol scaling | ✅ (Equation 4) | ❌ |
+| Portfolio 构建 | NAV | NAV |
+| Portfolio-level vol scaling | ❌ | ✅ `σ_tgt / σ_portfolio × R_portfolio` |
+| σ_tgt | 10% annual (≈0.0063 daily) | same |
+
+---
+
+## 对齐结果 (σ_tgt_annual=10%, Equity Index)
+
+### Table 3 (per-contract vol scaling)
+| | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | Ave P/L |
+|---|---|---|---|---|---|---|---|---|---|
+| Long ours | +0.057 | +0.094 | +0.070 | +0.607 | +0.812 | +0.163 | +0.351 | +0.552 | +0.902 |
+| paper | +0.504 | +0.928 | +0.606 | +0.543 | +0.831 | +0.127 | +0.466 | +0.541 | +0.928 |
+| | ❌88 | ❌89 | ❌88 | ✅11.8 | ✅2.3 | ⚠️28 | ⚠️24 | ✅2.0 | ✅2.8 |
+
+### Table 2 (portfolio-level vol scaling)
+| | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | Ave P/L |
+|---|---|---|---|---|---|---|---|---|---|
+| Long ours | +0.089 | +0.098 | +0.071 | +0.909 | +1.262 | +0.132 | +0.676 | +0.550 | +0.951 |
+| paper | +0.668 | +0.970 | +0.606 | +0.688 | +1.102 | +0.132 | +0.509 | +0.542 | +0.948 |
+| | ❌86 | ❌89 | ❌88 | ❌32 | ✅14.5 | **✅0.0** | ❌32 | ✅1.5 | ✅0.3 |
+
+### 已知问题
+- std/E(R)/DD 绝对值偏低 ~90%（σ_tgt 的 scale 不对，论文的 std ≈ 0.97 annual）
+- 比率指标（Sharpe/Sortino/%+ve/Ave P/L）对齐好
+- Table 2 Long MDD = 0.132 精确匹配论文 ✅
+- Sign(R)/MACD E(R) 方向/幅度仍有问题
+
+### 待确定
+- 论文 std ≈ 0.97 annual 对应 σ_tgt_daily ≈ 0.061（而非 0.0063）
+- σ_tgt=0.064 时 std ≈ 0.97 但 MDD 崩到 0.9+
+- 可能需要 σ_tgt ≈ 0.061 daily（对应 97% annual），MDD 用不同定义
+
+---
+
+## 代码结构
+
+```
+IEOR4733_Project/
+├── config.py              # 参数（BP, σ_tgt, 资产分类, paper值）
+├── data_loader.py         # CLC 数据加载
+├── strategies.py          # Long/Sign(R)/MACD 信号
+├── vol_scaling.py         # EWMA vol 计算
+├── metrics.py             # 9 指标（唯一来源！）
+├── baseline_backtest.py   # Table 2/3 主运行脚本
+└── methodology.md         # 本文件
+```
+
+**规则**：
+- 所有指标计算统一用 `metrics.py`，禁止在其他文件重复实现
+- 参数统一在 `config.py`，不要 hardcode
 
 ---
 
@@ -40,18 +113,12 @@
 | **数据源** | Pinnacle Data Corp CLC Database |
 | **合约数** | 50 个期货合约 |
 | **时间范围** | 2005-2019 |
-| **资产类别** | Commodity (25), Equity Index (11), Fixed Income (5), FX (9) |
-| **训练方式** | 每隔 5 年重新训练 |
+| **资产类别** | Commodity (23), Equity Index (11), Fixed Income (4), Forex (9) |
 | **测试期** | 2011-2019 |
 
-### 滚动训练 (论文原文)
-
-> "We retrain our model **at every 5 years**, using all data available up to that point to optimise the parameters. Model parameters are then **fixed for the next 5 years** to produce out-of-sample results. In total, our testing period is from **2011 to 2019**."
-
-**理解**:
-- 训练期：使用到某时间点之前的所有数据
-- 参数固定：随后 5 年用于样本外测试
-- 测试期：2011-2019
+### CLC 数据质量
+- 45/50 可用（排除 ZH/ZU/US 全零/NaN，ZI/ZN 严重跳变）
+- LX 排除（2026-01-19 异常单日跌 88%）
 
 ---
 
@@ -60,19 +127,14 @@
 **时间窗口**: 60 天
 
 **8 个特征**:
-1. **归一化收盘价** (Normalised close price series)
-2. **21 天收益率** (1 month, 波动率调整): `r_{t-21,t} / (σ_t * √21)`
-3. **42 天收益率** (2 months): `r_{t-42,t} / (σ_t * √42)`
-4. **63 天收益率** (3 months): `r_{t-63,t} / (σ_t * √63)`
-5. **252 天收益率** (1 year): `r_{t-252,t} / (σ_t * √252)`
-6. **MACD 指标** (公式 3):
-   ```
-   MACD_t = q_t / std(q_{t-252:t})
-   q_t = (m(S) - m(L)) / std(p_{t-63:t})
-   ```
-   多时间尺度平均: Sk ∈ {8, 16, 32}, Lk ∈ {24, 48, 96}
-7. **RSI 指标** (30 天回看)
-8. **波动率** (60 天指数加权移动标准差)
+1. 归一化收盘价
+2. 21 天收益率 (vol-adjusted)
+3. 42 天收益率
+4. 63 天收益率
+5. 252 天收益率
+6. MACD 指标 (Eq 3)
+7. RSI (30 天)
+8. 波动率 (60 天 EWMA)
 
 **输出形状**: `(60, 8)` → LSTM 输入
 
@@ -80,185 +142,64 @@
 
 ## 3. 动作空间
 
-| 模型 | 动作空间 | 说明 |
-|------|----------|------|
-| **DQN** | `{-1, 0, 1}` | 离散：做空、空仓、做多 |
-| **PG** | `{-1, 0, 1}` | 离散 |
-| **A2C** | `[-1, 1]` | 连续 |
+| 模型 | 动作空间 |
+|------|----------|
+| DQN | `{-1, 0, 1}` 离散 |
+| PG | `{-1, 0, 1}` 离散 |
+| A2C | `[-1, 1]` 连续 |
 
 ---
 
 ## 4. 奖励函数 (公式 4)
 
 ```
-R_t = (A_t * σ_t^(-1)) * r_t - bp * p_{t-1} * |A_t - A_{t-1}| * σ_t^(-1)
+R_t = A_{t-1} × (σ_tgt/σ_{t-1}) × r_t − bp × p_{t-1} × |A_{t-1}×σ_tgt/σ_{t-1} − A_{t-2}×σ_tgt/σ_{t-2}|
 ```
 
-**其中**:
-- `A_t`: 动作 (位置)
-- `σ_t^(-1) = σ_target / σ_t`: 波动率缩放因子
-- `σ_target = 0.10` (10% 年化目标波动率)
-- `bp = 0.0020` (20 bps 交易成本)
-- `r_t`: 收益率
-- `p_{t-1}`: 前一时刻价格
+其中:
+- `r_t = p_t - p_{t-1}` (additive profits on normalized prices)
+- `σ_t = EWMA(60) std of r_t`
+- `σ_tgt = 10% annual → 0.0063 daily`
+- `bp = 0.0020`
 
 ---
 
 ## 5. 网络架构 (Section 4.3)
 
-**所有模型使用相同网络结构**:
-
 | 组件 | 规格 |
 |------|------|
-| **类型** | 两层 LSTM |
-| **第一层** | 64 单元 |
-| **第二层** | 32 单元 |
-| **激活函数** | Leaky-ReLU |
-| **Leaky-ReLU 负斜率** | 0.01 (标准值) |
-
-> "We use **two-layer LSTM networks with 64 and 32 units** in all models, and **Leaky Rectifying Linear Units (Leaky-ReLU)** are used as activation functions."
+| 类型 | 两层 LSTM |
+| 第一层 | 64 单元 |
+| 第二层 | 32 单元 |
+| 激活 | Leaky-ReLU (slope=0.01) |
 
 ---
 
-## 6. 超参数 (Table 1) ⚠️ 严格对照
+## 6. 超参数 (Table 1)
 
 ### DQN
-
 | 参数 | 值 |
 |------|-----|
-| **α_critic** | **0.0001** |
-| **Optimiser** | Adam |
-| **Batch size** | **64** |
-| **γ (折扣因子)** | **0.3** |
-| **bp (交易成本)** | **0.0020** |
-| **Memory size** | **5000** |
-| **τ (target update)** | **1000** |
+| α_critic | 0.0001 |
+| Optimiser | Adam |
+| Batch size | 64 |
+| γ | 0.3 |
+| bp | 0.0020 |
+| Memory size | 5000 |
+| τ (target update) | 1000 |
 
-> "The memory size shows the size of the buffer for experience replay, and we update the parameters of our target network in DQN at **every 1000 steps**."
-
-### PG
-
+### A2C ⚠️
 | 参数 | 值 |
 |------|-----|
-| **α_actor** | **0.0001** |
-| **Optimiser** | Adam |
-| **Batch size** | **- (无)** |
-| **γ** | **0.3** |
-| **bp** | **0.0020** |
-| **Memory size** | **-** |
-| **τ** | **-** |
-
-### A2C ⚠️ 注意 critic 学习率
-
-| 参数 | 值 |
-|------|-----|
-| **α_critic** | **0.001** ⚠️ (不是 0.0001！) |
-| **α_actor** | **0.0001** |
-| **Optimiser** | Adam |
-| **Batch size** | **128** |
-| **γ** | **0.3** |
-| **bp** | **0.0020** |
-| **Memory size** | **-** |
-| **τ** | **-** |
+| α_critic | **0.001** |
+| α_actor | 0.0001 |
+| Batch size | 128 |
+| γ | 0.3 |
 
 ---
 
-## 7. 训练稳定机制 (Section 3.2)
+## 7. 训练方式
 
-**DQN 采用三种稳定策略**:
-
-1. **Fixed Q-targets** [49]
-   - 使用独立的目标网络产生 target values
-   - 每 τ=1000 步更新目标网络参数
-   
-2. **Double DQN** [18]
-   - 减少 policy variances
-   - 主网络选择动作，目标网络计算 Q 值
-
-3. **Dueling DQN** [50] (可选)
-   - 分离 Q-value 为 state value 和 advantage
-
----
-
-## 8. 训练方式
-
-### 按资产类别分组训练
-
-> "As our dataset consists of different asset classes, **we train a separate model for each asset class**."
-
-**4 个资产类别**:
-- Commodity
-- Equity Index
-- Fixed Income
-- FX
-
-### 等权组合评估
-
-> "We then form a simple portfolio by **giving equal weights to each contract**"
-
-```
-R_port = (1/N) * Σ R_i
-```
-
----
-
-## 9. 评估指标 (Section 4.4)
-
-| 指标 | 说明 |
-|------|------|
-| **E(R)** | 年化期望收益 |
-| **std(R)** | 年化标准差 |
-| **DD** | Downside Deviation (负收益标准差) |
-| **Sharpe** | E(R) / std(R) |
-| **Sortino** | E(R) / DD |
-| **MDD** | Maximum Drawdown |
-| **Calmar** | E(R) / MDD |
-| **% +ve Returns** | 正收益交易占比 |
-| **Ave. P / Ave. L** | 正/负收益比率 |
-
----
-
-## 10. 代码实现检查清单
-
-### ✅ 必须对齐
-
-| 组件 | 论文值 | 检查 |
-|------|--------|------|
-| LSTM 结构 | [64, 32] | ✅ |
-| Leaky-ReLU | negative_slope=0.01 | ✅ |
-| DQN α_critic | 0.0001 | ✅ |
-| DQN batch | 64 | ✅ |
-| DQN memory | 5000 | ✅ |
-| DQN τ | 1000 | ✅ |
-| A2C α_critic | **0.001** | ⚠️ 需修复 |
-| A2C α_actor | 0.0001 | ✅ |
-| A2C batch | 128 | ⚠️ 需检查 |
-| PG α_actor | 0.0001 | ✅ |
-| γ | 0.3 | ✅ |
-| bp | 0.002 | ✅ |
-| 状态窗口 | 60 天 | ✅ |
-| 状态特征 | 8 个 | ✅ |
-| 波动率目标 | 10% | ✅ |
-
----
-
-## 11. 论文 Table 2 目标结果
-
-### DQN Sharpe Ratio (目标)
-
-| 资产类别 | 论文 Sharpe |
-|----------|-------------|
-| Commodity | 0.723 |
-| Equity Index | 0.648 |
-| Fixed Income | 0.935 |
-| FX | 0.546 |
-| **All** | **1.288** |
-
----
-
-## 12. 修复记录
-
-### 2026-03-20 21:35 EDT
-- ⚠️ 发现 A2C α_critic 应为 **0.001** (之前错误设为 0.0001)
-- ⚠️ PG batch size 为 **-** (无，之前错误设为 128)
-- ✅ 更新 methodology.md 为完整论文提取版本
+- 按资产类别分组训练（4 个模型）
+- 每 5 年重新训练
+- 等权组合: `R_port = (1/N) Σ R_i`
