@@ -17,31 +17,27 @@ MACD_STD_WINDOW = 252     # MACD signal standardisation window [4]
 WARMUP_DAYS = 252         # Minimum warmup days before test period
 
 # =============================================================================
-# σ_tgt — Per-contract daily volatility target (additive framework)
+# σ_tgt — Volatility target
 #
-# Paper Formula 4: r_t = p_t - p_{t-1} (additive profits)
-# σ_t = EWMA(60) std of r_t (same units: price/day)
-# σ_tgt = same units, constant across all contracts
-# σ_tgt/σ_t is dimensionless → normalises each contract to same daily vol
+# Paper Equation 4: positions scaled by σ_tgt / σ_t
+# σ_t = EWMA(60) std of r_t where r_t = p_t - p_{t-1} on p0-normalized prices
 #
-# The specific value does NOT affect ratio metrics (Sharpe, Sortino, % +ve, Ave P/L).
-# It only scales E(R), std(R), DD, MDD proportionally.
+# σ_tgt_annual = 10% is the target annual portfolio volatility.
+# σ_tgt_daily = 0.10 / √252 ≈ 0.0063
 #
-# σ_tgt = 0.10 daily was reverse-engineered to match Table 3 std(R).
-# This value is NOT from the paper — it is calibrated.
+# This gives MDD ≈ 0.13-0.24 (close to paper range 0.12-0.35)
 # =============================================================================
-SIGMA_TGT_DAILY = 0.93 / math.sqrt(TRADING_DAYS)  # Daily target volatility (percentage framework, 93% annualized to match Table 3)
-MAX_LEVERAGE = 2.0      # Cap on per-contract scaling factor (strict limit to match paper MDD)
+SIGMA_TGT_ANNUAL = 0.10
+SIGMA_TGT_DAILY = SIGMA_TGT_ANNUAL / math.sqrt(TRADING_DAYS)  # ≈ 0.00630
+MAX_LEVERAGE = 5.0
 
 # =============================================================================
 # Portfolio-level volatility target (Table 2 only)
 #
 # Paper says Table 2 adds portfolio-level vol scaling so "different methods
-# are evaluated at the same target volatility." The specific target is NOT given.
-# PORT_TGT_STD = 0.97 is reverse-engineered from Table 2 output where
-# std(R) ≈ 0.97 for all strategies/asset classes.
+# are evaluated at the same target volatility."
 # =============================================================================
-PORT_TGT_STD = 0.97
+PORT_TGT_STD = SIGMA_TGT_ANNUAL  # Same target for portfolio-level vol scaling
 
 # =============================================================================
 # Test Period
