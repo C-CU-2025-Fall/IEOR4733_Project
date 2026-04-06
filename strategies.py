@@ -68,7 +68,6 @@ def strategy_macd(prices, pairs=MACD_PAIRS,
     for t in range(std_window, len(prices)):
         m = macd_avg[t]
         if not (np.isnan(m) or np.isinf(m)):
-            phi = m * np.exp(-m ** 2 / 4) / 0.89
-            positions[t] = np.clip(phi, -1, 1)
+            positions[t] = m * np.exp(-m ** 2 / 4) / 0.89
 
     return positions

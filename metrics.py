@@ -24,11 +24,9 @@ def calc_std(port_returns, annual_factor=TRADING_DAYS):
 
 
 def calc_downside_deviation(port_returns, annual_factor=TRADING_DAYS):
-    """DD: annualised std of negative returns only (downside deviation)."""
-    neg = port_returns[port_returns < 0]
-    if len(neg) > 1:
-        return np.std(neg) * np.sqrt(annual_factor)
-    return calc_std(port_returns, annual_factor) / np.sqrt(2)
+    """DD: downside deviation = sqrt(1/n * sum(min(0, R_i)^2)), annualized."""
+    n = len(port_returns)
+    return np.sqrt(np.mean(np.minimum(port_returns, 0) ** 2)) * np.sqrt(annual_factor)
 
 
 def calc_sharpe(port_returns, annual_factor=TRADING_DAYS):
@@ -45,29 +43,21 @@ def calc_sortino(port_returns, annual_factor=TRADING_DAYS):
     return er / dd if dd > 0 else 0.0
 
 
-def calc_mdd(port_returns):
+def calc_mdd(port_returns, window=252):
     """
-    Maximum Drawdown: max peak-to-trough decline.
-    
-    For additive returns (paper's framework), we use cumulative sum as the
-    wealth/path. Drawdown is computed as (peak - trough) / |peak| to handle
-    both positive and negative cumulative paths.
-    
-    This gives MDD in the same scale as the paper's Table 2 (0.06–0.43 range).
+    Rolling Maximum Drawdown: average of max drawdown over rolling windows.
+
+    MDD = max((Peak_t - Trough_t) / Peak_t) over window, averaged across windows.
+    Uses cumprod(1 + R) as wealth curve within each window.
     """
-    # Cumulative PnL path (additive returns)
-    cumulative = np.cumsum(port_returns)
-    
-    # Running maximum of cumulative path
-    running_max = np.maximum.accumulate(cumulative)
-    
-    # Drawdown: how far below peak at each point
-    # Use absolute value of running_max to normalize (handles negative cumulative)
-    drawdown = (running_max - cumulative) / np.where(
-        running_max > 0, running_max, np.abs(running_max) + 1e-10
-    )
-    
-    return float(np.nanmax(drawdown))
+    mdds = []
+    for i in range(len(port_returns) - window + 1):
+        w = port_returns[i:i + window]
+        wealth = np.cumprod(1 + w)
+        peak = np.maximum.accumulate(wealth)
+        dd = (peak - wealth) / peak
+        mdds.append(float(np.max(dd)))
+    return float(np.mean(mdds)) if mdds else 0.0
 
 
 def calc_calmar(port_returns, annual_factor=TRADING_DAYS):
