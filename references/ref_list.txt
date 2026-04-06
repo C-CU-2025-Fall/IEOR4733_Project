@@ -1,0 +1,59 @@
+# Reference list from Zhang, Zohren, Roberts (2019) "Deep Reinforcement Learning for Trading"
+# 56 references total
+
+[1] Arrow (1971) - The theory of risk aversion
+[2] Baltas & Kosowski (2017) - Demystifying time-series momentum strategies
+[3] Bao et al. (2017) - Deep learning framework for financial time series using stacked autoencoders and LSTM
+[4] Baz et al. (2015) - Dissecting investment strategies in the cross section and time series [SSRN 2695101]
+[5] Bekiros (2010) - Heterogeneous trading strategies with adaptive fuzzy actor-critic RL
+[6] Bellemare et al. (2017) - A distributional perspective on reinforcement learning
+[7] Bertoluzzo & Corazza (2012) - Testing different RL configurations for financial trading
+[8] Chan (2009) - Quantitative trading: How to build your own algorithmic trading business
+[9] Chan (2013) - Algorithmic trading: Winning strategies and their rationale
+[10] Pinnacle Data Corp - CLC Database
+[11] Collobert et al. (2011) - Natural language processing (almost) from scratch
+[12] Deng et al. (2016) - Deep direct reinforcement learning for financial signal representation and trading
+[13] Di Persio & Honchar (2016) - ANN architectures for stock price prediction
+[14] Fischer & Krauss (2018) - Deep learning with LSTM networks for financial market predictions
+[15] Fischer (2018) - Reinforcement learning in financial markets - A survey
+[16] Graham & Dodd (1934) - Security analysis
+[17] Harvey et al. (2018) - The impact of volatility targeting
+[18] Hasselt (2010) - Double Q-learning
+[19] Hochreiter & Schmidhuber (1997) - Long short-term memory
+[20] Huang (2018) - Financial trading as a game: A deep RL approach [arXiv:1807.02787]
+[21] Ingersoll (1987) - Theory of financial decision making
+[22] Jin & El-Saawy (2016) - Portfolio management using RL
+[23] Kingma & Ba (2015) - Adam: A method for stochastic optimization
+[24] Kirk (2012) - Optimal control theory: An introduction
+[25] Krizhevsky et al. (2012) - ImageNet classification with deep CNNs
+[26] Li et al. (2007) - Short-term stock market timing prediction under RL schemes
+[27] Lim, Zohren & Roberts (2019) - Enhancing time-series momentum strategies using deep neural networks
+[28] Maas et al. (2013) - Rectifier nonlinearities improve neural network acoustic models
+[29] Markowitz (1952) - Portfolio selection
+[30] Merton (1969) - Lifetime portfolio selection under uncertainty
+[31] Metropolis & Ulam (1949) - The Monte Carlo method
+[32] Michaud (1989) - The Markowitz optimization enigma
+[33] Mnih et al. (2016) - Asynchronous methods for deep RL (A3C)
+[34] Mnih et al. (2013) - Playing Atari with deep RL (DQN)
+[35] Moody & Saffell (2001) - Learning to trade via direct reinforcement
+[36] Moody et al. (1998) - Performance functions and RL for trading systems
+[37] Moskowitz et al. (2012) - Time series momentum
+[38] Murphy (1999) - Technical analysis of the financial markets
+[39] Pratt (1978) - Risk aversion in the small and in the large
+[40] Ritter (2017) - Machine learning for trading
+[41] Rohrbach et al. (2017) - Momentum and trend following trading strategies for currencies
+[42] Schwager (2017) - A Complete Guide to the Futures Market
+[43] Singhvi (1988) - How to Make Money in Stocks
+[44] Sirignano & Cont (2019) - Universal features of price formation in financial markets
+[45] Sutton & Barto (1998) - Introduction to reinforcement learning
+[46] Tan et al. (2011) - Stock trading with cycles: ANFIS and RL
+[47] Tsantekidis et al. (2017a) - Forecasting stock prices from limit order book using CNNs
+[48] Tsantekidis et al. (2017b) - Using deep learning to detect price change indications
+[49] Van Hasselt et al. (2016) - Deep RL with double Q-learning
+[50] Wang et al. (2016) - Dueling network architectures for deep RL
+[51] Wilder (1978) - New concepts in technical trading systems
+[52] Williams (1992) - Simple statistical gradient-following algorithms for connectionist RL
+[53] Xiong et al. (2018) - Practical deep RL approach for stock trading [arXiv:1811.07522]
+[54] Zhang et al. (2018) - BDLOB: Bayesian deep CNNs for limit order books
+[55] Zhang et al. (2019a) - DeepLOB: Deep CNNs for limit order books
+[56] Zhang et al. (2019b) - Extending deep learning models for LOB to quantile regression
