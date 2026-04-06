@@ -43,16 +43,11 @@ def calc_sortino(r):
     d = calc_dd(r)
     return calc_er(r) / d if d > 0 else 0
 
-def calc_mdd(r, window=252):
-    """Rolling MDD: average of max drawdown over rolling windows."""
-    mdds = []
-    for i in range(len(r) - window + 1):
-        w = r[i:i + window]
-        wealth = np.cumprod(1 + w)
-        peak = np.maximum.accumulate(wealth)
-        dd = (peak - wealth) / peak
-        mdds.append(float(np.max(dd)))
-    return float(np.mean(mdds)) if mdds else 0.0
+def calc_mdd(r):
+    """Standard MDD: max((Peak - Trough) / Peak) over entire period."""
+    wealth = np.cumprod(1 + r)
+    peak = np.maximum.accumulate(wealth)
+    return float(np.max((peak - wealth) / peak))
 
 def calc_calmar(r):
     m = calc_mdd(r)
@@ -134,7 +129,12 @@ def run_backtest(asset_class='Equity Index', mode='A'):
 
     for strat in ['Long', 'Sign(R)', 'MACD']:
         all_s = [pd.Series(r, index=d) for d, r in sd[strat]]
-        port_rets = pd.DataFrame(all_s).T.mean(axis=1).dropna().values
+        port_df = pd.DataFrame(all_s).T.dropna()
+
+        # Build portfolio NAV: each contract starts at 100
+        navs = port_df.apply(lambda col: 100 * np.cumprod(1 + col))
+        port_nav = navs.sum(axis=1)
+        port_rets = port_nav.pct_change().dropna().values
 
         ours = compute_all(port_rets)
         pp = paper[strat]
