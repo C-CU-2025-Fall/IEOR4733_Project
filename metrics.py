@@ -1,16 +1,28 @@
 """
-metrics.py — Portfolio performance metrics (9 indicators, each as a function)
+metrics.py — Single source of truth for all 9 portfolio metrics.
 
-Note: With additive r_t = p_t - p_{t-1}, the returns R_t are in price units.
-After per-contract vol scaling, each contract's daily vol ≈ σ_tgt_daily.
-We treat the scaled returns as return-like quantities for metric computation.
+Paper reference: Zhang, Zohren, Roberts (2020) Section 4.4
+
+Metrics:
+  1. E(R)     — Annualised expected return
+  2. std(R)   — Annualised standard deviation
+  3. DD       — Annualised downside deviation (from zero)
+  4. Sharpe   — E(R) / std(R)
+  5. Sortino  — E(R) / DD
+  6. MDD      — Rolling 252-day maximum drawdown on NAV
+  7. Calmar   — E(R) / MDD
+  8. % +ve    — Fraction of positive return days
+  9. Ave P/L  — Mean positive return / mean |negative return|
+
+All other modules MUST import from this file. No duplicate implementations.
 """
 import numpy as np
+import pandas as pd
 from config import TRADING_DAYS
 
 
 # =============================================================================
-# Individual metric functions — each independently testable
+# Individual metric functions
 # =============================================================================
 
 def calc_expected_return(port_returns, annual_factor=TRADING_DAYS):
@@ -24,22 +36,9 @@ def calc_std(port_returns, annual_factor=TRADING_DAYS):
 
 
 def calc_downside_deviation(port_returns, annual_factor=TRADING_DAYS):
-    """
-    DD: Downside Deviation — only downside deviations from zero are counted.
-    
-    Formula: sqrt(1/n × Σ(deviation_i²)) × √annual_factor
-    
-    where deviation_i = min(0, R_i)  [positive deviations are zeroed out]
-    
-    Example:
-      R = [+1%, -2%, +3%, -1%]
-      deviations = [0, -2%, 0, -1%]  ← positive returns zeroed out
-      DD = sqrt(mean([0, 0.02², 0, 0.01²])) × √252
-    """
-    # Compute deviations from zero, zero out positive deviations
-    downside_deviations = np.minimum(port_returns, 0)  # positive → 0, negative → keep
-    # Square, mean, sqrt, annualize
-    return np.sqrt(np.mean(downside_deviations ** 2)) * np.sqrt(annual_factor)
+    """DD: downside deviation from zero. sqrt(mean(min(0,R)²)) × √T."""
+    downside = np.minimum(port_returns, 0)
+    return np.sqrt(np.mean(downside ** 2)) * np.sqrt(annual_factor)
 
 
 def calc_sharpe(port_returns, annual_factor=TRADING_DAYS):
@@ -56,60 +55,91 @@ def calc_sortino(port_returns, annual_factor=TRADING_DAYS):
     return er / dd if dd > 0 else 0.0
 
 
-def calc_mdd(port_returns):
+def calc_mdd_rolling(port_returns, window=TRADING_DAYS):
+    """MDD: rolling window max drawdown on cumprod(1+R).
+    
+    For each 252-day window, compute max drawdown, then take the max across all windows.
+    This is the "worst year" drawdown.
     """
-    Maximum Drawdown: max peak-to-trough decline over entire period.
+    mdds = []
+    for i in range(len(port_returns) - window + 1):
+        w = port_returns[i:i + window]
+        wealth = np.cumprod(1 + w)
+        peak = np.maximum.accumulate(wealth)
+        mdds.append(np.max((peak - wealth) / peak))
+    return float(max(mdds)) if mdds else 0.0
 
-    Uses cumprod(1 + R) for percentage returns framework.
-    MDD = max((Peak - Trough) / Peak)
+
+def calc_mdd_from_nav(total_nav, window=TRADING_DAYS):
+    """MDD: rolling window max drawdown directly on NAV series.
+    
+    For each 252-day window, compute max drawdown on NAV, take max across windows.
     """
-    wealth = np.cumprod(1 + port_returns)
-    peak = np.maximum.accumulate(wealth)
-    drawdown = (peak - wealth) / peak
-    return float(np.nanmax(drawdown))
+    nav_vals = total_nav.values if isinstance(total_nav, pd.Series) else total_nav
+    mdds = []
+    for i in range(len(nav_vals) - window + 1):
+        w = nav_vals[i:i + window]
+        peak = np.maximum.accumulate(w)
+        mdds.append(np.max((peak - w) / peak))
+    return float(max(mdds)) if mdds else 0.0
 
 
-def calc_calmar(port_returns, annual_factor=TRADING_DAYS):
+def calc_calmar(port_returns, annual_factor=TRADING_DAYS, mdd=None):
     """Calmar ratio: E(R) / MDD."""
     er = calc_expected_return(port_returns, annual_factor)
-    mdd = calc_mdd(port_returns)
+    if mdd is None:
+        mdd = calc_mdd_rolling(port_returns)
     return er / mdd if mdd > 0 else 0.0
 
 
 def calc_pct_positive(port_returns):
     """% +ve: fraction of positive return days."""
-    return np.sum(port_returns > 0) / len(port_returns)
+    return float(np.sum(port_returns > 0) / len(port_returns))
 
 
 def calc_avg_pl(port_returns):
-    """Ave P/L: ratio of average positive return to average |negative return|."""
+    """Ave P/L: ratio of mean positive return to mean |negative return|."""
     pos = port_returns[port_returns > 0]
     neg = port_returns[port_returns < 0]
     avg_pos = np.mean(pos) if len(pos) > 0 else 0.0
     avg_neg = abs(np.mean(neg)) if len(neg) > 0 else 1e-10
-    return avg_pos / avg_neg
+    return float(avg_pos / avg_neg)
 
 
 # =============================================================================
-# Compose all 9 metrics
+# Compose all 9 metrics — two entry points
 # =============================================================================
 
-METRIC_FUNCTIONS = {
-    'E(R)':      calc_expected_return,
-    'std(R)':    calc_std,
-    'DD':        calc_downside_deviation,
-    'Sharpe':    calc_sharpe,
-    'Sortino':   calc_sortino,
-    'MDD':       calc_mdd,
-    'Calmar':    calc_calmar,
-    '% +ve':     calc_pct_positive,
-    'Ave P/L':   calc_avg_pl,
-}
+METRIC_NAMES = ['E(R)', 'std(R)', 'DD', 'Sharpe', 'Sortino', 'MDD', 'Calmar', '% +ve', 'Ave P/L']
 
 
-def compute_all_metrics(port_returns, annual_factor=TRADING_DAYS):
-    """Compute all 9 metrics from a 1D array of portfolio returns."""
-    return {name: round(fn(port_returns, annual_factor)
-                        if name not in ('MDD', '% +ve', 'Ave P/L')
-                        else fn(port_returns), 3)
-            for name, fn in METRIC_FUNCTIONS.items()}
+def compute_all_metrics(port_returns, total_nav=None, annual_factor=TRADING_DAYS):
+    """Compute all 9 metrics from portfolio returns.
+    
+    Args:
+        port_returns: 1D array of portfolio daily returns
+        total_nav:    Optional NAV series. If provided, MDD is computed on NAV directly.
+                      If None, MDD uses cumprod(1+R) with rolling 252d window.
+        annual_factor: Trading days per year (default 252)
+    
+    Returns:
+        dict with all 9 metric values (rounded to 3 decimals)
+    """
+    er = calc_expected_return(port_returns, annual_factor)
+    std_r = calc_std(port_returns, annual_factor)
+    dd = calc_downside_deviation(port_returns, annual_factor)
+    sharpe = er / std_r if std_r > 0 else 0.0
+    sortino = er / dd if dd > 0 else 0.0
+    
+    if total_nav is not None:
+        mdd = calc_mdd_from_nav(total_nav, window=annual_factor)
+    else:
+        mdd = calc_mdd_rolling(port_returns, window=annual_factor)
+    
+    calmar = er / mdd if mdd > 0 else 0.0
+    pct_pos = calc_pct_positive(port_returns)
+    avg_pl = calc_avg_pl(port_returns)
+    
+    return {name: round(v, 3) for name, v in zip(
+        METRIC_NAMES, [er, std_r, dd, sharpe, sortino, mdd, calmar, pct_pos, avg_pl]
+    )}
