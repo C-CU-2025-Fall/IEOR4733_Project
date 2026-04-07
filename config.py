@@ -72,7 +72,7 @@ ASSET_CLASSES = {
         'ZO', 'ZP', 'ZR', 'ZT', 'ZW', 'ZZ',  # Grade B/A
     ],
     'Equity Index': [
-        'CA', 'EN', 'ER', 'ES', 'MD', 'SC', 'SP', 'XU', 'XX', 'YM',  # Exclude LX (data anomaly: -88% single-day drop 2026-01-19)
+        'CA', 'EN', 'ER', 'ES', 'LX', 'MD', 'SC', 'SP', 'XU', 'XX', 'YM',  # 11 contracts as per paper
     ],
     'Fixed Income': [
         'DT', 'FB', 'TY', 'UB',  # Grade A (exclude US)
@@ -88,7 +88,7 @@ EXCLUDED_CONTRACTS = {
     'ZN': '10-Year T-Note — 10451x price ratio, 1.01% roll issues (Grade D)',
     'ZU': 'Crude Oil Electronic — 0 rows in test period (Grade F)',
     'US': 'T-Bonds Composite — 0 rows in test period (Grade C)',
-    'LX': 'Euro Stoxx 50 — data anomaly: -88% single-day drop on 2026-01-19 (price 10234 → 1190)',
+    # LX anomaly is in 2026, outside test period (2011-2019) — included in Equity Index
 }
 
 # Quality summary
