@@ -2,10 +2,13 @@
 strategies.py — Trading signal functions
 Reference: [4] Baz et al. 2015 for MACD; [37] Moskowitz et al. 2012 for Sign(R)
 
-Note on return conventions:
-- Trading framework uses additive returns: r_t = p_t - p_{t-1} (p0-normalized)
-- Sign(R) signal uses PERCENTAGE returns for the lookback (Moskowitz convention)
-- MACD signal uses raw prices for EMA computation (Baz convention)
+All strategies operate in the additive framework (Paper Section 3.2):
+  r_t = p_t - p_{t-1}  (additive profits on p0-normalized prices)
+  
+Signal conventions:
+- Long Only: A_t = 1
+- Sign(R): A_t = sign(sum(r_{t-252:t}))  [Paper Eq 10]
+- MACD: A_t = φ(MACD_tilde)  [Paper Eq 3, 11, 12]
 """
 import numpy as np
 import pandas as pd
@@ -23,20 +26,22 @@ def strategy_long_only(n):
 # =============================================================================
 # Strategy 2: Sign(R) — [37] Moskowitz et al. 2012; [27] Lim et al. 2019
 # =============================================================================
-def strategy_sign_r(pct_returns, lookback=SIGN_LOOKBACK):
+def strategy_sign_r(additive_returns, lookback=SIGN_LOOKBACK):
     """
     Sign(R): A_t = sign(r_{t-252:t})  [Paper Eq 10]
     
-    Signal is the sign of cumulative percentage return over past `lookback` days.
-    Caller should pass PERCENTAGE returns (pct_change), not additive returns.
+    In the additive framework:
+      r_t = p_t - p_{t-1} (p0-normalized)
+      sum(r_{t-252:t}) = p_t - p_{t-252} = cumulative additive return
+      A_t = sign(cumulative additive return over past `lookback` days)
     
     Position ∈ {-1, 0, +1}.
     
     Reference: [37] Moskowitz, Ooi, Pedersen 2012; [27] Lim, Zohren, Roberts 2019
     """
-    positions = np.zeros(len(pct_returns))
-    for t in range(lookback, len(pct_returns)):
-        cum_ret = np.sum(pct_returns[t - lookback:t])
+    positions = np.zeros(len(additive_returns))
+    for t in range(lookback, len(additive_returns)):
+        cum_ret = np.sum(additive_returns[t - lookback:t])
         positions[t] = np.sign(cum_ret)
     return positions
 
