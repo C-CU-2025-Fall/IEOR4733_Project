@@ -1,6 +1,11 @@
 """
 strategies.py — Trading signal functions
-Reference: [4] Baz et al. 2015 for MACD; [27] Lim et al. 2019 for Sign(R)
+Reference: [4] Baz et al. 2015 for MACD; [37] Moskowitz et al. 2012 for Sign(R)
+
+Note on return conventions:
+- Trading framework uses additive returns: r_t = p_t - p_{t-1} (p0-normalized)
+- Sign(R) signal uses PERCENTAGE returns for the lookback (Moskowitz convention)
+- MACD signal uses raw prices for EMA computation (Baz convention)
 """
 import numpy as np
 import pandas as pd
@@ -16,20 +21,22 @@ def strategy_long_only(n):
 
 
 # =============================================================================
-# Strategy 2: Sign(R) — [27] Moskowitz et al. style
+# Strategy 2: Sign(R) — [37] Moskowitz et al. 2012; [27] Lim et al. 2019
 # =============================================================================
-def strategy_sign_r(returns, lookback=SIGN_LOOKBACK):
+def strategy_sign_r(pct_returns, lookback=SIGN_LOOKBACK):
     """
-    Sign(R): A_t = sign(cumulative return over past `lookback` days).
-
-    Signal computed on percentage returns.
+    Sign(R): A_t = sign(r_{t-252:t})  [Paper Eq 10]
+    
+    Signal is the sign of cumulative percentage return over past `lookback` days.
+    Caller should pass PERCENTAGE returns (pct_change), not additive returns.
+    
     Position ∈ {-1, 0, +1}.
-
-    Reference: [27] Eq 2-3
+    
+    Reference: [37] Moskowitz, Ooi, Pedersen 2012; [27] Lim, Zohren, Roberts 2019
     """
-    positions = np.zeros(len(returns))
-    for t in range(lookback, len(returns)):
-        cum_ret = np.prod(1 + returns[t - lookback:t]) - 1
+    positions = np.zeros(len(pct_returns))
+    for t in range(lookback, len(pct_returns)):
+        cum_ret = np.sum(pct_returns[t - lookback:t])
         positions[t] = np.sign(cum_ret)
     return positions
 
@@ -42,15 +49,20 @@ def strategy_macd(prices, pairs=MACD_PAIRS,
                   std_window=MACD_STD_WINDOW):
     """
     MACD: multi-timeframe MACD with φ transformation.
-
-    For each (S, L) pair [4] Eqs 4-6:
-      q_t = (EMA(P, S) - EMA(P, L)) / RollingStd(P, 63)
-      Y_t = q_t / RollingStd(q, 252)
-
-    Average across pairs, then apply position sizing [4] Eq 7:
-      X_t = φ(Y_t) = Y · exp(-Y²/4) / 0.89
-
+    
+    Paper Eq 3: MACD_t = q_t / std(q_{t-252:t})
+    Paper Eq 11-12: A_t = φ(MACD_tilde), where MACD_tilde = avg across pairs
+    
+    For each (S, L) pair:
+      q_t = (EMA(P, S) - EMA(P, L)) / std(P_{t-63:t})
+      MACD_t = q_t / std(q_{t-252:t})
+    
+    Average MACD_t across pairs, then apply:
+      φ(x) = x * exp(-x²/4) / 0.89
+    
     Position ∈ [-1, +1].
+    
+    Reference: [4] Baz et al. 2015
     """
     positions = np.zeros(len(prices))
     macd_sum = np.zeros(len(prices))
