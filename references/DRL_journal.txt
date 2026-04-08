@@ -1,0 +1,970 @@
+                                                                                                                                        Deep Reinforcement
+                                                                                                                                        Learning for Trading
+                                                                                                                                        Zihao Zhang, Stefan Zohren, and Stephen Roberts
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                            Zihao Zhang
+                                                                                                            is a D.Phil. student with           KEY FINDINGS
+                                                                                                            the Oxford-Man Institute         • In this article, the authors introduce reinforcement learning algorithms to design trading
+                                                                                                            of Quantitative Finance            strategies for futures contracts. They investigate both discrete and continuous action spaces
+                                                                                                            and the Machine Learning
+                                                                                                            Research Group at the
+                                                                                                                                               and improve reward functions by using volatility scaling to scale trade positions based on
+                                                                                                            University of Oxford in            market volatility.
+                                                                                                            Oxford, UK.                      • The authors discuss the connection between modern portfolio theory and the reinforce-
+                                                                                                            zihao.zhang@worc.ox.ac.uk          ment learning reward hypothesis and show that they are equivalent if a linear utility
+                                                                                                                                               function is used.
+                                                                                                            Stefan Zohren                    • The authors back test their methods on 50 very liquid futures contracts from 2011 to
+                                                                                                            is an associate professor
+                                                                                                            (research) with the                2019, and their algorithms deliver positive profits despite heavy transaction costs.
+                                                                                                            Oxford-Man Institute of
+                                                                                                            Quantitative Finance and
+                                                                                                            the Machine Learning
+                                                                                                            Research Group at the       ABSTRACT: In this article, the authors adopt           TOPICS: Futures and forward contracts,
+                                                                                                            University of Oxford in     deep reinforcement learning algorithms to design       exchanges/markets/clearinghouses, statistical
+                                                                                                            Oxford, UK.                 trading strategies for continuous futures contracts.   methods, simulations*
+                                                                                                            zohren@robots.ox.ac.uk
+                                                                                                                                        Both discrete and continuous action spaces are
+
+
+
+
+                                                                                                                                                                                               F
+                                                                                                            Stephen Roberts             considered, and volatility scaling is incorporated
+                                                                                                            is the director of the      to create reward functions that scale trade posi-              inancial trading has been a widely
+                                                                                                            Oxford-Man Institute        tions based on market volatility. They test their              researched topic, and a variety of
+                                                                                                            of Quantitative Finance,
+                                                                                                            the founding director of    algorithms on 50 very liquid futures contracts                 methods have been proposed to trade
+                                                                                                            the Oxford Centre for       from 2011 to 2019 and investigate how per-                     markets over the last few decades.
+                                                                                                            Doctoral Training in        formance varies across different asset classes,        These include fundamental analysis (Graham
+                                                                                                            Autonomous Intelligent
+                                                                                                            Machines and Systems,       including commodities, equity indexes, fixed           and Dodd 1934), technical analysis (Murphy
+                                                                                                            and the Royal Academy of    income, and foreign exchange markets. They             1999), and algorithmic trading (Chan 2009).
+                                                                                                            Engineering/Man Group       compare their algorithms against classical time-       Indeed, many practitioners use a hybrid of
+                                                                                                            Professor in the Machine
+                                                                                                            Learning Research Group
+                                                                                                                                        series momentum strategies and show that their         these techniques to make trades (Schwager
+                                                                                                            at the University of        method outperforms such baseline models, deliv-        2017). Algorithmic trading has arguably
+                                                                                                            Oxford in Oxford, UK.       ering positive profits despite heavy transaction       gained most recent interest and accounts for
+                                                                                                            sjrob@robots.ox.ac.uk       costs. The experiments show that the proposed          about 75% of trading volume in the US stock
+                                                                                                                                        algorithms can follow large market trends without      exchanges (Chan 2009). The advantages of
+                                                                                                            *All articles are now
+                                                                                                            categorized by topics       changing positions and can also scale down, or         algorithmic trading are widespread, ranging
+                                                                                                            and subtopics. View at      hold, through consolidation periods.                   from strong computing foundations to faster
+                                                                                                            PM-Research.com.                                                                   execution and risk diversification. One key
+
+
+                                                                                                                Spring 2020                                                                            The Journal of Financial Data Science   1
+                                                                                                            component of such trading systems is a predictive signal     in wealth. The performance of the final wealth measure
+                                                                                                            that can lead to alpha (excess return); to this end, math-   depends upon sequences of interdependent actions in
+                                                                                                            ematical and statistical methods are widely applied.         which optimal trading decisions do not just decide
+                                                                                                            However, because of the low signal-to-noise ratio of         immediate trade returns but also affect subsequent future
+                                                                                                            financial data and the dynamic nature of markets, the        returns. As mentioned by Merton (1969) and Ritter
+                                                                                                            design of these methods is nontrivial, and the effective-    (2017), this falls under the framework of optimal con-
+                                                                                                            ness of commonly derived signals varies through time.        trol theory (Kirk 2012) and forms a classical sequential
+                                                                                                                   In recent years, machine learning algorithms have     decision-making process. If the investor is risk neutral,
+                                                                                                            gained much popularity in many areas, with notable           the utility function becomes linear, and we only need
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                            successes in diverse application domains, including          to maximize the expected cumulative trades returns,
+                                                                                                            image classification (Krizhevsky, Sutskever, and Hinton       E( ΣTt =1δWt ); we observe that the problem fits exactly
+                                                                                                            2012) and natural language processing (Collobert et al.      with the framework of RL, the goal of which is to maxi-
+                                                                                                            2011). Similar techniques have also been applied to          mize some expected cumulative rewards via an agent
+                                                                                                            financial markets in an attempt to find higher alpha         interacting with an uncertain environment. Under the
+                                                                                                            (for a few examples using such techniques in the context     RL framework, we can directly map different market
+                                                                                                            of high-frequency data, see Tsantekidis et al. 2017a;        situations to trade positions and conveniently include
+                                                                                                            Zhang, Zohren, and Roberts 2018, 2019a, 2019b; Siri-         market frictions, such as commissions, in our reward
+                                                                                                            gnano and Cont 2019). Most research focuses on regres-       functions, allowing trading performance to be directly
+                                                                                                            sion and classification pipelines in which excess returns,   optimized.
+                                                                                                            or market movements, are predicted over some (fixed)                  In this article, we adopt state-of-the-art RL algo-
+                                                                                                            horizons. However, there is little discussion related to     rithms to the aforementioned problem setting, including
+                                                                                                            transforming these predictive signals into actual trade      deep Q-learning networks (DQN) (Mnih et al. 2013;
+                                                                                                            positions (see Lim, Zohren, and Roberts 2019 for an          Van Hasselt, Guez, and Silver 2016), policy gradients
+                                                                                                            attempt to train a deep learning model to learn positions    (PG) (Williams 1992), and advantage actor–critic (A2C)
+                                                                                                            directly). Indeed, such a mapping is nontrivial. As an       (Mnih et al. 2016). Both discrete and continuous action
+                                                                                                            example, predictive horizons are often relatively short      spaces are explored in our work, and we improve reward
+                                                                                                            (one day or a few days ahead if using daily data); how-      functions with volatility scaling (Moskowitz, Ooi, and
+                                                                                                            ever, large trends can persist for weeks or months with      Pedersen 2012; Harvey et al. 2018) to scale up trade posi-
+                                                                                                            some moderate consolidation periods. We therefore            tions when volatility is low, and vice versa. We show the
+                                                                                                            need a signal that not only has good predictive power        robustness and consistency of our algorithms by testing
+                                                                                                            but also can consistently produce good directional calls.    them on 50 very liquid futures contracts (CLC Database
+                                                                                                                   In this article, we report on reinforcement           2019) between 2011 and 2019. Our dataset consists of
+                                                                                                            learning (RL) (Sutton and Barto 1998) algorithms to          different asset classes, including commodities, equity
+                                                                                                            tackle the aforementioned problems. Instead of making        indexes, fixed income, and foreign exchange (FX)
+                                                                                                            predictions—followed by a trade decision based on            markets. We compare our method with classical time-
+                                                                                                            predictions—we train our models to directly output           series momentum strategies and find that our method
+                                                                                                            trade positions, bypassing the explicit forecasting step.    outperforms baseline models and generates positive
+                                                                                                            Modern portfolio theory (Arrow 1971; Pratt 1978;             returns in all sectors despite heavy transaction costs.
+                                                                                                            Ingersoll 1987) implies that, given a finite time horizon,   Time-series strategies work well in trending markets,
+                                                                                                            an investor chooses actions to maximize some expected        such as fixed-income markets, but suffer losses in FX
+                                                                                                            utility of final wealth:                                     markets in which directional moves are less usual. Our
+                                                                                                                                                                         experiments show that our algorithms can monetize on
+                                                                                                                                             T
+                                                                                                                                                                       large moves without changing positions and deal with
+                                                                                                                      E[U (WT )] = E U W0 + ∑ δWt              (1)   markets that are more mean reverting.
+                                                                                                                                            t =1  
+                                                                                                                                                                                  The remainder of the article is structured as fol-
+                                                                                                            where U is the utility function, W T is the final wealth     lows. We first introduce the current literature and present
+                                                                                                            over a finite horizon T, and dWt represents the change       our methodology. We then compare our methods with
+                                                                                                                                                                         baseline algorithms and show how trading performance
+
+
+                                                                                                            2   Deep Reinforcement Learning for Trading                                                                   Spring 2020
+                                                                                                            varies among asset classes; a description of the dataset and   directional moves but can suffer huge losses if markets
+                                                                                                            training methodology is also included. At the end, we          move sideways as the predictability of these signals
+                                                                                                            offer our conclusions and discuss extensions of our work.      deteriorates and excess turnover erodes profitability.
+                                                                                                                                                                           Here, we adopt time-series momentum features along
+                                                                                                            LITERATURE REVIEW                                              with technical indicators to represent state space and
+                                                                                                                                                                           obtain trade positions directly using RL. The idea of
+                                                                                                                   In this section, we review some classical trading       our representation is simple: extracting information
+                                                                                                            strategies and discuss how RL has been applied to this         across different momentum features and outputting
+                                                                                                            field. Fundamental analysis aims to measure the intrinsic      positions based on the aggregated information.
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                            value of a security by examining economic data so inves-              The current literature on RL in trading can be
+                                                                                                            tors can compare the security’s current price with esti-       categorized into three main methods: critic-only, actor-
+                                                                                                            mates to determine whether the security is undervalued         only, and actor–critic approaches (Fischer 2018). The
+                                                                                                            or overvalued. One of the established strategies is called     critic approach, mainly DQN, features most often in
+                                                                                                            CAN-SLIM (O’Neil 2009), and it is based on a major             publications in this field (Tan, Quek, and Cheng 2011;
+                                                                                                            study of market winners from 1880 to 2009. A common            Bertoluzzo and Corazza 2012; Jin and El-Saawy 2016;
+                                                                                                            criticism of fundamental analysis is that the entrance         Ritter 2017; Huang 2018). A state-action value function,
+                                                                                                            and exit timing of trades is not specified. Even when          Q, is constructed to represent how good a particular
+                                                                                                            markets move toward the estimated price, bad timing            action is in a state. Discrete action spaces are adopted
+                                                                                                            in entering trades could lead to huge drawdowns, and           in these works, and an agent is trained to fully go long
+                                                                                                            such moves in account values are often not bearable to         or short a position. However, a fully invested position
+                                                                                                            investors, shaking them out of the markets. Technical          is risky during high-volatility periods, exposing one
+                                                                                                            analysis is in contrast to fundamental analysis, in which      to severe risk when opposite moves occur. Ideally, one
+                                                                                                            a security’s historical price data are used to study price     would like to scale positions up or down according to
+                                                                                                            patterns. Technicians place trades based on a combi-           current market conditions. Doing this requires one to
+                                                                                                            nation of indicators such as the relative strength index       have large action spaces; however, the critic approach
+                                                                                                            (RSI) and Bollinger bands. However, owing to the lack          suffers from large action spaces because a score must be
+                                                                                                            of analysis on economic or market conditions, the pre-         assigned for each possible action.
+                                                                                                            dictability of these signals is not strong, often leading             The second most common approach is the actor-
+                                                                                                            to false breakouts.                                            only approach (Moody et al. 1998; Moody and Saffell
+                                                                                                                   A lgorithmic trading is a more systematic               2001; Deng et al. 2016; Lim, Zohren, and Roberts
+                                                                                                            approach that involves mathematical modeling and               2019), in which the agent directly optimizes the objec-
+                                                                                                            automated execution. Examples include trend fol-               tive function without computing the expected outcomes
+                                                                                                            lowing (Schwager 2017), mean-reversion (Chan 2013),            of each action in a state. Because a policy is directly
+                                                                                                            statistical arbitrage (Chan 2009), and delta-neutral           learned, actor-only approaches can be generalized to
+                                                                                                            trading strategies (Michaud 1989). We mainly review            continuous action spaces. In the works of Moody and
+                                                                                                            time-series momentum strategies by Moskowitz,                  Saffell (2001) and Lim, Zohren, and Roberts (2019),
+                                                                                                            Ooi, and Pedersen (2012) because we benchmark our              off line batch gradient ascent methods can be used to
+                                                                                                            models against their algorithms. Their work developed          optimize the objective function, such as profits or Sharpe
+                                                                                                            a very robust trading strategy by simply taking the            ratio, because the approach is differentiable end to end.
+                                                                                                            sign of returns over the last year as a signal; they dem-      However, this is different from standard RL actor-only
+                                                                                                            onstrated profitability for every contract considered          approaches in which a distribution needs to be learned
+                                                                                                            within 58 liquid instruments over 25 years. Thence-            for the policy. To study the distribution of a policy,
+                                                                                                            forth, a number of methods (Baz et al. 2015; Baltas            the policy gradient theorem (Sutton and Barto 1998)
+                                                                                                            and Kosowski 2017; Rohrbach, Suremann, and Oster-              and Monte Carlo methods (Metropolis and Ulam 1949)
+                                                                                                            rieder 2017; Lim, Zohren, and Roberts 2019) have been          are adopted in the training, and models are updated
+                                                                                                            proposed to enhance this strategy by estimating the            until the end of each episode. We often experience slow
+                                                                                                            trend and mapping to actual trade positions. How-              learning and need many samples to obtain an optimal
+                                                                                                            ever, these strategies are designed to profit from large       policy because individual bad actions will be considered
+
+
+                                                                                                            Spring 2020                                                                       The Journal of Financial Data Science   3
+                                                                                                            good as long as the total rewards are good; thus, a long                     State space. In the literature, many different
+                                                                                                            time is needed to adjust these actions.                                features have been used to represent state spaces.
+                                                                                                                  The actor–critic approach forms the third category               Among these features, a security’s past price is always
+                                                                                                            and aims to solve the aforementioned learning problems                 included, and the related technical indicators are often
+                                                                                                            by updating the policy in real time. The key idea is to                used (Fischer 2018). In our work, we take past price,
+                                                                                                            alternatively update two models in which one (the actor)               returns (rt) over different horizons, and technical indica-
+                                                                                                            controls how an agent performs given the current state,                tors including moving average convergence divergence
+                                                                                                            and the other (the critic) measures how good the chosen                (MACD) (Baz et al. 2015) and the RSI (Wilder 1978) to
+                                                                                                            action is. However, this approach is the least studied                 represent states. At a given time step, we take the past 60
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                            method in financial applications (Li et al. 2007; Bekiros              observations of each feature to form a single state. The
+                                                                                                            2010; Xiong et al. 2018). We aim to supplement the                     following is a list of our features:
+                                                                                                            literature and study the effectiveness of this approach in
+                                                                                                            trading. For a more detailed discussion on state, action                 • Normalized close price series
+                                                                                                            spaces, and reward functions, interested readers are                     • Returns over the past month, two months, three
+                                                                                                            pointed to the survey (Fischer 2018). Other important                      months, and one year are used. Following Lim,
+                                                                                                            financial applications such as portfolio optimization and                  Zohren, and Roberts (2019), we normalize them
+                                                                                                            trade execution are also included in this work.                            by daily volatility adjusted to a reasonable time
+                                                                                                                                                                                       scale. As an example, we normalize annual returns
+                                                                                                            METHODOLOGY                                                                as rt − 252,t /(σ t 252 ) , where σt is computed using an
+                                                                                                                                                                                       exponentially weighted moving standard deviation
+                                                                                                                   In this section, we introduce our setups including                  of rt with a 60-day span,
+                                                                                                            state, action spaces, and reward functions. We describe                  • MACD indicators are proposed by Baz et al. (2015)
+                                                                                                            three RL algorithms used in our work, DQN, PG, and                         where
+                                                                                                            A2C methods.
+                                                                                                                                                                                                                  qt
+                                                                                                                                                                                                MACDt =
+                                                                                                                  Markov Decision Process Formalization                                                      std( qt − 252:t )
+                                                                                                                                                                                                qt = (m(S ) − m(L ))/std( pt −63:t )          (3)
+                                                                                                                  We can formulate the trading problem as a Markov
+                                                                                                            decision process in which an agent interacts with the                      where std(pt−63:t) is the 63-day rolling standard
+                                                                                                            environment at discrete time steps. At each time step t, the               deviation of prices pt , and m(S) is the exponen-
+                                                                                                            agent receives some representations of the environment                     tially weighted moving average of prices with a
+                                                                                                            denoted as a state St. Given this state, an agent chooses an               time scale S.
+                                                                                                            action At, and based on this action, a numerical reward                  • The RSI is an oscillating indicator moving
+                                                                                                            Rt+1 is given to the agent at the next time step, and the                  between 0 and 100. It indicates the oversold
+                                                                                                            agent finds itself in a new state St+1. The interaction                    (a reading below 20) or overbought (above 80)
+                                                                                                            between the agent and the environment produces                             condition of an asset by measuring the magnitude
+                                                                                                            a trajectory τ = [S 0, A 0, R 1, S 1, A1, R 2 , S 2 , A 2 , R 3, …].       of recent price changes. We include this indicator
+                                                                                                            At any time step t, the goal of RL is to maximize the                      with a look-back window of 30 days in our state
+                                                                                                            expected return (essentially the expected discounted                       representations.
+                                                                                                            cumulative rewards) denoted as Gt at time t:
+                                                                                                                                          T
+                                                                                                                                                                                         Action space. We study both discrete and con-
+                                                                                                                                 Gt = ∑ γ k −t −1Rk                         (2)    tinuous action spaces. For discrete action spaces, a simple
+                                                                                                                                        k = t +1                                   action set of {-1, 0, 1} is used, and each value represents
+                                                                                                                                                                                   the position directly (i.e., -1 corresponds to a maximally
+                                                                                                            where g is the discounting factor. If the utility function             short position, 0 to no holdings, and 1 to a maximally
+                                                                                                            in Equation 1 has a linear form and we use Rt to repre-                long position). This representation of action space is also
+                                                                                                            sent trade returns, we can see that optimizing E(G) is                 known as target orders (Huang 2018), in which a trade
+                                                                                                            equivalent to optimizing our expected wealth.                          position is the output instead of the trading decision.
+
+                                                                                                            4   Deep Reinforcement Learning for Trading                                                                                Spring 2020
+                                                                                                            Note that if the current action and next action are the                   by Moody et al. (1998). We stick to additive profits in
+                                                                                                            same, no transaction cost will occur and we just maintain                 our work because logarithmic transformation needs to
+                                                                                                            our positions. If we move from a fully long position to                   be done for multiplicative profits to have the cumula-
+                                                                                                            a short position, transaction cost will be doubled. The                   tive rewards required by the RL setup, but logarithmic
+                                                                                                            design of continuous action spaces is very similar to the                 transformation penalizes large wealth growth.
+                                                                                                            discrete case in which we still output trade positions
+                                                                                                            but allow actions to be any value between -1 and 1                             RL Algorithms
+                                                                                                            (At ∈ [-1, 1]).
+                                                                                                                  Reward function. The design of the reward                                 DQN. By adopting a neural network, a DQN
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                            function depends on the utility function in Equation 1.                   approximates the state-action value function (Q func-
+                                                                                                            Here, we let the utility function be profits representing                 tion) to estimate how good it is for the agent to perform
+                                                                                                            a risk-insensitive trader, and the reward Rt at time t is                 a given action in a given state. Suppose our Q function
+                                                                                                                                                                                      is parameterized by some θ. We minimize the mean
+                                                                                                                            σ tgt                σ tgt          σ tgt               squared error between the current and target Q to derive
+                                                                                                              Rt = µ  At −1        rt − bp pt −1|       At −1 −       At − 2| (4)
+                                                                                                                            σ t −1               σ t −1         σ t−2               the optimal state-action value function:
+
+                                                                                                            where stgt is the volatility target and st-1 is an ex                            L (θ) = E[(Qθ (S, A) − Qθ′ (S, A))2 ]
+                                                                                                            ante volatility estimate calculated using an exponen-                           Qθ′ (St , At ) = r + γ argmax At +1Qθ (St +1 , At +1 )   (5)
+                                                                                                            tially weighted moving standard deviation with a
+                                                                                                            60-day window on rt. This expression forms the volatility                 where L(θ) is the objective function. A problem is that
+                                                                                                            scaling of Moskowitz, Ooi, and Pedersen (2012), Harvey                    the training of a vanilla DQN is not stable and suffers
+                                                                                                            et al. (2018), and Lim, Zohren, and Roberts (2019), in                    from variability. Many improvements have been made to
+                                                                                                            which our position is scaled up when market volatility is                 stabilize the training process, and we adopt the following
+                                                                                                            low and vice versa. In addition, given a volatility target,               three strategies to improve the training in our work:
+                                                                                                            our reward Rt is mostly driven by our actions instead of                  fixed Q-targets (Van Hasselt, Guez, and Silver 2016),
+                                                                                                            being heavily affected by market volatility. We can also                  double DQN (Hasselt 2010), and dueling DQN (Wang
+                                                                                                            consider the volatility scaling as normalizing rewards                    et al. 2016). Fixed Q-targets and double DQN are used
+                                                                                                            from different contracts to the same scale. Because our                   to reduce policy variances and to solve the problem of
+                                                                                                            dataset consists of 50 futures contracts with different                   chasing tails by using a separate network to produce target
+                                                                                                            price ranges, we need to normalize different rewards to                   values. Dueling DQNs separate the Q-value into state
+                                                                                                            the same scale for training and for portfolio construc-                   value and the advantage of each action. The benefit of
+                                                                                                            tion. m is a fixed number per contract at each trade, and                 doing this is that the value stream has more updates and
+                                                                                                            we set it to 1. Note that our transaction cost term also                  we receive a better representation of the state values.
+                                                                                                            includes a price term pt−1. This is necessary because again                      PG. The PG aims to maximize the expected
+                                                                                                            we work with many contracts, each of which has a dif-                     cumulative rewards by optimizing the policy directly.
+                                                                                                            ferent cost, so we represent transaction cost as a fraction               If we use a neural network with parameters θ to rep-
+                                                                                                            of traded value. The constant, basis point (bp), is the                   resent the policy, pθ(A|S), we can generate a trajectory
+                                                                                                            cost rate and 1 bp = 0.0001. As an example, if the cost                   τ = [S 0, A 0, R 1, S1, …, St , At , …] from the environment
+                                                                                                            rate is 1 bp, we need to pay $0.10 to buy one unit of a                   and obtain a sequence of rewards. We maximize the
+                                                                                                            contract priced at $1,000.                                                expected cumulative rewards J(θ) by using gradient
+                                                                                                                   We define rt = pt - pt-1, and this expression repre-               ascent to adjust θ:
+                                                                                                            sents additive profits. Additive profits are often used if
+                                                                                                            a fixed number of shares or contracts is traded at each                                              T −1       
+                                                                                                            time. If we want to trade a fraction of our accumu-                                       J (θ) = E  ∑ Rt +1|πθ 
+                                                                                                                                                                                                                 t =0       
+                                                                                                            lated wealth at each time, multiplicative profits should                                           T −1
+                                                                                                            be used, and rt = pt ⁄pt-1 - 1. In this case, we also need                            ∇ θ J (θ) = ∑ ∇ θ log πθ ( At|St )Gt               (6)
+                                                                                                            to change the expression of R t because R t represents                                             t =0
+                                                                                                            the percentage of our wealth. The exact form is given
+
+
+                                                                                                            Spring 2020                                                                                      The Journal of Financial Data Science   5
+                                                                                                            where G t is defined in Equation 2. Compared with                can be found in Appendix A. We retrain our model at
+                                                                                                            DQN, PG learns a policy directly and can output a prob-          every five years, using all data available up to that point
+                                                                                                            ability distribution over actions. This is useful if we want     to optimize the parameters. Model parameters are then
+                                                                                                            to design stochastic policies or work with continuous            fixed for the next five years to produce out-of-sample
+                                                                                                            action spaces. However, the training of PG uses Monte            results. In total, our testing period is from 2011 to 2019.
+                                                                                                            Carlo methods to sample trajectories from the environ-
+                                                                                                            ment, and the update is done only when the episode                    Baseline Algorithms
+                                                                                                            finishes. This often results in slow training, and it can
+                                                                                                            get stuck at a (suboptimal) local maximum.                             We compare our methods to the following base-
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                                  A2C. The A2C is proposed to solve the training             line models including classical time-series momentum
+                                                                                                            problem of PG by updating the policy in real time. It            strategies:
+                                                                                                            consists of two models: One is an actor network that
+                                                                                                            outputs the policy, and the other is a critic network that         • Long only
+                                                                                                            measures how good the chosen action is in the given                • Sign(R) (Moskowitz, Ooi, and Pedersen 2012; Lim,
+                                                                                                            state. We can update the policy network p(A|S, θ) by                 Zohren, and Roberts 2019):
+                                                                                                            maximizing the objective function:
+                                                                                                                                                                                                At = sign(rt − 252:t )             (10)
+                                                                                                                        J (θ) = E[log π( A|S, θ)Aadv (S, A)]           (7)
+                                                                                                                                                                               • MACD signal (Baz et al. 2015)
+                                                                                                            where Aadv(S, A) is the advantage function defined as
+                                                                                                                                                                                            At = φ(MACDt )
+                                                                                                                    Aadv (St , At ) = Rt + γV (St +1|w ) − V (St|w )   (8)                        MACD exp( − MACD2 /4)
+                                                                                                                                                                                    φ(MACD) =                                       (11)
+                                                                                                                                                                                                         0.89
+                                                                                                                  To calculate advantages, we use another network,
+                                                                                                            the critic network, with parameters w to model the state              where MACDt is defined in Equation 3. We can
+                                                                                                            value function V (s|w), and we can update the critic net-             also take multiple signals with different time scales
+                                                                                                            work using gradient descent to minimize the temporal                  and average them to give a final indicator:
+                                                                                                            difference error:
+                                                                                                                                                                                         t = ∑ MACDt (Sk , L k )
+                                                                                                                                                                                         MACD                                      (12)
+                                                                                                                      J (w ) = ( Rt + γV (St +1|w ) − V (St|w ))2      (9)                            k
+
+
+
+                                                                                                                 The A2C is most useful if we are interested in                   where Sk and Lk define short and long time scales,
+                                                                                                            continuous action spaces because we reduce the policy                 namely Sk ∈ {8, 16, 32} and Lk ∈ {24, 48, 96}, as
+                                                                                                            variance by using the advantage function and update the               done by Lim, Zohren, and Roberts (2019).
+                                                                                                            policy in real time. The training of A2C can be done
+                                                                                                            synchronously or asynchronously (A3C). In this article,                We compare the aforementioned baseline models
+                                                                                                            we adopt the synchronous approach and execute agents             with our RL algorithms, DQN, PG, and A2C. DQN
+                                                                                                            in parallel on multiple environments.                            and PG have discrete action spaces {-1, 0, 1}, and A2C
+                                                                                                                                                                             has a continuous action space [-1, 1].
+                                                                                                            EXPERIMENTS
+                                                                                                                                                                                  Training Schemes for RL
+                                                                                                                 Description of Dataset
+                                                                                                                                                                                   In our work, we use long short-term memory
+                                                                                                                  We use data on 50 ratio-adjusted continuous                (LSTM) (Hochreiter and Schmidhuber 1997) neural net-
+                                                                                                            futures contracts from the CLC Database (2019). Our              works to model both actor and critic networks. LSTMs
+                                                                                                            dataset ranges from 2005 to 2019 and consists of a variety       are traditionally used in natural language processing,
+                                                                                                            of asset classes, including commodity, equity index,             but many recent works have applied them to financial
+                                                                                                            fixed income, and FX. A full breakdown of the dataset            time series (Di Persio and Honchar 2016; Bao, Yue,
+
+
+
+                                                                                                            6   Deep Reinforcement Learning for Trading                                                                      Spring 2020
+                                                                                                            Exhibit 1
+                                                                                                            Values of Hyperparameters for Different RL Algorithms
+
+                                                                                                                   0RGHO       αFULWLF     αDFWRU     2SWLPL]HU      %DWFK6L]H         γ         ES           0HPRU\6L]H       τ
+                                                                                                                   '41                 ±          $GDP                                                   
+                                                                                                                   3*            ±                $GDP              ±                                ±            ±
+                                                                                                                   $&                       $GDP                                            ±            ±
+
+
+
+                                                                                                            and Rao 2017; Tsantekidis et al. 2017b; Fischer and                Our models consist of two hidden layers, and each layer
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                            Krauss 2018). In particular, the work of Lim, Zohren,              has a relatively small number of neurons. The resulting
+                                                                                                            and Roberts (2019) showed that LSTMs deliver superior              network has fewer parameters, which makes it less likely
+                                                                                                            performance on modeling daily financial data. We use               to overfit.
+                                                                                                            two-layer LSTM networks with 64 and 32 units in all                      In addition, we use dropout (Hinton et al. 2016),
+                                                                                                            models, and leaky rectifying linear units (Leaky-ReLU)             a regularization method commonly employed in deep
+                                                                                                            (Maas, Hannun, and Ng 2013) are used as activation                 learning. Because our networks are small, we did not
+                                                                                                            functions. Because our dataset consists of different asset         notice significant improvements, but we still recom-
+                                                                                                            classes, we train a separate model for each asset class.           mend the usage of dropout following the general advice
+                                                                                                            It is a common practice to train models by grouping                of selecting the least f lexible model that achieves com-
+                                                                                                            contracts within the same asset class, and we find it also         parable cross-validation performance. This is also in line
+                                                                                                            improves our performance.                                          with other works (Zhang, Zohren, and Roberts 2018;
+                                                                                                                   We list the value of hyperparameters for different          Lim, Zohren, and Roberts 2019) that show improved
+                                                                                                            RL algorithms in Exhibit 1. We denote the learning                 results using dropout in financial applications, especially
+                                                                                                            rates for critic and actor networks as acritic and aactor.         when handling complex network architectures.
+                                                                                                            The Adam optimizer (Kingma and Ba 2015) is used                          Finally, we use 10% of any given training data as
+                                                                                                            for training all networks, and batch size means the size           a separate cross-validation set to optimize hyperparam-
+                                                                                                            of the minibatch used is in a gradient descent. As pre-            eters. We monitor the validation performance and use
+                                                                                                            viously introduced, g is the discounting factor and bp             early stopping with 20 epochs to help optimal model
+                                                                                                            is the cost rate used in training. We can treat bp as a            selection. Any hyperparameter optimization is done on
+                                                                                                            regularizing term; a large bp penalizes turnovers and lets         the cross-validation set, leaving the test set for the final
+                                                                                                            agents maintain current trade positions. The memory                test performance evaluation. This reduces the leakage
+                                                                                                            size shows the size of the buffer for experience replay,           of the test data, another cause of overfitting.
+                                                                                                            and we update the parameters of our target network in
+                                                                                                            DQN every t steps.                                                      Experimental Results
+
+                                                                                                                  Procedures for Controlling Overfitting                            We test both baseline models and our methods
+                                                                                                                                                                               between 2011 and 2019, and we calculate the trade
+                                                                                                                  Because overfitting to backtest data can be problem-         returns net of transaction costs as in Equation 4 for each
+                                                                                                            atic in many application domains, especially in finance,           contract. We then form a simple portfolio by giving
+                                                                                                            we adopt the following procedures to overcome it.                  equal weights to each contract, and the trade return of
+                                                                                                            The most common cause of overfitting is a poor ratio of            a portfolio is
+                                                                                                            training samples to model parameters. Although there
+                                                                                                            is no universal guarantee that increasing the number of                                           1 N i
+                                                                                                            samples will resolve the overfitting issue, we find that
+                                                                                                                                                                                                   Rtport =     ∑ Rt
+                                                                                                                                                                                                              N i =1
+                                                                                                                                                                                                                                       (13)
+                                                                                                            expanding the dataset to allow training on a cross sec-
+                                                                                                            tion of futures contracts, not just on a single contract,          where N represents the number of contracts considered,
+                                                                                                            greatly helps to reduce the problem in our case. Further-          and Rti is the trade return for contract i at time t. We
+                                                                                                            more, we intentionally design our networks to have a               evaluate the performance of this portfolio using
+                                                                                                            smaller number of free parameters whenever possible.
+
+                                                                                                            Spring 2020                                                                            The Journal of Financial Data Science   7
+                                                                                                            following metrics as suggested by Lim, Zohren, and                      We present our results in Exhibit 2, in which an
+                                                                                                            Roberts (2019):                                                  additional layer of portfolio-level volatility scaling is
+                                                                                                                                                                             applied for each model. This brings the volatility of dif-
+                                                                                                              1. E(R): annualized expected trade returns                     ferent methods to the same target, so we can directly
+                                                                                                              2. std(R): annualized standard deviation of trade              compare metrics such as expected and cumulative trade
+                                                                                                                 returns                                                     returns. We also include the results without this vola-
+                                                                                                              3. Downside deviation (DD): annualized standard                tility scaling for reference in Exhibit B1 in Appendix B.
+                                                                                                                 deviation of trade returns that are negative, also          Exhibit 2 is split into five parts based on different asset
+                                                                                                                 known as downside risk                                      classes. The results show the performance of a portfolio
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                              4. Sharpe: annualized Sharpe ratio (E(R) ⁄ std(R))             by only using contracts from that specific asset class.
+                                                                                                              5. Sortino: a variant of the Sharpe ratio that uses            An exception is the last part of the exhibit, in which we
+                                                                                                                 downside deviation as risk measures (E(R) ⁄ DD)             form a portfolio using all contracts from our dataset. The
+                                                                                                              6. MDD: maximum drawdown shows the maximum                     cumulative trade returns for different models and asset
+                                                                                                                 observed loss from any peak of a portfolio to the           classes are presented in Exhibit 3.
+                                                                                                                 trough                                                             We can see that RL algorithms deliver better per-
+                                                                                                              7. Calmar: the Calmar ratio compares the expected              formance for most asset classes except for the equity
+                                                                                                                 annual rate of return with MDD; in general, the             index, for which a long-only strategy is better. This can
+                                                                                                                 higher the ratio, the better the performance of the         be explained by the fact that most equity indexes were
+                                                                                                                 portfolio                                                   dominated by large upward trends in the testing period.
+                                                                                                              8. % +ve Returns: percentage of positive trade returns         Similarly, fixed incomes had a growing trend until
+                                                                                                              9. Ave.                                                        2016 and then entered currently ongoing consolida-
+                                                                                                                       L : the ratio between positive and negative trade
+                                                                                                                  Ave. P
+
+                                                                                                                 returns.                                                    tion periods. Arguably, the most reasonable strategy in
+
+
+                                                                                                            Exhibit 2
+                                                                                                            Experiment Results for Portfolio-Level Volatility Targeting
+
+                                                                                                                                                                                                                           $YH3
+                                                                                                                                (5        6WG 5       ''       6KDUSH      6RUWLQR    0''       &DOPDU      RI5HW     $YH/
+                                                                                                                   &RPPRGLW\
+                                                                                                                   /RQJ      ±                  ±      ±          ±                
+                                                                                                                   6LJQ 5                                                          
+                                                                                                                   0$&'      ±                  ±      ±          ±                
+                                                                                                                   '41                                                             
+                                                                                                                   3*                                                              
+                                                                                                                   $&                                                             
+                                                                                                                   (TXLW\,QGH[
+                                                                                                                   /RQJ                                                            
+                                                                                                                   6LJQ 5                                                          
+                                                                                                                   0$&'                                                            
+                                                                                                                   '41                                                             
+                                                                                                                   3*                                                              
+                                                                                                                   $&                                                             
+                                                                                                                   )L[HG,QFRPH
+                                                                                                                   /RQJ                                                            
+                                                                                                                   6LJQ 5                                                          
+                                                                                                                   0$&'                                                            
+                                                                                                                   '41                                                             
+                                                                                                                   3*                                                              
+                                                                                                                   $&                                                             
+                                                                                                                                                                                                                               (continued)
+
+                                                                                                            8   Deep Reinforcement Learning for Trading                                                                      Spring 2020
+                                                                                                            Exhibit 2                     (continued)
+                                                                                                            Experiment Results for Portfolio-Level Volatility Targeting
+
+                                                                                                                                                                                                                                                       $YH3
+                                                                                                                                     (5          6WG 5          ''             6KDUSH      6RUWLQR       0''          &DOPDU         RI5HW        $YH/
+                                                                                                                      );
+                                                                                                                      /RQJ          ±                           ±      ±                ±                      
+                                                                                                                      6LJQ 5        ±                           ±      ±                ±                      
+                                                                                                                      0$&'                                                                                     
+                                                                                                                      '41                                                                                      
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                                      3*                                                                                       
+                                                                                                                      $&                                                                                      
+                                                                                                                      $OO
+                                                                                                                      /RQJ                                                                                     
+                                                                                                                      6LJQ 5                                                                                   
+                                                                                                                      0$&'                                                                                     
+                                                                                                                      '41                                                                                      
+                                                                                                                      3*                                                                                       
+                                                                                                                      $&                                                                                      
+
+
+
+                                                                                                            Exhibit 3
+                                                                                                            Cumulative Trade Returns
+
+                                                                                                                                                                 6                                                    7
+                                                                                                             4
+                                                                                                                                                                                                                      6
+                                                                                                             2                                                   4                                                    5
+
+                                                                                                             0                                                                                                        4
+                                                                                                                                                                 2
+                                                                                                                                                                                                                      3
+                                                                                                            –2
+                                                                                                                                                                 0                                                    2
+                                                                                                            –4                                                                                                        1
+                                                                                                                                                                –2                                                    0
+                                                                                                            –6
+                                                                                                                 2011 2012 2013 2014 2015 2016 2017 2018 2019        2011 2012 2013 2014 2015 2016 2017 2018 2019         2011 2012 2013 2014 2015 2016 2017 2018 2019
+
+
+
+                                                                                                                                                                10
+                                                                                                             4
+                                                                                                             3                                                   8
+                                                                                                             2
+                                                                                                                                                                 6
+                                                                                                             1
+                                                                                                                                                                 4
+                                                                                                             0
+                                                                                                            –1                                                   2
+                                                                                                            –2                                                   0
+                                                                                                            –3
+                                                                                                                                                                –2
+                                                                                                            –4
+                                                                                                                 2011 2012 2013 2014 2015 2016 2017 2018 2019        2011 2012 2013 2014 2015 2016 2017 2018 2019
+
+                                                                                                                                                     Long            Sign(R)            MACD           DQN           PG             A2C
+
+
+                                                                                                            Notes: First row: commodity, equity index, and fixed income; second row: FX and the portfolio of using all contracts.
+
+
+
+
+                                                                                                            Spring 2020                                                                                                The Journal of Financial Data Science   9
+                                                                                                            Exhibit 4
+                                                                                                            Sharpe Ratio (top) and Average Trade Return per Turnover (bottom) for Individual Contracts
+
+                                                                                                                                                      1.00
+                                                                                                                                                      0.75
+                                                                                                                                                      0.50
+                                                                                                                            Sharpe Ratio
+
+
+
+
+                                                                                                                                                      0.25
+                                                                                                                                                      0.00
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                                                               –0.25
+                                                                                                                                               –0.50
+                                                                                                                                               –0.75
+
+                                                                                                                                                                   Commodity        Equity Index           Fixed Income           FX
+                                                                                                                                                                                               Asset Classes
+
+
+                                                                                                                                                               2
+                                                                                                                                       Ave. Return/Turnover
+
+
+
+
+                                                                                                                                                               1
+
+                                                                                                                                                               0
+
+                                                                                                                                                              –1
+
+                                                                                                                                                              –2
+
+
+                                                                                                                                                                   Commodity        Equity Index           Fixed Income           FX
+                                                                                                                                                                                               Asset Classes
+
+                                                                                                                                                                    Long       Sign(R)         MACD             DQN         PG          A2C
+
+
+
+                                                                                                            these cases might be to hold our positions if large trends                            We can see that RL algorithms can tolerate larger cost
+                                                                                                            persist. However, the long-only strategy performs the                                 rates; in particular, DQN and A2C can still generate
+                                                                                                            worst in commodity and FX markets, in which prices                                    positive profits with the cost rate at 25 bp. To under-
+                                                                                                            are more volatile. RL algorithms perform better in                                    stand how cost rates (bp) translate into monetary values,
+                                                                                                            these markets by being able to go long or short at rea-                               we plot the average cost per contract in Panel B of
+                                                                                                            sonable time points. Overall, DQN obtains the best                                    Exhibit 5, and we see that 25 bp represents roughly
+                                                                                                            performance among all models, and the second best                                     $3.50 per contract. This is a realistic cost for a retail
+                                                                                                            is the A2C approach. We investigate the cause of this                                 trader to pay, but institutional traders have a different
+                                                                                                            observation and find that A2C generates larger turn-                                  fee structure based on trading volumes and often have
+                                                                                                            overs, leading to smaller average returns per turnover,                               cheaper cost. In any case, this shows the validity of our
+                                                                                                            as shown in Exhibit 4.                                                                methods in a realistic setup.
+                                                                                                                  We also investigate the performance of our                                            The performance of a portfolio is generally better
+                                                                                                            methods under different transaction costs. In Panel A                                 than the performance of an individual contract because
+                                                                                                            of Exhibit 5, we plot the annualized Sharpe ratio for                                 risks are diversified across a range of assets, so the return
+                                                                                                            the portfolio using all contracts at different cost rates.                            per risk is higher. To investigate the raw quality of our
+
+
+
+
+                                                                                                            10   Deep Reinforcement Learning for Trading                                                                                            Spring 2020
+                                                                                                            Exhibit 5
+                                                                                                            Sharpe Ratio and Average Cost per Contract under Different Cost Rates
+                                                                                                                    Panel A: Sharpe Ratio                                  Panel B: Average Cost per Contract
+                                                                                                                                                                           7
+                                                                                                                     1.0
+                                                                                                                                                                           6
+                                                                                                                     0.5
+                                                                                                                     0.0                                                   5
+
+                                                                                                                    –0.5                                                   4
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                                    –1.0                                                   3
+                                                                                                                    –1.5                                                   2
+                                                                                                                    –2.0
+                                                                                                                                                                           1
+                                                                                                                    –2.5
+                                                                                                                                                                           0
+                                                                                                                           Long   Sign(R) MACD   DQN      PG      A2C            Long   Sign(R) MACD         DQN   PG      A2C
+
+                                                                                                                                                  1 bp         5 bp      10 bp          15 bp        20 bp
+
+                                                                                                                                                  25 bp        30 bp     35 bp          40 bp        45 bp
+
+
+
+                                                                                                            methods, we investigate the performance of individual         reward functions. We test our methods on 50 liquid
+                                                                                                            contracts. We use the boxplots in Exhibit 4 to present        futures contracts from 2011 to 2019, and our results
+                                                                                                            the annualized Sharpe ratio and average trade return per      show that RL algorithms outperform baseline models
+                                                                                                            turnover for each futures contract. Overall, these results    and deliver profits even under heavy transaction costs.
+                                                                                                            reinforce our previous findings that RL algorithms gen-              In continuations of this work, we would like to
+                                                                                                            erally work better, and the performance of our method         investigate different forms of utility functions. In prac-
+                                                                                                            is not driven by a single contract that shows superior        tice, an investor is often risk averse, and the objective is
+                                                                                                            performance, reassuring us about the consistency of our       to maximize a risk-adjusted performance function such
+                                                                                                            model.                                                        as the Sharpe ratio, leading to a concave utility function.
+                                                                                                                                                                          As suggested by Huang (2018), we can resort to distri-
+                                                                                                            CONCLUSION                                                    butional RL (Bellemare, Dabney, and Munos 2017) to
+                                                                                                                                                                          obtain the entire distribution over Q(s, a) instead of the
+                                                                                                                   We adopt RL algorithms to learn trading strate-        expected Q-value. Once the distribution is learned, we
+                                                                                                            gies for continuous futures contracts. We discuss the         can choose actions with the highest expected Q-value
+                                                                                                            connection between modern portfolio theory and the            and the lowest standard deviation of it, maximizing the
+                                                                                                            RL reward hypothesis and show that they are equivalent        Sharpe ratio. We can also extend our methods to port-
+                                                                                                            if a linear utility function is used. Our analysis focuses    folio optimization by modifying the action spaces to give
+                                                                                                            on three RL algorithms, namely DQN, PG, and A2C,              weights of individual contracts in a portfolio. We can
+                                                                                                            and investigates both discrete and continuous action          incorporate the reward functions with mean–variance
+                                                                                                            spaces. We use features from time-series momentum             portfolio theory (Markowitz 1952) to deliver a reason-
+                                                                                                            and technical indicators to form state representations.       able expected trade return with minimal volatility.
+                                                                                                            In addition, volatility scaling is introduced to improve
+
+
+
+
+                                                                                                            Spring 2020                                                                         The Journal of Financial Data Science   11
+                                                                                                            Appendix A
+                                                                                                                 Our dataset consists of 50 futures contracts, and there are 25 commodity contracts, 11 equity index contracts, 5 fixed
+                                                                                                            income contracts, and 9 forex contracts. A detailed description of each contract is given in Exhibit A1.
+
+                                                                                                            Exhibit A1
+                                                                                                            Contract Descriptions
+
+                                                                                                                                 7LFNHU             &RQWUDFW'HWDLOV            7LFNHU                &RQWUDFW'HWDLOV
+                                                                                                                                 &RPPRGLWLHV                                    (TXLW\,QGH[HV
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                                                 &&            &2&2$                            &$               &$&,1'(;
+                                                                                                                                 '$            0,/.,,,&RPS                   (5               5866(//0,1,
+                                                                                                                                 *,            *2/'0$16$.6&,               (6               6 30,1,
+                                                                                                                                 -2            25$1*(-8,&(                     /;               )76(,1'(;
+                                                                                                                                 .&            &2))((                           0'               6 3 0LQL(OHFWURQLF
+                                                                                                                                 .:            :+($7.&                        6&               6 3&RPSRVLWH
+                                                                                                                                 /%            /80%(5                           63               6 3'D\6HVVLRQ
+                                                                                                                                 15            528*+5,&(                       ;8               '2:-21(6(852672;;
+                                                                                                                                 6%            68*$5                        ;;               '2:-21(6672;;
+                                                                                                                                 =$            3$//$',80(OHFWURQLF            <0               0LQL'RZ-RQHV 
+                                                                                                                                 =&            &251(OHFWURQLF                 )L[HG,QFRPHV
+                                                                                                                                 =)            )(('(5&$77/((OHFWURQLF        '7           (852%21' %81'
+                                                                                                                                 =*            *2/'(OHFWURQLF                 )%           7127(<HDU&RPSRVLWH
+                                                                                                                                 =+            +($7,1*2,/(OHFWURQLF          7<           7127(<HDU&RPSRVLWH
+                                                                                                                                 =,            6,/9(5(OHFWURQLF               8%           (852%2%/
+                                                                                                                                 =.            &233(5(OHFWURQLF               86           7%21'6&RPSRVLWH
+                                                                                                                                 =/            62<%($12,/(OHFWURQLF
+                                                                                                                                                                                )RUHLJQ([FKDQJH
+                                                                                                                                 =1            1$785$/*$6(OHFWURQLF
+                                                                                                                                                                                $1           $8675$/,$1'D\6HVVLRQ
+                                                                                                                                 =2            2$76(OHFWURQLF
+                                                                                                                                                                                %1           %5,7,6+3281'&RPSRVLWH
+                                                                                                                                 =3            3/$7,180(OHFWURQLF
+                                                                                                                                                                                &1           &$1$',$1&RPSRVLWH
+                                                                                                                                 =5            528*+5,&((OHFWURQLF
+                                                                                                                                                                                ';           86'2//$5,1'(;
+                                                                                                                                 =7            /,9(&$77/((OHFWURQLF
+                                                                                                                                                                                )1           (852&RPSRVLWH
+                                                                                                                                 =8            &58'(2,/(OHFWURQLF
+                                                                                                                                                                                -1           -$3$1(6(<(1&RPSRVLWH
+                                                                                                                                 =:            :+($7(OHFWURQLF
+                                                                                                                                                                                03           0(;,&$13(62
+                                                                                                                                 ==            /($1+2*6(OHFWURQLF
+                                                                                                                                                                                1.           1,..(,,1'(;
+                                                                                                                                                                                61           6:,66)5$1&&RPSRVLWH
+
+
+                                                                                                            Appendix B
+                                                                                                                 Exhibit B1 presents the performance metrics for portfolios without the additional layer of volatility scaling.
+
+                                                                                                            Exhibit B1
+                                                                                                            Experiment Results for the Raw Signal
+
+                                                                                                                                                                                                                               $YH3
+                                                                                                                               (5         6WG 5       ''        6KDUSH      6RUWLQR      0''         &DOPDU       RI5HW   $YH/
+                                                                                                                   &RPPRGLW\
+                                                                                                                   /RQJ      ±                   ±      ±               ±                 
+                                                                                                                   6LJQ 5                                                                 
+                                                                                                                   0$&'      ±                   ±      ±               ±                 
+                                                                                                                   '41                                                                    
+                                                                                                                   3*                                                                     
+                                                                                                                   $&                                                                    
+                                                                                                                                                                                                                                     (continued)
+
+                                                                                                            12   Deep Reinforcement Learning for Trading                                                                            Spring 2020
+                                                                                                            Exhibit B1                  (continued)
+                                                                                                            Experiment Results for the Raw Signal
+
+                                                                                                                                                                                                                               $YH3
+                                                                                                                                (5         6WG 5      ''       6KDUSH      6RUWLQR     0''        &DOPDU       RI5HW      $YH/
+                                                                                                                   (TXLW\,QGH[HV
+                                                                                                                   /RQJ                                                                 
+                                                                                                                   6LJQ 5                                                               
+                                                                                                                   0$&'        ±                 ±     ±             ±                  
+                                                                                                                   '41                                                                  
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                                   3*                                                                   
+                                                                                                                   $&                                                                  
+                                                                                                                   )L[HG,QFRPH
+                                                                                                                   /RQJ                                                                 
+                                                                                                                   6LJQ 5                                                               
+                                                                                                                   0$&'                                                                 
+                                                                                                                   '41                                                                  
+                                                                                                                   3*                                                                   
+                                                                                                                   $&                                                                  
+                                                                                                                   )RUHLJQ([FKDQJH
+                                                                                                                   /RQJ        ±                 ±     ±             ±                  
+                                                                                                                   6LJQ 5      ±                 ±     ±             ±                  
+                                                                                                                   0$&'                                                                 
+                                                                                                                   '41                                                                  
+                                                                                                                   3*                                                                   
+                                                                                                                   $&                                                                  
+                                                                                                                   $OO
+                                                                                                                   /RQJ        ±                 ±     ±             ±                  
+                                                                                                                   6LJQ 5                                                               
+                                                                                                                   0$&'        ±                 ±     ±             ±                  
+                                                                                                                   '41                                                                  
+                                                                                                                   3*                                                                   
+                                                                                                                   $&                                                                  
+
+
+
+                                                                                                            ACKNOWLEDGMENT                                                   Bao, W., J. Yue, and Y. Rao. 2017. “A Deep Learning Frame-
+                                                                                                                                                                             work for Financial Time Series Using Stacked Autoencoders
+                                                                                                                   The authors would like to thank Bryan Lim, Vu             and Long–Short Term Memory.” PLOS One 12 (7): e0180944.
+                                                                                                            Nguyen, Anthony Ledford, and members of Machine
+                                                                                                            Learning Research Group at the University of Oxford for          Baz, J., N. Granger, C. R. Harvey, N. Le Roux, and S.
+                                                                                                            their helpful comments. We are most grateful to the Oxford-      Rattray. “Dissecting Investment Strategies in the Cross
+                                                                                                            Man Institute of Quantitative Finance, which provided the        Section and Time Series.” SSRN 2695101, 2015.
+                                                                                                            Pinnacle dataset and computing facilities.
+                                                                                                                                                                             Bekiros, S. D. 2010. “Heterogeneous Trading Strategies
+                                                                                                            REFERENCES                                                       with Adaptive Fuzzy Actor–Critic Reinforcement Learning:
+                                                                                                                                                                             A Behavioral Approach.” Journal of Economic Dynamics and
+                                                                                                            Arrow, K. J. “The Theory of Risk Aversion.” In Essays in the     Control 34 (6): 1153–1170.
+                                                                                                            Theory of Risk-Bearing, pp. 90–120. Chicago: Markham, 1971.
+                                                                                                                                                                             Bellemare, M. G., W. Dabney, and R. Munos. 2017. “A Dis-
+                                                                                                            Baltas, N., and R. Kosowski. “Demystifying Time-Series           tributional Perspective on Reinforcement Learning.” Proceed-
+                                                                                                            Momentum Strategies: Volatility Estimators, Trading              ings of the 34th International Conference on Machine Learning 70:
+                                                                                                            Rules and Pairwise Correlations.” Trading Rules and Pairwise     449–458.
+                                                                                                            Correlations, May 8, 2017.
+
+                                                                                                            Spring 2020                                                                          The Journal of Financial Data Science   13
+                                                                                                            Bertoluzzo, F., and M. Corazza. 2012. “Testing Different             Hochreiter, S., and J. Schmidhuber. 1997. “Long Short-Term
+                                                                                                            Reinforcement Learning Conf igurations for Financial                 Memory.” Neural Computation 9 (8): 1735–1780.
+                                                                                                            Trading: Introduction and Applications.” Procedia Economics
+                                                                                                            and Finance 3: 68–77.                                                Huang, C. Y. 2018. “Financial Trading as a Game: A Deep
+                                                                                                                                                                                 Reinforcement Learning Approach.” arXiv 1807.02787.
+                                                                                                            Chan, E. Quantitative Trading: How to Build Your Own Algo-
+                                                                                                            rithmic Trading Business, vol. 430. Hoboken: John Wiley &            Ingersoll, J. E. Theory of Financial Decision Making, vol. 3.
+                                                                                                            Sons, 2009.                                                          Lanham, MD; Rowman & Littlefield, 1987.
+
+                                                                                                            ——. Algorithmic Trading: Winning Strategies and Their Ratio-         Jin, O., and H. El-Saawy. “Portfolio Management Using
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                            nale, vol. 625. Hoboken: John Wiley & Sons, 2013.                    Reinforcement Learning.” Technical report working paper,
+                                                                                                                                                                                 Stanford University, 2016.
+                                                                                                            CLC Database. Pinnacle Data Corp, 2019, https://pinnacle-
+                                                                                                            data2.com/clc.html.                                                  Kingma, D. P., and J. Ba. “Adam: A Method for Stochastic
+                                                                                                                                                                                 Optimization.” Proceedings of the International Conference on
+                                                                                                            Collobert, R., J. Weston, L. Bottou, M. Karlen, K.                   Learning Representations, 2015.
+                                                                                                            Kavukcuoglu, and P. Kuksa. 2011. “Natural Language
+                                                                                                            Processing (Almost) from Scratch.” Journal of Machine Learning       Kirk, D. E. Optimal Control Theory: An Introduction. North
+                                                                                                            Research 12 (Aug): 2493–2537.                                        Chelmsford: MA; Courier Corporation, 2012.
+
+                                                                                                            Deng, Y., F. Bao, Y. Kong, Z. Ren, and Q. Dai. 2016. “Deep           Krizhevsky, A., I. Sutskever, and G. E. Hinton. “Imagenet
+                                                                                                            Direct Reinforcement Learning for Financial Signal Repre-            Classification with Deep Convolutional Neural Networks.”
+                                                                                                            sentation and Trading.” IEEE Transactions on Neural Networks         In Advances in Neural Information Processing Systems, pp.
+                                                                                                            and Learning Systems 28 (3): 653–664.                                1097–1105. Cambridge, MA: MIT Press, 2012.
+
+                                                                                                            Di Persio, L., and O. Honchar. 2016. “Artificial Neural Net-         Li, H., C. H. Dagli, and D. Enke. 2007. “Short-Term Stock
+                                                                                                            works Architectures for Stock Price Prediction: Comparisons          Market Timing Prediction under Reinforcement Learning
+                                                                                                            and Applications.” International Journal of Circuits, Systems and    Schemes.” 2007 IEEE International Symposium on Approximate
+                                                                                                            Signal Processing 10: 403–413.                                       Dynamic Programming and Reinforcement Learning, pp. 233–240.
+
+                                                                                                            Fischer, T., and C. Krauss. 2018. “Deep Learning with Long           Lim, B., S. Zohren, and S. Roberts. 2019. “Enhancing Time-
+                                                                                                            Short-Term Memory Networks for Financial Market Predic-              Series Momentum Strategies Using Deep Neural Networks.”
+                                                                                                            tions.” European Journal of Operational Research 270 (2): 654–669.   The Journal of Financial Data Science 1 (4): 19–38.
+
+                                                                                                            Fischer, T. G. “Reinforcement Learning in Financial                  Maas, A. L., A. Y. Hannun, and A. Y. Ng. 2013. “Rectifier
+                                                                                                            Markets—A Survey.” Technical report, FAU Discussion                  Nonlinearities Improve Neural Network Acoustic Models.”
+                                                                                                            Papers in Economics, 2018.                                           ICML Workshop on Deep Learning for Audio, Speech and Lan-
+                                                                                                                                                                                 guage Processing 30: 3.
+                                                                                                            Graham, B., and D. L. F. Dodd. Security Analysis. New York:
+                                                                                                            McGraw-Hill, 1934.                                                   Markowitz, H. 1952. “Portfolio Selection.” The Journal of
+                                                                                                                                                                                 Finance 7 (1): 77–91.
+                                                                                                            Harvey, C. R., E. Hoyle, R. Korgaonkar, S. Rattray, M. Sar-
+                                                                                                            gaison, and O. Van Hemert. 2018. “The Impact of Volatility           Merton, R. C. 1969. “Lifetime Portfolio Selection under
+                                                                                                            Targeting.” The Journal of Portfolio Management 45 (1): 14–33.       Uncertainty: The Continuous-Time Case.” The Review of
+                                                                                                                                                                                 Economics and Statistics 51 (3): 247–257.
+                                                                                                            Hasselt, H. V. “Double Q-Learning.” In Advances in Neural
+                                                                                                            Information Processing Systems, pp. 2613–2621. Cambridge,            Metropolis, N., and S. Ulam. 1949. “The Monte Carlo
+                                                                                                            MA: MIT Press, 2010.                                                 Method.” Journal of the American Statistical Association 44 (247):
+                                                                                                                                                                                 335–341.
+                                                                                                            Hinton, G. E., A. Krizhevsky, I. Sutskever, and N. Srivastva.
+                                                                                                            “System and Method for Addressing Overfitting in a Neural            Michaud, R. O. 1989. “The Markowitz Optimization
+                                                                                                            Network.” US Patent 9,406,017, August 2, 2016.                       Enigma: Is ‘Optimized’ Optimal?” Financial Analysts Journal
+                                                                                                                                                                                 45 (1): 31–42.
+
+                                                                                                            14   Deep Reinforcement Learning for Trading                                                                               Spring 2020
+                                                                                                            Mnih, V., A. P. Badia, M. Mirza, A. Graves, T. Lillicrap,            Tan, Z., C. Quek, and P. Y. Cheng. 2011. “Stock Trading
+                                                                                                            T. Harley, D. Silver, and K. Kavukcuoglu. 2016.                      with Cycles: A Financial Application of Anfis and Rein-
+                                                                                                            “Asynchronous Methods for Deep Reinforcement Learning.”              forcement Learning.” Expert Systems with Applications 38 (5):
+                                                                                                            In International Conference on Machine Learning 48: 1928–1937.       4741–4755.
+
+                                                                                                            Mnih, V., K. Kavukcuoglu, D. Silver, A. Graves, I.                   Tsantekidis, A., N. Passalis, A. Tefas, J. Kanniainen,
+                                                                                                            Antonoglou, D. Wierstra, and M. Riedmiller. “Playing Atari           M. Gabbouj, and A. Iosifidis. 2017a. “Forecasting Stock
+                                                                                                            with Deep Reinforcement Learning.” NIPS Deep Learning                Prices from the Limit Order Book Using Convolutional
+                                                                                                            Workshop, 2013.                                                      Neural Networks.” 2017 IEEE 19th Conference on Business
+                                                                                                                                                                                 Informatics (CBI) 1: 7–12.
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                            Moody, J., and M. Saffell. 2001. “Learning to Trade via
+                                                                                                            Direct Reinforcement. IEEE Transactions on Neural Networks           ——. “Using Deep Learning to Detect Price Change Indica-
+                                                                                                            12 (4): 875–889.                                                     tions in Financial Markets.” 2017b. 2017 25th European Signal
+                                                                                                                                                                                 Processing Conference (EUSIPCO), pp. 2511–2515.
+                                                                                                            Moody, J., L. Wu, Y. Liao, and M. Saffell. 1998. “Performance
+                                                                                                            Functions and Reinforcement Learning for Trading Systems             Van Hasselt, H., A. Guez, and D. Silver. “Deep Reinforce-
+                                                                                                            and Portfolios.” Journal of Forecasting 17 (5–6): 441–470.           ment Learning with Double Q-Learning.” Thirtieth AAAI
+                                                                                                                                                                                 Conference on Artificial Intelligence, 2016.
+                                                                                                            Moskowitz, T. J., Y. H. Ooi, and L. H. Pedersen. 2012. “Time
+                                                                                                            Series Momentum.” Journal of Financial Economics 104 (2):            Wang, Z., T. Schaul, M. Hessel, H. Van Hasselt, M. Lanctot,
+                                                                                                            228–250.                                                             and N. De Freitas. 2016. “Dueling Network Architectures
+                                                                                                                                                                                 for Deep Reinforcement Learning.” In Proceedings of the 33rd
+                                                                                                            Murphy, J. J. Technical Analysis of the Financial Markets: A Com-    International Conference on International Conference on Machine
+                                                                                                            prehensive Guide to Trading Methos and Applications. Paramus,        Learning 48: 1995–2003.
+                                                                                                            NJ: New York Institute of Finance, 1999.
+                                                                                                                                                                                 Wilder, J. W. “New Concepts in Technical Trading Systems.”
+                                                                                                            O’Neil, W. J. How to Make Money in Stocks: A Winning System          Trend Research, 1978.
+                                                                                                            in Good Times and Bad, 4th ed. New York: McGraw-Hill,
+                                                                                                            2009.                                                                Williams, R. J. 1992. “Simple Statistical Gradient-Following
+                                                                                                                                                                                 Algorithms for Connectionist Reinforcement Learning.”
+                                                                                                            Pratt, J. W. “Risk Aversion in the Small and in the Large.” In       Machine Learning 8 (3–4): 229–256.
+                                                                                                            Uncertainty in Economics, pp. 59–79. Elsevier, 1978.
+                                                                                                                                                                                 Xiong, Z., X. Y. Liu, S. Zhong, and A. Walid. 2018. “Prac-
+                                                                                                            Ritter, G. 2017. “Machine Learning for Trading.” August 8,           tical Deep Reinforcement Learning Approach for Stock
+                                                                                                            2017. Available at SSRN: https://ssrn.com/abstract=3015609           Trading.” arXiv 1811.07522.
+                                                                                                            or http://dx.doi.org/10.2139/ssrn.3015609.
+                                                                                                                                                                                 Zhang, Z., S. Zohren, and S. Roberts. “Bdlob: Bayesian Deep
+                                                                                                            Rohrbach, J., S. Suremann, and J. Osterrieder. 2017.                 Convolutional Neural Networks for Limit Order Books.”
+                                                                                                            “Momentum and Trend Following Trading Strategies for                 Presented at Third Workshop on Bayesian Deep Learning
+                                                                                                            Currencies Revisited—Combining Academia and Industry.”               (NeurIPS 2018), Montréal, Canada, 2018.
+                                                                                                            SSRN 2949379.
+                                                                                                                                                                                 ——. 2019a. “Deeplob: Deep Convolutional Neural Net-
+                                                                                                            Schwager, J. D. A Complete Guide to the Futures Market: Technical    works for Limit Order Books.” IEEE Transactions on Signal
+                                                                                                            Analysis, Trading Systems, Fundamental Analysis, Options, Spreads,   Processing 67 (11): 3001–3012.
+                                                                                                            and Trading Principles. Hoboken: John Wiley & Sons, 2017.
+                                                                                                                                                                                 ——. “Extending Deep Learning Models for Limit Order
+                                                                                                            Sirignano, J., and R. Cont. 2019. “Universal Features of Price       Books to Quantile Regression.” Proceedings of Time Series
+                                                                                                            Formation in Financial Markets: Perspectives from Deep               Workshop of the 36th International Conference on Machine
+                                                                                                            Learning.” Quantitative Finance 19 (9): 1449–1459.                   Learning, 2019b.
+
+                                                                                                            Sutton, R. S., and A. G. Barto. Introduction to Reinforcement
+                                                                                                            Learning, vol. 2. Cambridge, MA: MIT Press, 1998.                    To order reprints of this article, please contact David Rowe at
+                                                                                                                                                                                 d.rowe@pageantmedia.com or 646-891-2157.
+
+                                                                                                            Spring 2020                                                                              The Journal of Financial Data Science   15
+                                                                                                                                                                                           Enhancing Time-Series Momentum Strategies
+                                                                                                             ADDITIONAL READING
+                                                                                                                                                                                           Using Deep Neural Networks
+                                                                                                                                                                                           Bryan Lim, Stefan Zohren, and Stephen Roberts
+                                                                                                            The Impact of Volatility Targeting                                             The Journal of Financial Data Science
+                                                                                                            Campbell R. H arvey, E dward Hoyle , Russell Kor-                              https://jfds.pm-research.com/content/1/4/19
+                                                                                                            gaonkar , Sandy R attray, M atthew Sargaison, and                              ABSTRACT: Although time-series momentum is a well-studied
+                                                                                                            Otto Van H emert                                                               phenomenon in finance, common strategies require the explicit defini-
+                                                                                                            The Journal of Portfolio Management                                            tion of both a trend estimator and a position sizing rule. In this article,
+                                                                                                            https://jpm.pm-research.com/content/45/1/14                                    the authors introduce deep momentum networks—a hybrid approach
+Downloaded from https://jfds.pm-research.com by guest on June 16, 2020. Copyright 2020 Pageant Media Ltd.
+
+
+
+
+                                                                                                            ABSTRACT: Recent studies show that volatility-managed equity                   that injects deep learning–based trading rules into the volatility scaling
+                                                                                                            portfolios realize higher Sharpe ratios than portfolios with a constant        framework of time-series momentum. The model also simultaneously
+                                                                                                            notional exposure. The authors show that this result only holds for risk       learns both trend estimation and position sizing in a data-driven
+                                                                                                            assets, such as equity and credit, and they link this finding to the so-       manner, with networks directly trained by optimizing the Sharpe
+                                                                                                            called leverage effect for those assets. In contrast, for bonds, currencies,   ratio of the signal. Backtesting on a portfolio of 88 continuous futures
+                                                                                                            and commodities, the impact of volatility targeting on the Sharpe ratio        contracts, the authors demonstrate that the Sharpe-optimized long
+                                                                                                            is negligible. However, the impact of volatility targeting goes beyond         short-term memory improved traditional methods by more than two
+                                                                                                            the Sharpe ratio: It reduces the likelihood of extreme returns across all      times in the absence of transactions costs and continued outperforming
+                                                                                                            asset classes. Particularly relevant for investors, left-tail events tend      when considering transaction costs up to 2–3 bps. To account for more
+                                                                                                            to be less severe because they typically occur at times of elevated vola-      illiquid assets, the authors also propose a turnover regularization term
+                                                                                                            tility, when a target-volatility portfolio has a relatively small notional     that trains the network to factor in costs at run-time.
+                                                                                                            exposure. We also consider the popular 60–40 equity–bond balanced
+                                                                                                            portfolio and an equity–bond–credit–commodity risk parity portfolio.
+                                                                                                            Volatility scaling at both the asset and portfolio level improves Sharpe
+                                                                                                            ratios and reduces the likelihood of tail events.
+
+                                                                                                            A Century of Evidence on Trend-Following
+                                                                                                            Investing
+                                                                                                            Brian Hurst, Yao Hua Ooi, and Lasse H eje P edersen
+                                                                                                            The Journal of Portfolio Management
+                                                                                                            https://jpm.pm-research.com/content/44/1/15
+                                                                                                            ABSTRACT: In this article, the authors study the performance of
+                                                                                                            trend-following investing across global markets since 1880, extending
+                                                                                                            the existing evidence by more than 100 years using a novel data set.
+                                                                                                            They find that in each decade since 1880, time-series momentum has
+                                                                                                            delivered positive average returns with low correlations to traditional
+                                                                                                            asset classes. Further, time-series momentum has performed well in
+                                                                                                            8 out of 10 of the largest crisis periods over the century, defined as
+                                                                                                            the largest drawdowns for a 60/40 stock/bond portfolio. Lastly, the
+                                                                                                            authors find that time-series momentum has performed well across
+                                                                                                            different macro environments, including recessions and booms, war
+                                                                                                            and peace, high- and low-interest-rate regimes, and high- and low-
+                                                                                                            inflation periods.
+
+
+
+
+                                                                                                            16   Deep Reinforcement Learning for Trading                                                                                                 Spring 2020
+
