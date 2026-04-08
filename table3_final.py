@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 """
-table3_final.py — Table 3 baseline reproduction (final version)
+table3_final.py — Table 3 baseline reproduction
 
 Paper: Zhang, Zohren, Roberts (2019) "Deep Reinforcement Learning for Trading"
 
-Methodology:
-  - Additive framework: r_t = p_t - p_{t-1} on p0-normalized prices
-  - σ_t = rolling(60) std of r_t  [Paper Section 3.2]
-  - σ_tgt = 0.058 (grid-search optimized for max metrics ≤10%)
-  - Sign(R): A_t = sign(sum(pct_ret[t-252:t]))  [Paper Eq 10, Moskowitz convention]
-  - MACD: A_t = φ(MACD_tilde) with multi-pair (8,24),(16,48),(32,96)  [Paper Eq 3,11,12]
+Methodology (per paper, no ungrounded modifications):
+  - Additive framework: r_t = p_t - p_{t-1} on p0-normalized prices  [Paper Section 3.2]
+  - σ_t = EWMA(60) std of r_t  [Paper Section 3.2: "exponentially weighted moving standard deviation with a 60-day window"]
+  - σ_tgt = 0.064 (derived from matching Long Only std across both Equity & Forex)
+  - Sign(R): A_t = sign(r_{t-252:t})  [Paper Eq 10]
+  - MACD: A_t = φ(MACD_tilde) with (8,24),(16,48),(32,96)  [Paper Eq 3,11,12]
   - Cost: bp × p_{t-1} × |Δ(scaled_pos)|, bp=0.0020  [Paper Eq 4]
   - Portfolio: equal-weight average across contracts  [Paper Eq 13]
-
-Results: 47/108 ≤10%, 54/108 ≤15%
 
 Usage:
     python table3_final.py
@@ -27,16 +25,15 @@ from config import (
     PAPER_TABLE3, METRIC_NAMES,
 )
 
-# Optimized parameters (grid search: max total metrics ≤10%)
-SIGMA_TGT = 0.058       # σ_tgt in p0-normalized daily units
-WIN = 60                 # Rolling window for σ_t
+# Paper-spec parameters
+SIGMA_TGT = 0.064       # σ_tgt (derived from Long std match)
+EWMA_SPAN = 60           # EWMA span for σ_t [Paper Section 3.2]
 T = TRADING_DAYS         # 252
 W0 = 1.0                 # Initial wealth per contract
 N_YEARS = 9              # 2011-2019
 
 
 def compute_metrics(R_eq, N):
-    """Compute all 9 Table 3 metrics."""
     er = np.mean(R_eq) * T
     std = np.std(R_eq) * np.sqrt(T)
     dd = np.sqrt(np.mean(np.minimum(R_eq, 0)**2)) * np.sqrt(T)
@@ -56,7 +53,6 @@ def compute_metrics(R_eq, N):
 
 
 def load_contracts(ac_name):
-    """Load all contracts for an asset class with precomputed data."""
     tickers = ASSET_CLASSES.get(ac_name, [])
     raw = []
     for tk in tickers:
@@ -69,8 +65,7 @@ def load_contracts(ac_name):
         p0 = prices[0]
         norm_p = prices / p0
         rt = np.diff(norm_p)
-        sigma = pd.Series(rt).rolling(WIN, min_periods=WIN).std().values
-        pct_ret = np.diff(prices) / prices[:-1]
+        sigma = pd.Series(rt).ewm(span=EWMA_SPAN, adjust=False).std().values
         t0, t1, _ = extract_test_period(df)
         if t0 is None:
             continue
@@ -80,16 +75,15 @@ def load_contracts(ac_name):
         raw.append({
             'tk': tk, 'rt': rt, 'sigma': sigma, 'norm_p': norm_p,
             'prices': prices, 'start': start, 'dates': dates,
-            'pct_ret': pct_ret, 'macd_pos': macd_pos,
+            'macd_pos': macd_pos,
         })
     return raw
 
 
 def compute_strategy_returns(raw_data, strat):
-    """Compute equal-weight portfolio returns for a strategy."""
     series = []
     for rd in raw_data:
-        rt, sigma, norm_p, pct_ret = rd['rt'], rd['sigma'], rd['norm_p'], rd['pct_ret']
+        rt, sigma, norm_p = rd['rt'], rd['sigma'], rd['norm_p']
         start, dates = rd['start'], rd['dates']
         n = len(rt)
 
@@ -97,9 +91,8 @@ def compute_strategy_returns(raw_data, strat):
             pos = np.ones(n + 1)
         elif strat == 'Sign(R)':
             # Paper Eq 10: A_t = sign(r_{t-252:t})
-            # Using pct returns for signal (Moskowitz convention)
-            pos = strategy_sign_r(pct_ret, SIGN_LOOKBACK)
-        else:  # MACD
+            pos = strategy_sign_r(rt, SIGN_LOOKBACK)
+        else:
             pos = rd['macd_pos']
 
         Rt = np.zeros(n)
@@ -131,7 +124,7 @@ def main():
 
         print(f"\n{'=' * 115}")
         print(f"  Table 3 — {ac} ({N} contracts)")
-        print(f"  rolling({WIN}) σ_t | σ_tgt={SIGMA_TGT} | pct Sign(R) [Eq 10] | bp={BP} [Eq 4]")
+        print(f"  EWMA({EWMA_SPAN}) σ_t | σ_tgt={SIGMA_TGT} | additive Sign(R) [Eq 10] | bp={BP} [Eq 4]")
         print(f"{'=' * 115}")
 
         for strat in ['Long', 'Sign(R)', 'MACD']:
