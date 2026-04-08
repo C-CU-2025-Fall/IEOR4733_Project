@@ -8,10 +8,9 @@ env/
 venv/
 .venv/
 
-# Data files (too large, do not commit)
+# Data files — CLC futures data committed to repo
 data/futures/
 data/futures_processed/
-data/CLC/
 models/
 
 # Logs
