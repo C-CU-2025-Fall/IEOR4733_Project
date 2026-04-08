@@ -64,7 +64,9 @@ def load_contracts(ac_name):
             continue
         p0 = prices[0]
         norm_p = prices / p0
-        rt = np.diff(norm_p)
+        # FIXED: rt[t] = p_t - p_{t-1}, same length as norm_p
+        rt = np.zeros(len(norm_p))
+        rt[1:] = norm_p[1:] - norm_p[:-1]
         sigma = pd.Series(rt).ewm(span=EWMA_SPAN, adjust=False).std().values
         t0, t1, _ = extract_test_period(df)
         if t0 is None:
@@ -85,16 +87,19 @@ def compute_strategy_returns(raw_data, strat):
     for rd in raw_data:
         rt, sigma, norm_p = rd['rt'], rd['sigma'], rd['norm_p']
         start, dates = rd['start'], rd['dates']
-        n = len(rt)
+        n = len(rt)  # same as len(norm_p)
 
         if strat == 'Long':
-            pos = np.ones(n + 1)
+            pos = np.ones(n)  # A_t = 1 for all t
         elif strat == 'Sign(R)':
-            # Paper Eq 10: A_t = sign(r_{t-252:t})
+            # Paper Eq 10: A_t = sign(r_{t-252:t}) = sign(p_t - p_{t-252})
             pos = strategy_sign_r(rt, SIGN_LOOKBACK)
         else:
             pos = rd['macd_pos']
 
+        # Paper Eq 4:
+        #   R_t = A_{t-1} * (σ_tgt/σ_{t-1}) * r_t - bp * p_{t-1} * |Δscaled_pos|
+        # where r_t = p_t - p_{t-1}, all in p0-normalized units
         Rt = np.zeros(n)
         for t in range(1, n):
             if sigma[t - 1] > 0 and (t < 2 or sigma[t - 2] > 0):
