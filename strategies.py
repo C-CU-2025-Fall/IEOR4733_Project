@@ -32,8 +32,12 @@ def strategy_sign_r(additive_returns, lookback=SIGN_LOOKBACK):
     
     In the additive framework:
       r_t = p_t - p_{t-1} (p0-normalized)
-      sum(r_{t-252:t}) = p_t - p_{t-252} = cumulative additive return
-      A_t = sign(cumulative additive return over past `lookback` days)
+      r_{t-252:t} = sum of r_{t-251}, r_{t-250}, ..., r_t  (252 returns)
+                 = p_t - p_{t-252}
+      A_t = sign(p_t - p_{t-252})
+    
+    NOTE: additive_returns[i] must be r_i = p_i - p_{i-1} for i >= 1.
+    Then sum(rt[t-251:t+1]) = p_t - p_{t-252}.
     
     Position ∈ {-1, 0, +1}.
     
@@ -41,7 +45,8 @@ def strategy_sign_r(additive_returns, lookback=SIGN_LOOKBACK):
     """
     positions = np.zeros(len(additive_returns))
     for t in range(lookback, len(additive_returns)):
-        cum_ret = np.sum(additive_returns[t - lookback:t])
+        # sum r_{t-251}...r_t = p_t - p_{t-252}
+        cum_ret = np.sum(additive_returns[t - lookback + 1 : t + 1])
         positions[t] = np.sign(cum_ret)
     return positions
 
