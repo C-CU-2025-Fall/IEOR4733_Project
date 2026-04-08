@@ -1,268 +1,215 @@
 #!/usr/bin/env python3
 """
-baseline_run.py — Table 2 & Table 3 baseline reproduction
-
-Usage:
-    python baseline_run.py                    # Table 3 (per-contract vol scaling only)
-    python baseline_run.py --portfolio        # Table 2 (+ portfolio-level vol scaling)
-    python baseline_run.py --sigma-tgt 0.12   # Custom σ_tgt (annualized)
-    python baseline_run.py --no-scaling       # Debug: no vol scaling at all
+baseline_run.py — Table 2 & Table 3 baseline reproduction (single entry point)
 
 Paper: Zhang, Zohren, Roberts (2019) "Deep Reinforcement Learning for Trading"
-References:
-  [4] Baz et al. (2015) — MACD signal definition
-  [27] Lim, Zohren, Roberts (2019) — Volatility scaling framework
+
+Usage:
+    python baseline_run.py                  # Table 3 (all asset classes)
+    python baseline_run.py --table 2        # Table 2 (with portfolio vol scaling)
+    python baseline_run.py --table both     # Both tables
+    python baseline_run.py --asset Forex    # Single asset class
+    python baseline_run.py --sigma 0.064    # Custom σ_tgt
+    python baseline_run.py --test-start 2015-01-01 --test-end 2019-12-31  # Custom period
 """
 import argparse
 import numpy as np
 import pandas as pd
-from pathlib import Path
-
-# Import modular components
-from config import (
-    BP, TRADING_DAYS, EWMA_SPAN, SIGN_LOOKBACK,
-    MACD_PAIRS, MACD_VOL_WINDOW, MACD_STD_WINDOW,
-    TEST_START, TEST_END, WARMUP_DAYS,
-    ASSET_CLASSES, PAPER_TABLE3, PAPER_TABLE2, METRIC_NAMES,
-)
 from data_loader import load_clc_full
-from strategies import strategy_long_only, strategy_sign_r, strategy_macd
-from vol_scaling import compute_vol_scaling, apply_portfolio_scaling
-from metrics import (
-    compute_expected_return, compute_annualized_std, compute_downside_deviation,
-    compute_sharpe, compute_sortino, compute_max_drawdown, compute_calmar,
-    compute_pct_positive, compute_avg_pl_ratio, compute_all_metrics,
+from strategies import strategy_sign_r, strategy_macd
+from metrics import compute_metrics
+from config import (
+    ASSET_CLASSES, BP, TRADING_DAYS, SIGN_LOOKBACK,
+    PAPER_TABLE2, PAPER_TABLE3, METRIC_NAMES,
 )
 
+# ─── Parameters ───────────────────────────────────────────────────
+DEFAULT_SIGMA_TGT = 0.064   # σ_tgt per contract [Paper Eq 4]
+EWMA_SPAN = 60              # EWMA span for σ_t [Paper Section 3.2]
+T = TRADING_DAYS            # 252
+W0 = 1.0                    # Initial wealth per contract
 
-def compute_trade_returns(prices, positions, sigma_tgt_annual, bp=BP):
+
+# ─── Data Loading ─────────────────────────────────────────────────
+def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31'):
+    """Load and prepare all contracts for an asset class.
+
+    Returns list of dicts with:
+      rt[t] = p_t - p_{t-1}  (additive, p0-normalized)  [Paper Section 3.2]
+      sigma[t] = EWMA(60) std of rt                      [Paper Section 3.2]
+      norm_p = prices / prices[0]                         (p0-normalized)
+      pos_macd = MACD positions                           [Paper Eq 3,11,12]
+      start, t1 = test period indices
     """
-    Compute per-contract trade returns using paper's Formula 4.
-
-    R_t = c_{t-1} × r_t − bp × p_{t-1} × |c_{t-1} − c_{t-2}|
-
-    where:
-        r_t = p_t - p_{t-1}              (additive profits)
-        c_t = A_t × (σ_tgt / σ_t)         (scaled position)
-        σ_t = EWMA(60) std of r_t         (same units as σ_tgt)
-
-    Args:
-        prices:            array of close prices
-        positions:         array of signal positions (A_t)
-        sigma_tgt_annual:  annualized volatility target (e.g., 0.10 = 10%)
-        bp:                transaction cost rate (default 0.0020 = 20 bps)
-
-    Returns:
-        trade_rets: array of daily trade returns (in price-diff units)
-    """
-    n = len(prices)
-
-    # Additive profits: r_t = p_t - p_{t-1}
-    r_add = np.zeros(n)
-    r_add[1:] = prices[1:] - prices[:-1]
-
-    # Per-contract vol scaling: c_t = A_t × (σ_tgt / σ_t)
-    scaling = compute_vol_scaling(r_add, sigma_tgt_annual, TRADING_DAYS, EWMA_SPAN)
-    scaled_positions = positions * scaling
-
-    # Trade returns with transaction cost
-    trade_rets = np.zeros(n)
-    for t in range(2, n):
-        c_prev = scaled_positions[t - 1]
-        c_prev2 = scaled_positions[t - 2]
-        trade_rets[t] = c_prev * r_add[t] - bp * prices[t - 1] * abs(c_prev - c_prev2)
-
-    return trade_rets
-
-
-def build_aligned_portfolio(contract_data):
-    """
-    Build equal-weight portfolio from per-contract returns, aligned by date.
-
-    Args:
-        contract_data: list of (dates_series, returns_array) tuples
-
-    Returns:
-        port_dates: aligned dates index
-        port_returns: equal-weight average returns
-    """
-    if not contract_data:
-        return None, None
-
-    series_list = []
-    for dates, rets in contract_data:
-        s = pd.Series(rets, index=dates, name='ret')
-        series_list.append(s)
-
-    # Inner join: only dates where all contracts have data
-    merged = pd.concat(series_list, axis=1, join='inner').dropna()
-    port_returns = merged.mean(axis=1).values
-
-    return merged.index, port_returns
-
-
-def print_comparison(ours_dict, paper_dict, strat_name):
-    """Print metric comparison table against paper targets."""
-    print(f"\n  {strat_name}:")
-    print(f"    {'Metric':<10} {'Ours':>8}  {'Paper':>8}  {'Diff':>8}  {'%':>7}  Status")
-    print(f"    {'-' * 62}")
-
-    for mn in METRIC_NAMES:
-        ov = ours_dict[mn]
-        pv = paper_dict.get(mn)
-        if pv is not None:
-            diff = ov - pv
-            pct = abs(diff / abs(pv)) * 100 if pv != 0 else 0
-
-            # Status icon based on tolerance
-            if mn == 'std(R)':
-                status = '✅' if pct < 5 else '⚠️' if pct < 15 else '❌'
-            elif mn in ('% +ve', 'Ave P/L'):
-                status = '✅' if pct < 10 else '⚠️' if pct < 25 else '❌'
-            elif mn == 'MDD':
-                status = '✅' if pct < 30 else '⚠️' if pct < 60 else '❌'
-            else:
-                status = '✅' if pct < 30 else '⚠️' if pct < 60 else '❌'
-
-            print(f"    {mn:<10} {ov:>+8.3f}  {pv:>+8.3f}  {diff:>+8.3f}  {pct:>6.1f}%  {status}")
-        else:
-            print(f"    {mn:<10} {ov:>+8.3f}")
-
-
-def run_asset_class(ac_name, tickers, table_name, paper_targets,
-                    do_per_contract_scaling, do_portfolio_scaling,
-                    sigma_tgt_annual):
-    """Run backtest for one asset class."""
-    print(f"\n{'=' * 100}")
-    print(f"  {ac_name} ({len(tickers)} contracts)")
-    print(f"{'=' * 100}")
-
-    strat_data = {'Long': [], 'Sign(R)': [], 'MACD': []}
-    loaded = []
-
+    tickers = ASSET_CLASSES.get(ac_name, [])
+    raw = []
     for tk in tickers:
         df = load_clc_full(tk)
         if df is None:
             continue
-
-        prices = df['Close'].values
-        dates = df['Date']
-
-        # Compute test period boundaries
-        test_start_idx = dates[dates >= TEST_START].index[0] if len(dates[dates >= TEST_START]) > 0 else None
-        test_end_idx = dates[dates <= TEST_END].index[-1] if len(dates[dates <= TEST_END]) > 0 else None
-
-        if test_start_idx is None or test_end_idx is None:
+        prices = df['Close'].values.astype(float)
+        if len(prices) < 500:
             continue
+        p0 = prices[0]
+        norm_p = prices / p0
+        # rt[t] = p_t - p_{t-1}, same length as norm_p  [Paper Eq below 4]
+        rt = np.zeros(len(norm_p))
+        rt[1:] = norm_p[1:] - norm_p[:-1]
+        # σ_t = EWMA(60) std of rt  [Paper Section 3.2]
+        sigma = pd.Series(rt).ewm(span=EWMA_SPAN, adjust=False).std().values
+        # Test period boundaries
+        mask_s = df['Date'] >= test_start
+        mask_e = df['Date'] <= test_end
+        if not mask_s.any() or not mask_e.any():
+            continue
+        t0 = mask_s.idxmax()
+        t1 = len(df) - 1 - mask_e[::-1].values.argmax()
+        start = max(t0, SIGN_LOOKBACK)
+        # dates for index alignment (exclusive of t1, matching table3_final.py)
+        dates = df['Date'].iloc[start:t1].values
+        raw.append({
+            'tk': tk, 'rt': rt, 'sigma': sigma, 'norm_p': norm_p,
+            'prices': prices, 'start': start, 't1': t1, 'dates': dates,
+            'macd_pos': strategy_macd(prices),
+        })
+    return raw
 
-        # Compute positions on FULL history (for warmup)
-        pos_long = strategy_long_only(len(prices))
-        pct_returns = prices[1:] / prices[:-1] - 1 if len(prices) > 1 else np.zeros(len(prices) - 1)
-        pct_returns = np.insert(pct_returns, 0, 0)  # Align with prices
-        pos_sign = strategy_sign_r(pct_returns, SIGN_LOOKBACK)
-        pos_macd = strategy_macd(prices, MACD_PAIRS, MACD_VOL_WINDOW, MACD_STD_WINDOW)
 
-        for pos, key in [(pos_long, 'Long'), (pos_sign, 'Sign(R)'), (pos_macd, 'MACD')]:
-            if do_per_contract_scaling:
-                trade_rets = compute_trade_returns(prices, pos, sigma_tgt_annual)
-            else:
-                # No scaling: raw signal returns (debug mode)
-                n = len(prices)
-                trade_rets = np.zeros(n)
-                r_add = np.zeros(n)
-                r_add[1:] = prices[1:] - prices[:-1]
-                for t in range(2, n):
-                    trade_rets[t] = pos[t - 1] * r_add[t] - BP * prices[t - 1] * abs(pos[t - 1] - pos[t - 2])
+# ─── Eq 4: Trade Return ──────────────────────────────────────────
+def compute_contract_returns(rd, strat, sigma_tgt):
+    """Compute daily R_t for one contract using Paper Eq 4:
 
-            # Extract test period only (skip first WARMUP_DAYS for indicator warmup)
-            start_idx = max(test_start_idx, WARMUP_DAYS)
-            strat_data[key].append((dates.iloc[start_idx:test_end_idx + 1],
-                                    trade_rets[start_idx:test_end_idx + 1]))
+    R_t = A_{t-1} × (σ_tgt / σ_{t-1}) × r_t
+        − bp × p_{t-1} × |(σ_tgt/σ_{t-1})×A_{t-1} − (σ_tgt/σ_{t-2})×A_{t-2}|
 
-        loaded.append(tk)
+    Returns full-length Rt array (slice to test period later).
+    """
+    rt, sigma, norm_p = rd['rt'], rd['sigma'], rd['norm_p']
+    n = len(rt)
 
-    print(f"  Loaded: {len(loaded)}/{len(tickers)} — {loaded}")
-    if not loaded:
-        return
+    # Position signal A_t
+    if strat == 'Long':
+        pos = np.ones(n)
+    elif strat == 'Sign(R)':
+        pos = strategy_sign_r(rt, SIGN_LOOKBACK)
+    else:
+        pos = rd['macd_pos']
 
-    pp = paper_targets.get(ac_name, {})
+    Rt = np.zeros(n)
+    for t in range(1, n):
+        if sigma[t - 1] > 0 and (t < 2 or sigma[t - 2] > 0):
+            a_prev = pos[t - 1] if strat != 'Long' else 1.0
+            a_prev2 = pos[t - 2] if strat != 'Long' else 1.0
+            sp = a_prev * sigma_tgt / sigma[t - 1]
+            spp = a_prev2 * sigma_tgt / sigma[t - 2] if t >= 2 else 0.0
+            Rt[t] = sp * rt[t] - BP * norm_p[t - 1] * abs(sp - spp)
+    return Rt
 
+
+# ─── Eq 13: Portfolio Return ─────────────────────────────────────
+def compute_portfolio_returns(raw_data, strat, sigma_tgt):
+    """Eq 13: R_port = (1/N) × Σ R_i  (equal-weight average)."""
+    series = []
+    for rd in raw_data:
+        Rt = compute_contract_returns(rd, strat, sigma_tgt)
+        start, t1, dates = rd['start'], rd['t1'], rd['dates']
+        slc = Rt[start:t1]
+        series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
+    return pd.DataFrame(series).T.dropna().mean(axis=1).values
+
+
+# ─── Table 2: Portfolio-level vol scaling ─────────────────────────
+def apply_portfolio_vol_scaling(R_eq, target_std):
+    """Scale R_eq so annualized std = target_std."""
+    current_std = np.std(R_eq) * np.sqrt(T)
+    if current_std > 0:
+        return R_eq * (target_std / current_std)
+    return R_eq
+
+
+# ─── Output ───────────────────────────────────────────────────────
+def fmt(vals):
+    return "  ".join(f"{v:>+7.3f}" for v in vals)
+
+
+def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
+              port_vol_target=None):
+    """Run one table (Table 2 or 3) for one asset class."""
+    N = len(raw_data)
+    if N == 0:
+        return 0, 0, 0
+
+    port_str = f" | port_vol→{port_vol_target}" if port_vol_target else ""
+    print(f"\n{'=' * 110}")
+    print(f"  {table_label} — {ac_name} ({N} contracts)")
+    print(f"  σ_tgt={sigma_tgt} | EWMA({EWMA_SPAN}) | bp={BP}{port_str}")
+    print(f"{'=' * 110}")
+
+    total_n10, total_n15, total = 0, 0, 0
     for strat in ['Long', 'Sign(R)', 'MACD']:
-        if not strat_data[strat]:
-            continue
+        R = compute_portfolio_returns(raw_data, strat, sigma_tgt)
+        if port_vol_target is not None:
+            R = apply_portfolio_vol_scaling(R, port_vol_target)
+        m = compute_metrics(R, N)
+        pv_dict = paper_table[ac_name][strat]
+        pv = [pv_dict[k] for k in METRIC_NAMES]
+        errs = [abs((m[i] - pv[i]) / abs(pv[i])) * 100 if pv[i] != 0 else 0
+                for i in range(9)]
+        n10 = sum(1 for e in errs if e < 10)
+        n15 = sum(1 for e in errs if e < 15)
+        total_n10 += n10
+        total_n15 += n15
+        total += 9
 
-        port_dates, port_raw = build_aligned_portfolio(strat_data[strat])
-        if port_raw is None or len(port_raw) == 0:
-            continue
+        print(f"\n  {strat:8s} (≤10%:{n10}/9  ≤15%:{n15}/9)")
+        print(f"  Ours  : {fmt(m)}")
+        print(f"  Paper : {fmt(pv)}")
+        print(f"  %Err  : {'  '.join(f'{e:>6.1f}%' for e in errs)}")
 
-        # Apply portfolio-level vol scaling if requested (Table 2)
-        if do_portfolio_scaling:
-            port_scaled = apply_portfolio_scaling(port_raw, TRADING_DAYS)
-        else:
-            port_scaled = port_raw.copy()
-
-        # Compute all 9 metrics
-        metrics = compute_all_metrics(port_scaled, port_raw, TRADING_DAYS)
-        paper = pp.get(strat, {})
-        print_comparison(metrics, paper, strat)
+    return total_n10, total_n15, total
 
 
+# ─── Main ─────────────────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser(
-        description='Table 2/3 Baseline Reproduction',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python baseline_run.py                      # Table 3 (per-contract scaling only)
-  python baseline_run.py --portfolio          # Table 2 (+ portfolio scaling)
-  python baseline_run.py --sigma-tgt 0.15     # Use σ_tgt = 15% annualized
-  python baseline_run.py --no-scaling         # Debug: raw signal, no scaling
-        """
-    )
-    parser.add_argument('--portfolio', action='store_true',
-                        help='Add portfolio-level vol scaling (Table 2)')
-    parser.add_argument('--sigma-tgt', type=float, default=0.10,
-                        help='Annualized σ_tgt (default: 0.10 = 10%)')
-    parser.add_argument('--no-scaling', action='store_true',
-                        help='Disable ALL vol scaling (debug mode)')
+    parser = argparse.ArgumentParser(description='Baseline reproduction')
+    parser.add_argument('--table', choices=['2', '3', 'both'], default='3',
+                        help='Which table to run (default: 3)')
+    parser.add_argument('--asset', default=None,
+                        help='Single asset class (e.g. "Equity Index")')
+    parser.add_argument('--sigma', type=float, default=DEFAULT_SIGMA_TGT,
+                        help=f'σ_tgt per contract (default: {DEFAULT_SIGMA_TGT})')
+    parser.add_argument('--test-start', default='2011-01-01')
+    parser.add_argument('--test-end', default='2019-12-31')
+    parser.add_argument('--port-vol-target', type=float, default=0.97,
+                        help='Portfolio vol target for Table 2 (default: 0.97)')
     args = parser.parse_args()
 
-    # Determine which table we're reproducing
-    do_per_contract = not args.no_scaling
-    do_portfolio = args.portfolio and not args.no_scaling
+    asset_classes = [args.asset] if args.asset else [
+        'Commodity', 'Equity Index', 'Fixed Income', 'Forex'
+    ]
 
-    if args.no_scaling:
-        table_name = "DEBUG (No Scaling)"
-        paper_targets = PAPER_TABLE3  # Still compare against Table 3
-    elif args.portfolio:
-        table_name = "Table 2"
-        paper_targets = PAPER_TABLE2
-    else:
-        table_name = "Table 3"
-        paper_targets = PAPER_TABLE3
+    tables = []
+    if args.table in ('3', 'both'):
+        tables.append(('Table 3', PAPER_TABLE3, None))
+    if args.table in ('2', 'both'):
+        tables.append(('Table 2', PAPER_TABLE2, args.port_vol_target))
 
-    # Print configuration header
-    print("=" * 100)
-    if args.no_scaling:
-        print(f"  {table_name}")
-        print(f"  r_t = p_t − p_{{t-1}} (additive) | NO vol scaling")
-    elif args.portfolio:
-        print(f"  {table_name}: per-contract σ_tgt={args.sigma_tgt:.3f} annualized")
-        print(f"           + portfolio-level scaling → std≈{SIGMA_TGT_ANNUAL:.3f}")
-    else:
-        print(f"  {table_name}: per-contract σ_tgt={args.sigma_tgt:.3f} annualized")
+    grand_n10, grand_n15, grand_total = 0, 0, 0
 
-    print(f"  cost = bp × p_{{t-1}} × |Δc|  (bp={BP})")
-    print(f"  Test: {TEST_START} to {TEST_END} (warmup: {WARMUP_DAYS} days from 2010)")
-    print(f"  References: [4] Baz et al. 2015 (MACD) | [27] Lim et al. 2019 (vol scaling)")
-    print("=" * 100)
+    for table_label, paper_table, port_vol in tables:
+        for ac in asset_classes:
+            raw = load_contracts(ac, args.test_start, args.test_end)
+            n10, n15, tot = run_table(raw, ac, args.sigma, paper_table,
+                                      table_label, port_vol)
+            grand_n10 += n10
+            grand_n15 += n15
+            grand_total += tot
 
-    # Run for each asset class
-    for ac_name, tickers in ASSET_CLASSES.items():
-        run_asset_class(
-            ac_name, tickers, table_name, paper_targets,
-            do_per_contract, do_portfolio, args.sigma_tgt
-        )
+    if grand_total > 0:
+        print(f"\n{'=' * 60}")
+        print(f"  GRAND TOTAL: ≤10%: {grand_n10}/{grand_total}"
+              f" | ≤15%: {grand_n15}/{grand_total}")
+        print(f"{'=' * 60}")
 
 
 if __name__ == '__main__':
