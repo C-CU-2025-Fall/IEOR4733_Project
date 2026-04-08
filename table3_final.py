@@ -30,10 +30,11 @@ SIGMA_TGT = 0.064       # σ_tgt (derived from Long std match)
 EWMA_SPAN = 60           # EWMA span for σ_t [Paper Section 3.2]
 T = TRADING_DAYS         # 252
 W0 = 1.0                 # Initial wealth per contract
-N_YEARS = 9              # 2011-2019
+# N_YEARS computed from test period dates in compute_metrics()
 
 
 def compute_metrics(R_eq, N):
+    n_years = len(R_eq) / T  # auto-compute from data length
     er = np.mean(R_eq) * T
     std = np.std(R_eq) * np.sqrt(T)
     dd = np.sqrt(np.mean(np.minimum(R_eq, 0)**2)) * np.sqrt(T)
@@ -47,7 +48,7 @@ def compute_metrics(R_eq, N):
     wealth = N * W0 + cumret
     pk = np.maximum.accumulate(wealth)
     mdd = float(np.max((pk - wealth) / pk))
-    realized_ann = (wealth[-1] - wealth[0]) / wealth[0] / N_YEARS
+    realized_ann = (wealth[-1] - wealth[0]) / wealth[0] / n_years
     calmar = realized_ann / mdd if mdd > 0 else 0
     return [round(v, 3) for v in [er, std, dd, sharpe, sortino, mdd, calmar, pct_pos, avg_pl]]
 
