@@ -28,3 +28,4 @@ results_lstm_*.csv
 
 # Images (optional - can include if small)
 # *.png
+simulation_data/
