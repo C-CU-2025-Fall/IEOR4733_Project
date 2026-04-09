@@ -72,6 +72,10 @@ def strategy_macd(prices, pairs=MACD_PAIRS,
     
     Position ∈ [-1, +1].
     
+    NOTE: Input 'prices' should be p0-normalized prices (same space as Eq 4).
+    The result is scale-invariant, but we use normalized prices for
+    consistency with the additive framework.
+    
     Reference: [4] Baz et al. 2015
     """
     positions = np.zeros(len(prices))

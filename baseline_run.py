@@ -70,7 +70,7 @@ def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31'):
         raw.append({
             'tk': tk, 'rt': rt, 'sigma': sigma, 'norm_p': norm_p,
             'prices': prices, 'start': start, 't1': t1, 'dates': dates,
-            'macd_pos': strategy_macd(prices),
+            'macd_pos': strategy_macd(norm_p),
         })
     return raw
 
