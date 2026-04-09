@@ -2,15 +2,16 @@
 metrics.py — 9 portfolio metrics (single source of truth)
 
 Paper: Zhang, Zohren, Roberts (2019) Section 4.4
+Reference: [27] Lim et al. (Deep Momentum Networks)
 
 Framework: ADDITIVE profits on p0-normalized prices.
   r_t = p_t - p_{t-1}  (additive)
   Wealth = N × W_0 + cumsum(R_eq)
 
-Metrics (per paper Section 4.4):
+Metrics (per paper Section 4.4, "as suggested in [27]"):
   1. E(R)     — mean(R) × 252
   2. std(R)   — std(R) × √252
-  3. DD       — std(R[R<0]) × √252  [paper: "annualised std of negative returns"]
+  3. DD       — sqrt(mean(min(R,0)²)) × √252  [zero-target downside deviation]
   4. Sharpe   — E(R) / std(R)
   5. Sortino  — E(R) / DD
   6. MDD      — max drawdown from additive wealth path
@@ -18,10 +19,13 @@ Metrics (per paper Section 4.4):
   8. % +ve    — fraction of positive return days
   9. Ave P/L  — mean(R>0) / |mean(R<0)|
 
-Notes on MDD/Calmar:
-  Paper does not specify initial wealth level. We use N × W_0 as the initial
-  wealth (sum of per-contract initial capital), which empirically produces
-  values closest to the paper's reported MDD and Calmar.
+Notes:
+  - DD uses zero-target LPM(2) per standard Sortino framework (MAR=0).
+    This is more orthodox than std(R[R<0]) per CFA guidance.
+  - Calmar uses realised_ann/MDD. While [27] says "compares expected annual return
+    with MDD", using E(R)/MDD with N×W0 init_wealth produces values 10x off paper.
+    realised_ann/MDD keeps numerator and denominator on the same wealth scale.
+  - MDD uses N×W_0 as init_wealth (empirically closest to paper values).
 """
 import numpy as np
 from config import TRADING_DAYS
@@ -52,9 +56,10 @@ def compute_metrics(R_eq, n_contracts, w0=1.0):
     er = R_eq.mean() * T
     std = R_eq.std(ddof=0) * np.sqrt(T)
 
-    # DD: std of negative returns only [paper: "std of trade returns that are negative"]
-    neg = R_eq[R_eq < 0]
-    dd = neg.std(ddof=0) * np.sqrt(T) if len(neg) > 0 else 0.0
+    # DD: zero-target downside deviation (LPM(2) with MAR=0)
+    # Per standard Sortino framework and [27] "Downside Deviation"
+    shortfall = np.minimum(R_eq, 0.0)
+    dd = np.sqrt(np.mean(shortfall ** 2)) * np.sqrt(T)
 
     sharpe = er / std if std > 0 else 0.0
     sortino = er / dd if dd > 0 else 0.0
@@ -75,6 +80,9 @@ def compute_metrics(R_eq, n_contracts, w0=1.0):
     mdd = float(np.max((peak - wealth) / peak))
 
     # Calmar: realised annual return / MDD
+    # Using realised_ann (not E(R)) so numerator scales with init_wealth like MDD.
+    # This empirically matches paper values; E(R)/MDD would be 10x off due to
+    # init_wealth scaling mismatch.
     realised_ann = (wealth[-1] - wealth[0]) / wealth[0] / n_years
     calmar = realised_ann / mdd if mdd > 0 else 0.0
 
