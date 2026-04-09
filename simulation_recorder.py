@@ -57,7 +57,7 @@ def record_simulation(asset_class, strategy, output_dir="simulation_data"):
         elif strategy == 'Sign(R)':
             pos = strategy_sign_r(rt, SIGN_LOOKBACK)
         elif strategy == 'MACD':
-            pos = strategy_macd(prices)
+            pos = strategy_macd(norm_p)
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
         
