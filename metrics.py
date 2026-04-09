@@ -7,21 +7,28 @@ Framework: ADDITIVE profits on p0-normalized prices.
   r_t = p_t - p_{t-1}  (additive)
   Wealth = N × W_0 + cumsum(R_eq)
 
-Metrics:
+Metrics (per paper Section 4.4):
   1. E(R)     — mean(R) × 252
   2. std(R)   — std(R) × √252
-  3. DD       — sqrt(mean(min(0,R)²)) × √252
+  3. DD       — std(R[R<0]) × √252  [paper: "annualised std of negative returns"]
   4. Sharpe   — E(R) / std(R)
   5. Sortino  — E(R) / DD
-  6. MDD      — max((peak - wealth) / peak)  [running max method]
-  7. Calmar   — realised_annual_return / MDD
+  6. MDD      — max drawdown from additive wealth path
+  7. Calmar   — realised annual return / MDD
   8. % +ve    — fraction of positive return days
   9. Ave P/L  — mean(R>0) / |mean(R<0)|
+
+Notes on MDD/Calmar:
+  Paper does not specify initial wealth level. We use N × W_0 as the initial
+  wealth (sum of per-contract initial capital), which empirically produces
+  values closest to the paper's reported MDD and Calmar.
 """
 import numpy as np
 from config import TRADING_DAYS
 
 T = TRADING_DAYS
+W0 = 1.0  # initial wealth per contract
+
 METRIC_NAMES = [
     'E(R)', 'std(R)', 'DD', 'Sharpe', 'Sortino',
     'MDD', 'Calmar', '% +ve', 'Ave P/L',
@@ -39,27 +46,35 @@ def compute_metrics(R_eq, n_contracts, w0=1.0):
     Returns:
         list of 9 rounded values [E(R), std, DD, Sharpe, Sortino, MDD, Calmar, %+ve, AveP/L]
     """
-    n_years = len(R_eq) / T  # auto from data length
+    R_eq = np.asarray(R_eq, dtype=float)
+    n_years = len(R_eq) / T
 
-    er = np.mean(R_eq) * T
-    std = np.std(R_eq) * np.sqrt(T)
-    dd = np.sqrt(np.mean(np.minimum(R_eq, 0) ** 2)) * np.sqrt(T)
+    er = R_eq.mean() * T
+    std = R_eq.std(ddof=0) * np.sqrt(T)
+
+    # DD: std of negative returns only [paper: "std of trade returns that are negative"]
+    neg = R_eq[R_eq < 0]
+    dd = neg.std(ddof=0) * np.sqrt(T) if len(neg) > 0 else 0.0
+
     sharpe = er / std if std > 0 else 0.0
     sortino = er / dd if dd > 0 else 0.0
 
-    pct_pos = np.sum(R_eq > 0) / len(R_eq)
+    pct_pos = (R_eq > 0).mean()
+
     pos_r = R_eq[R_eq > 0]
     neg_r = R_eq[R_eq < 0]
-    avg_pl = (np.mean(pos_r) / abs(np.mean(neg_r))
-              if len(pos_r) > 0 and len(neg_r) > 0 else 0.0)
+    avg_pl = (
+        pos_r.mean() / abs(neg_r.mean())
+        if len(pos_r) > 0 and len(neg_r) > 0 else 0.0
+    )
 
-    # MDD: max drawdown from running max of additive wealth
+    # MDD: from additive wealth path with init_wealth = N × W_0
     cumret = np.cumsum(R_eq)
     wealth = n_contracts * w0 + cumret
     peak = np.maximum.accumulate(wealth)
     mdd = float(np.max((peak - wealth) / peak))
 
-    # Calmar: realised annualised return / MDD
+    # Calmar: realised annual return / MDD
     realised_ann = (wealth[-1] - wealth[0]) / wealth[0] / n_years
     calmar = realised_ann / mdd if mdd > 0 else 0.0
 
