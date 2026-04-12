@@ -1,0 +1,458 @@
+{
+  "ES": {
+    "commodity": "S & P 500, MINI",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "ED": {
+    "commodity": "EURODOLLARS",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,M,U,Z"
+  },
+  "ZH": {
+    "commodity": "EURODOLLARS",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,M,U,Z"
+  },
+  "ZU": {
+    "commodity": "T-NOTE, 10yr",
+    "rule_type": "MPDM",
+    "day": 24,
+    "contract_months": "H,M,U,Z"
+  },
+  "US": {
+    "commodity": "LONG TERM U.S. T-BONDS",
+    "rule_type": "MPDM",
+    "day": 24,
+    "contract_months": "H,M,U,Z"
+  },
+  "FA": {
+    "commodity": "5 YEAR U.S. T-NOTES",
+    "rule_type": "MPDM",
+    "day": 24,
+    "contract_months": "H,M,U,Z"
+  },
+  "TY": {
+    "commodity": "6.5 - 10 YR. T-NOTES",
+    "rule_type": "MPDM",
+    "day": 24,
+    "contract_months": "H,M,U,Z"
+  },
+  "TU": {
+    "commodity": "2 YEAR T-NOTES",
+    "rule_type": "MPDM",
+    "day": 24,
+    "contract_months": "H,M,U,Z"
+  },
+  "DJ": {
+    "commodity": "DOW JONES",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "ND": {
+    "commodity": "NASDAQ, MINI",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "AD": {
+    "commodity": "AUSTRALIAN $$",
+    "rule_type": "DM",
+    "day": 8,
+    "contract_months": "H,M,U,Z"
+  },
+  "CA": {
+    "commodity": "CANADIAN $ (Futures)",
+    "rule_type": "DM",
+    "day": 8,
+    "contract_months": "H,M,U,Z"
+  },
+  "FX": {
+    "commodity": "EURO",
+    "rule_type": "DM",
+    "day": 8,
+    "contract_months": "H,M,U,Z"
+  },
+  "JN": {
+    "commodity": "JAPANESE YEN",
+    "rule_type": "DM",
+    "day": 8,
+    "contract_months": "H,M,U,Z"
+  },
+  "SF": {
+    "commodity": "SWISS FRANC",
+    "rule_type": "DM",
+    "day": 8,
+    "contract_months": "H,M,U,Z"
+  },
+  "GC": {
+    "commodity": "GOLD",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "G,J,M,Q,V,Z"
+  },
+  "SI": {
+    "commodity": "SILVER",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "HG": {
+    "commodity": "COPPER",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "PL": {
+    "commodity": "PLATINUM",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "G,J,M,Q,V,Z"
+  },
+  "PA": {
+    "commodity": "PALLADIUM",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "G,J,M,Q,V,Z"
+  },
+  "CL": {
+    "commodity": "CRUDE OIL",
+    "rule_type": "MPDM",
+    "day": 11,
+    "contract_months": "F,G,H,J,K,M,N,Q,U,V,X,Z"
+  },
+  "HO": {
+    "commodity": "HEATING OIL #2",
+    "rule_type": "MPDM",
+    "day": 11,
+    "contract_months": "F,G,H,J,K,M,N,Q,U,V,X,Z"
+  },
+  "NG": {
+    "commodity": "NATURAL GAS",
+    "rule_type": "MPDM",
+    "day": 25,
+    "contract_months": "F,G,H,J,K,M,N,Q,U,V,X,Z"
+  },
+  "C_": {
+    "commodity": "CORN",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "S_": {
+    "commodity": "SOYBEANS",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "F,H,K,N,Q,Z"
+  },
+  "BO": {
+    "commodity": "SOYBEAN OIL",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "F,H,K,N,Q,Z"
+  },
+  "SM": {
+    "commodity": "SOYBEAN MEAL",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "F,H,K,N,Q,Z"
+  },
+  "W_": {
+    "commodity": "WHEAT",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "KW": {
+    "commodity": "WHEAT, KC",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "O_": {
+    "commodity": "OATS",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "LC": {
+    "commodity": "LIVE CATTLE",
+    "rule_type": "DM",
+    "day": 13,
+    "contract_months": "G,J,M,Q,U,V,X"
+  },
+  "LH": {
+    "commodity": "LEAN HOGS",
+    "rule_type": "MPDM",
+    "day": 27,
+    "contract_months": "G,J,M,Q,U,V,X"
+  },
+  "FC": {
+    "commodity": "FEEDER CATTLE",
+    "rule_type": "DM",
+    "day": 5,
+    "contract_months": "F,H,K,Q,U,V,X"
+  },
+  "CC": {
+    "commodity": "COCOA",
+    "rule_type": "MPDM",
+    "day": 9,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "CT": {
+    "commodity": "COTTON #2",
+    "rule_type": "MPDM",
+    "day": 15,
+    "contract_months": "H,K,N,Z"
+  },
+  "KC": {
+    "commodity": "COFFEE",
+    "rule_type": "MPDM",
+    "day": 11,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "SB": {
+    "commodity": "SUGAR #11",
+    "rule_type": "MPDM",
+    "day": 27,
+    "contract_months": "F,H,K,N,Q,V,X"
+  },
+  "JO": {
+    "commodity": "ORANGE JUICE",
+    "rule_type": "MPDM",
+    "day": 25,
+    "contract_months": "F,H,K,N,U,X"
+  },
+  "ZA": {
+    "commodity": "CORN (Mini)",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "ZC": {
+    "commodity": "CORN",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "ZG": {
+    "commodity": "CORN (3000 bu)",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "ZK": {
+    "commodity": "ETHANOL",
+    "rule_type": "MPDM",
+    "day": 11,
+    "contract_months": "F,G,H,J,K,M,N,Q,U,V,X,Z"
+  },
+  "ZL": {
+    "commodity": "SOYBEAN OIL (Mini)",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "F,H,K,N,Q,Z"
+  },
+  "ZO": {
+    "commodity": "OATS",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "ZP": {
+    "commodity": "SOYBEAN MEAL (Mini)",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "F,H,K,N,Q,Z"
+  },
+  "ZR": {
+    "commodity": "ROUGH RICE",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "F,H,K,N,U,X"
+  },
+  "ZT": {
+    "commodity": "2-YR T-NOTES",
+    "rule_type": "MPDM",
+    "day": 24,
+    "contract_months": "H,M,U,Z"
+  },
+  "ZW": {
+    "commodity": "WHEAT",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "H,K,N,U,Z"
+  },
+  "ZZ": {
+    "commodity": "SOYBEANS (Mini)",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "F,H,K,N,Q,Z"
+  },
+  "DA": {
+    "commodity": "MILK, CLASS III",
+    "rule_type": "MPDM",
+    "day": 11,
+    "contract_months": "F,G,H,J,K,M,N,Q,U,V,X,Z"
+  },
+  "GI": {
+    "commodity": "MILK, CLASS IV",
+    "rule_type": "MPDM",
+    "day": 11,
+    "contract_months": "F,G,H,J,K,M,N,Q,U,V,X,Z"
+  },
+  "LB": {
+    "commodity": "RANDOM LENGTH LUMBER",
+    "rule_type": "MPDM",
+    "day": 11,
+    "contract_months": "F,H,K,N,U,X"
+  },
+  "NR": {
+    "commodity": "RUBBER",
+    "rule_type": "MPDM",
+    "day": 11,
+    "contract_months": "F,G,H,J,K,M,N,Q,U,V,X,Z"
+  },
+  "EN": {
+    "commodity": "NASDAQ, MINI",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "ER": {
+    "commodity": "S&P 500 E-MINI",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "LX": {
+    "commodity": "NIKKEI 225",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "MD": {
+    "commodity": "S&P 400, MINI",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "SC": {
+    "commodity": "S&P SMALLCAP 600",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "SP": {
+    "commodity": "S&P 500 STOCK INDEX",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "XU": {
+    "commodity": "FTSE 100",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "XX": {
+    "commodity": "DOW JONES, MINI",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "YM": {
+    "commodity": "DOW JONES $5",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "DT": {
+    "commodity": "30-DAY FEDERAL FUNDS",
+    "rule_type": "DM",
+    "day": 1,
+    "contract_months": "F,G,H,J,K,M,N,Q,U,V,X,Z"
+  },
+  "FB": {
+    "commodity": "5 YEAR U.S. T-NOTES",
+    "rule_type": "MPDM",
+    "day": 24,
+    "contract_months": "H,M,U,Z"
+  },
+  "UB": {
+    "commodity": "ULTRA T-BOND",
+    "rule_type": "MPDM",
+    "day": 24,
+    "contract_months": "H,M,U,Z"
+  },
+  "AN": {
+    "commodity": "AUSTRALIAN $$",
+    "rule_type": "DM",
+    "day": 8,
+    "contract_months": "H,M,U,Z"
+  },
+  "BN": {
+    "commodity": "BRAZILIAN REAL",
+    "rule_type": "DM",
+    "day": 1,
+    "contract_months": "F,H,K,N,U,X"
+  },
+  "CN": {
+    "commodity": "CANADIAN $$",
+    "rule_type": "DM",
+    "day": 8,
+    "contract_months": "H,M,U,Z"
+  },
+  "DX": {
+    "commodity": "U.S. DOLLAR INDEX",
+    "rule_type": "DM",
+    "day": 8,
+    "contract_months": "H,M,U,Z"
+  },
+  "FN": {
+    "commodity": "EURO FX",
+    "rule_type": "DM",
+    "day": 8,
+    "contract_months": "H,M,U,Z"
+  },
+  "MP": {
+    "commodity": "MEXICAN PESO",
+    "rule_type": "DM",
+    "day": 1,
+    "contract_months": "F,H,K,N,U,X"
+  },
+  "NK": {
+    "commodity": "NIKKEI 225 (Futures)",
+    "rule_type": "THU_2ND_FRI",
+    "day": null,
+    "contract_months": "H,M,U,Z"
+  },
+  "SN": {
+    "commodity": "SWISS FRANC",
+    "rule_type": "DM",
+    "day": 8,
+    "contract_months": "H,M,U,Z"
+  },
+  "ZF": {
+    "commodity": "5-YR T-NOTES",
+    "rule_type": "MPDM",
+    "day": 24,
+    "contract_months": "H,M,U,Z"
+  },
+  "ZI": {
+    "commodity": "SOYBEAN OIL (Electronic)",
+    "rule_type": "MPDM",
+    "day": 22,
+    "contract_months": "F,H,K,N,Q,Z"
+  },
+  "ZN": {
+    "commodity": "10-YEAR T-NOTE",
+    "rule_type": "MPDM",
+    "day": 24,
+    "contract_months": "H,M,U,Z"
+  }
+}
