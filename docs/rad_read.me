@@ -67,48 +67,12 @@ ratio_after = ratio_before × (c / C)
 
 ### 2.1 算法设计
 
-```python
-def generate_rad_v2(non_file, output_file, rule_type, day, contract_months):
-    """
-    以测试期第一天为基准，从前往后应用 ratio 调整
-    
-    参数:
-    - rule_type: THUR_PRIOR_2ND_FRI | DM | MPDM
-    - day: 日期数字 (DM/MPDM 用)
-    - contract_months: 合约月份字符串如 "H,M,U,Z"
-    """
-    # 1. 读取 NON 数据
-    df = pd.read_csv(non_file, names=['Date', 'O', 'H', 'L', 'C', 'V', 'OI'])
-    
-    # 2. 生成理论 roll dates
-    roll_dates = get_roll_dates(rule_type, day, contract_months, start_year, end_year)
-    
-    # 3. 匹配到实际交易日 (±5 天内)
-    actual_rolls = match_to_trading_days(roll_dates, df['Date'])
-    
-    # 4. 找到测试期开始和第一个 roll
-    test_start_idx = df[df['Date'] >= TEST_START].index[0]
-    rolls_after_test = [r for r in actual_rolls if r >= test_start_idx]
-    
-    # 5. 初始化 ratio = 1 @ 测试期第一天
-    df['ratio'] = 1.0
-    df.loc[:test_start_idx, 'ratio'] = 1.0
-    
-    # 6. 从前往后累积
-    current_ratio = 1.0
-    for i, roll_idx in enumerate(rolls_after_test):
-        C = df.iloc[roll_idx]['Close']
-        c = df.iloc[roll_idx - 1]['Close']
-        if c > 0 and C > 0:
-            ratio_change = c / C
-            current_ratio *= ratio_change
-            
-            next_roll = rolls_after_test[i + 1] if i + 1 < len(rolls_after_test) else len(df)
-            df.loc[roll_idx:next_roll - 1, 'ratio'] = current_ratio
-    
-    # 7. 生成 RAD
-    df['RAD_Close'] = df['Close'] * df['ratio']
-```
+1. 读取 NON 数据
+2. 根据 roll rule 生成理论 roll dates
+3. 匹配到实际交易日 (±5 天内)
+4. 以测试期第一天为基准 (ratio=1.0)
+5. 从前往后累积 ratio 变化
+6. 生成 RAD 价格序列
 
 ### 2.2 关键设计决策
 
@@ -182,104 +146,19 @@ def generate_rad_v2(non_file, output_file, rule_type, day, contract_months):
 
 ---
 
-## 四、检测代码
+## 四、运行测试
 
-### 4.1 Roll Date 计算
-
-```python
-import calendar
-import pandas as pd
-
-def get_nth_weekday(year, month, n, weekday):
-    """获取某月第 n 个星期几"""
-    first_day = calendar.weekday(year, month, 1)
-    if first_day <= weekday:
-        first = weekday - first_day + 1
-    else:
-        first = 7 - first_day + weekday + 1
-    return first + (n - 1) * 7
-
-def get_2nd_friday(year, month):
-    """获取某月第 2 个星期五"""
-    return get_nth_weekday(year, month, 2, 4)  # Friday = 4
-
-def get_roll_dates(rule_type, day, contract_months_str, start_year, end_year):
-    """生成理论 roll dates"""
-    months_map = {'F': 1, 'G': 2, 'H': 3, 'J': 4, 'K': 5, 'M': 6,
-                  'N': 7, 'Q': 8, 'U': 9, 'V': 10, 'X': 11, 'Z': 12}
-    
-    delivery_months = [months_map[m.strip()] for m in contract_months_str.split(',') 
-                       if m.strip() in months_map]
-    
-    roll_dates = []
-    for year in range(start_year, end_year + 1):
-        for dm in delivery_months:
-            if rule_type == 'THUR_PRIOR_2ND_FRI':
-                # Thur prior 2nd Fri of DM
-                second_friday = get_2nd_friday(year, dm)
-                roll_day = second_friday - 1  # 前一天是星期四
-                try:
-                    rd = pd.Timestamp(year=year, month=dm, day=roll_day)
-                    roll_dates.append(rd)
-                except:
-                    pass
-            elif rule_type == 'DM':
-                try:
-                    rd = pd.Timestamp(year=year, month=dm, day=day)
-                    roll_dates.append(rd)
-                except:
-                    pass
-            elif rule_type == 'MPDM':
-                pm_year = year - 1 if dm == 1 else year
-                pm_month = 12 if dm == 1 else dm - 1
-                try:
-                    rd = pd.Timestamp(year=pm_year, month=pm_month, day=day)
-                    roll_dates.append(rd)
-                except:
-                    pass
-    
-    return sorted(roll_dates)
+```bash
+cd /home/congge2026/.openclaw/workspace/IEOR4733_Project
+python tests/test_rad_v2.py
 ```
 
-### 4.2 验证函数
+**测试脚本**: `tests/test_rad_v2.py`
 
-```python
-def validate_rad_v2(symbol, data_dir, TEST_START, TEST_END):
-    """验证 RAD_v2 与 CLC RAD 的一致性"""
-    rad_file = data_dir / f'{symbol}_RAD.CSV'
-    v2_file = data_dir / f'{symbol}_RAD_v2.CSV'
-    non_file = data_dir / f'{symbol}_NON.CSV'
-    
-    rad = pd.read_csv(rad_file, names=['Date', 'O', 'H', 'L', 'C', 'V', 'OI'])
-    v2 = pd.read_csv(v2_file, names=['Date', 'O', 'H', 'L', 'C', 'V', 'OI'])
-    non = pd.read_csv(non_file, names=['Date', 'O', 'H', 'L', 'C', 'V', 'OI'])
-    
-    rad['Date'] = pd.to_datetime(rad['Date'])
-    v2['Date'] = pd.to_datetime(v2['Date'])
-    non['Date'] = pd.to_datetime(non['Date'])
-    
-    # 过滤测试期
-    rad_test = rad[(rad['Date'] >= TEST_START) & (rad['Date'] <= TEST_END)]
-    v2_test = v2[(v2['Date'] >= TEST_START) & (v2['Date'] <= TEST_END)]
-    non_test = non[(non['Date'] >= TEST_START) & (non['Date'] <= TEST_END)]
-    
-    min_len = min(len(rad_test), len(v2_test), len(non_test))
-    rad_test = rad_test.iloc[:min_len].reset_index(drop=True)
-    v2_test = v2_test.iloc[:min_len].reset_index(drop=True)
-    non_test = non_test.iloc[:min_len].reset_index(drop=True)
-    
-    # 计算指标
-    corr_v2_rad = v2_test['C'].corr(rad_test['C'])
-    first_diff = abs(v2_test['C'].iloc[0] - non_test['C'].iloc[0]) / non_test['C'].iloc[0] * 100
-    last_diff = abs(v2_test['C'].iloc[-1] - rad_test['C'].iloc[-1]) / rad_test['C'].iloc[-1] * 100
-    
-    return {
-        'Symbol': symbol,
-        'Corr(v2,RAD)': corr_v2_rad,
-        'First_Diff%': first_diff,
-        'Last_Diff%': last_diff
-    }
-```
+**输出文件**:
+- `data/CLC/*_RAD_v2.CSV` - 生成的 RAD_v2 文件
+- `data/CLC/rad_v2_corrected_summary.csv` - 生成结果汇总
+- `data/CLC/rad_v2_corrected_validation.csv` - 验证结果
 
 ---
 
@@ -310,11 +189,11 @@ def validate_rad_v2(symbol, data_dir, TEST_START, TEST_END):
 
 | 文件 | 描述 |
 |------|------|
-| `config/roll_rules_corrected.json` | 90 个合约的 roll rules 配置 (修正版) |
+| `config/roll_rules_corrected.json` | 90 个合约的 roll rules 配置 |
+| `tests/test_rad_v2.py` | 生成与验证测试脚本 |
 | `data/CLC/*_RAD_v2.CSV` | 生成的 RAD_v2 文件 (84 个) |
 | `data/CLC/rad_v2_corrected_summary.csv` | 生成结果汇总 |
 | `data/CLC/rad_v2_corrected_validation.csv` | 验证结果 |
-| `scripts/generate_rad_v2.py` | RAD_v2 生成脚本 |
 
 ---
 
@@ -323,8 +202,8 @@ def validate_rad_v2(symbol, data_dir, TEST_START, TEST_END):
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | v1.0 | 2026-04-12 | 初始版本，roll rules 有误 |
-| v2.0 | 2026-04-12 | 修正 roll rules 按 APPENDIX B-1，18 类规则覆盖 90 合约 |
+| v2.0 | 2026-04-12 | 修正 roll rules 按 APPENDIX B-1，18 类规则覆盖 90 合约，代码移至 tests/ |
 
 ---
 
-**最后更新**: 2026-04-12 13:15 EDT
+**最后更新**: 2026-04-12 13:20 EDT
