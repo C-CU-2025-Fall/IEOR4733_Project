@@ -13,8 +13,12 @@ Usage:
 import pandas as pd
 from pathlib import Path
 
-TEMP_DIR = Path('/home/congge2026/.openclaw/workspace/IEOR4733_Project/config/TEMP')
-DATA_DIR = Path('/home/congge2026/.openclaw/workspace/IEOR4733_Project/data/CLC')
+# 项目根目录（相对于当前脚本）
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CONFIG_DIR = PROJECT_ROOT / 'config'
+DATA_DIR = PROJECT_ROOT / 'data' / 'CLC'
+TEMP_DIR = CONFIG_DIR / 'TEMP'
+OUTPUT_DIR = DATA_DIR
 TEST_START = pd.Timestamp('2011-01-01')
 TEST_END = pd.Timestamp('2019-12-31')
 
@@ -168,8 +172,8 @@ def main():
     
     # 保存结果
     results_df = pd.DataFrame(results)
-    results_df.to_csv(DATA_DIR / 'rad_v2_asc_summary.csv', index=False)
-    print(f"\n已保存到：{DATA_DIR / 'rad_v2_asc_summary.csv'}")
+    results_df.to_csv(OUTPUT_DIR / 'rad_v2_asc_summary.csv', index=False)
+    print(f"\n已保存到：{OUTPUT_DIR / 'rad_v2_asc_summary.csv'}")
     
     # 统计
     ok_df = results_df[results_df['status'] == 'OK']

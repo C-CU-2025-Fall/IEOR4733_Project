@@ -9,8 +9,11 @@ import pandas as pd
 import calendar
 from pathlib import Path
 
-DATA_DIR = Path('/home/congge2026/.openclaw/workspace/IEOR4733_Project/data/CLC')
-CONFIG_FILE = Path('/home/congge2026/.openclaw/workspace/IEOR4733_Project/config/roll_rules_corrected.json')
+# 项目根目录（相对于当前脚本）
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = PROJECT_ROOT / 'data' / 'CLC'
+CONFIG_DIR = PROJECT_ROOT / 'config'
+CONFIG_FILE = CONFIG_DIR / 'roll_rules_corrected.json'
 
 import json
 with open(CONFIG_FILE) as f:
