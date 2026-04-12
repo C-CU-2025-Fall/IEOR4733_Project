@@ -6,16 +6,50 @@ import numpy as np
 import pandas as pd
 
 
+<<<<<<< Updated upstream
+FIXED_TICKERS = {
+    # Commodity (25)
+    'CC', 'DA', 'GI', 'JO', 'KC', 'KW', 'LB', 'NR', 'SB',
+    'ZA', 'ZC', 'ZF', 'ZG', 'ZH', 'ZI', 'ZK', 'ZL', 'ZN', 'ZU',
+    'ZO', 'ZP', 'ZR', 'ZT', 'ZW', 'ZZ',
+    # Equity Index (11)
+    'CA', 'EN', 'ER', 'ES', 'LX', 'MD', 'SC', 'SP', 'XU', 'XX', 'YM',
+    # Fixed Income (5)
+    'DT', 'FB', 'TY', 'UB', 'US',
+    # Forex (9)
+    'AN', 'BN', 'CN', 'DX', 'FN', 'JN', 'MP', 'NK', 'SN',
+}
+
+
 def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01'):
+=======
+def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01', dataset='RAD'):
+>>>>>>> Stashed changes
     """
     Load CLC ratio-adjusted data from start_date onwards.
     Default 2009-01-01 gives ~504 trading days warmup before 2011 test,
     enough for MACD std_window=252 + longest EMA span=96.
 
+    dataset:
+      - 'RAD': ratio-adjusted continuous contracts
+      - 'NON': non-adjusted continuous contracts
+      - 'REV': reverse-adjusted continuous contracts
+
     CSV format (no header): Date,Open,High,Low,Close,Volume,OpenInterest
     Date format: MM/DD/YYYY
     """
-    fpath = os.path.join(data_dir, f'{ticker}_RAD.CSV')
+<<<<<<< Updated upstream
+    preferred_name = f'{ticker}_FIXED.CSV' if ticker in FIXED_TICKERS else f'{ticker}_RAD.CSV'
+    fpath = os.path.join(data_dir, preferred_name)
+    if not os.path.exists(fpath) and ticker in FIXED_TICKERS:
+        fpath = os.path.join(data_dir, f'{ticker}_RAD.CSV')
+=======
+    dataset = dataset.upper()
+    if dataset not in {'RAD', 'NON', 'REV'}:
+        raise ValueError(f"Unsupported dataset '{dataset}'. Use one of: RAD, NON, REV.")
+
+    fpath = os.path.join(data_dir, f'{ticker}_{dataset}.CSV')
+>>>>>>> Stashed changes
     if not os.path.exists(fpath):
         return None
     df = pd.read_csv(fpath, header=None,

@@ -5,12 +5,18 @@ baseline_run.py — Table 2 & Table 3 baseline reproduction (single entry point)
 Paper: Zhang, Zohren, Roberts (2019) "Deep Reinforcement Learning for Trading"
 
 Usage:
-    python baseline_run.py                  # Table 3 (all asset classes)
-    python baseline_run.py --table 2        # Table 2 (with portfolio vol scaling)
-    python baseline_run.py --table both     # Both tables
-    python baseline_run.py --asset Forex    # Single asset class
-    python baseline_run.py --sigma 0.064    # Custom σ_tgt
+    python baseline_run.py                         # Table 3 (all asset classes)
+    python baseline_run.py --table 2               # Table 2 (with portfolio vol scaling)
+    python baseline_run.py --table both            # Both tables
+    python baseline_run.py --asset Forex           # Single asset class
+    python baseline_run.py --dataset NON           # Use non-adjusted continuous data
+    python baseline_run.py --sigma 0.064           # Custom σ_tgt
     python baseline_run.py --test-start 2015-01-01 --test-end 2019-12-31  # Custom period
+
+Data repair (run before backtest if FIXED.CSV files are missing or threshold changes):
+    python fix_contracts.py                  # Rebuild FIXED.CSV with default 10% threshold
+    python fix_contracts.py --threshold 0.05 # Rebuild with tighter 5% threshold
+    python fix_contracts.py --threshold 0.15 # Rebuild with looser 15% threshold
 """
 import argparse
 import numpy as np
@@ -31,7 +37,8 @@ W0 = 1.0                    # Initial wealth per contract
 
 
 # ─── Data Loading ─────────────────────────────────────────────────
-def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31'):
+def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31',
+                   dataset='RAD'):
     """Load and prepare all contracts for an asset class.
 
     Returns list of dicts with:
@@ -44,7 +51,7 @@ def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31'):
     tickers = ASSET_CLASSES.get(ac_name, [])
     raw = []
     for tk in tickers:
-        df = load_clc_full(tk)
+        df = load_clc_full(tk, data_dir='data/CLCDATA', dataset=dataset)
         if df is None:
             continue
         prices = df['Close'].values.astype(float)
@@ -180,6 +187,8 @@ def main():
                         help=f'σ_tgt per contract (default: {DEFAULT_SIGMA_TGT})')
     parser.add_argument('--test-start', default='2011-01-01')
     parser.add_argument('--test-end', default='2019-12-31')
+    parser.add_argument('--dataset', choices=['RAD', 'NON', 'REV'], default='RAD',
+                        help='CLC continuous dataset variant (default: RAD)')
     parser.add_argument('--port-vol-target', type=float, default=0.97,
                         help='Portfolio vol target for Table 2 (default: 0.97)')
     args = parser.parse_args()
@@ -198,7 +207,7 @@ def main():
 
     for table_label, paper_table, port_vol in tables:
         for ac in asset_classes:
-            raw = load_contracts(ac, args.test_start, args.test_end)
+            raw = load_contracts(ac, args.test_start, args.test_end, args.dataset)
             n10, n15, tot = run_table(raw, ac, args.sigma, paper_table,
                                       table_label, port_vol)
             grand_n10 += n10

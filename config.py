@@ -56,26 +56,37 @@ TEST_END   = '2019-12-31'
 #   - Grade D: 3 contracts (6%) — ZH, ZI, ZN (severe roll issues)
 #   - Grade F: 1 contract (2%) — ZU (no valid test period data)
 #
-# Excluded contracts (documented in data_quality_report_50contracts.md):
-#   ZH (Heating Oil Electronic): 0 rows in test period, 0.8% roll issues
-#   ZI (Soybean Oil Electronic): 4676% max gap, 0.58% roll issues
-#   ZN (10-Year T-Note): 10451x price ratio, 1.01% roll issues
-#   ZU (Crude Oil Electronic): 0 rows in test period
-#   US (T-Bonds Composite): 0 rows in test period (data exists but outside test period)
+# Previously excluded contracts — now reinstated via fix_contracts.py:
+#   ZH (Heating Oil Electronic): repaired from _NON.CSV, splice threshold 10%
+#   ZI (Soybean Oil Electronic): repaired from _NON.CSV, splice threshold 10%
+#   ZN (Natural Gas Electronic): repaired from _NON.CSV, splice threshold 10%
+#   ZU (Crude Oil Electronic):   repaired from _NON.CSV, splice threshold 10%
+#   US (T-Bonds Composite):      repaired from _NON.CSV, splice threshold 10%
 #
-# This gives 45/50 contracts usable for replication.
+# Run `python fix_contracts.py --threshold 0.10` to regenerate *_FIXED.CSV files.
+# This gives 50/50 contracts used for replication.
 # =============================================================================
 ASSET_CLASSES = {
     'Commodity': [
+<<<<<<< Updated upstream
+        'CC', 'DA', 'GI', 'JO', 'KC', 'KW', 'LB', 'NR', 'SB',        # Grade B/A
+        'ZA', 'ZC', 'ZF', 'ZG', 'ZH', 'ZI', 'ZK', 'ZL', 'ZN', 'ZU',  # Grade B/A + FIXED
+        'ZO', 'ZP', 'ZR', 'ZT', 'ZW', 'ZZ',                           # Grade B/A
+=======
         'CC', 'DA', 'GI', 'JO', 'KC', 'KW', 'LB', 'NR', 'SB',  # Grade B/A
-        'ZA', 'ZC', 'ZF', 'ZG', 'ZK', 'ZL',  # Grade B/A (exclude ZH, ZI, ZU)
+        'ZA', 'ZC', 'ZF', 'ZG', 'ZH', 'ZI', 'ZK', 'ZL', 'ZN'  # Grade B/A (exclude ZH, ZI, ZU)
         'ZO', 'ZP', 'ZR', 'ZT', 'ZW', 'ZZ',  # Grade B/A
+>>>>>>> Stashed changes
     ],
     'Equity Index': [
         'CA', 'EN', 'ER', 'ES', 'LX', 'MD', 'SC', 'SP', 'XU', 'XX', 'YM',  # 11 contracts as per paper
     ],
     'Fixed Income': [
-        'DT', 'FB', 'TY', 'UB',  # Grade A (exclude US)
+<<<<<<< Updated upstream
+        'DT', 'FB', 'TY', 'UB', 'US',  # Grade A + FIXED
+=======
+        'DT', 'FB', 'TY', 'UB', 'US', # Grade A (exclude US)
+>>>>>>> Stashed changes
     ],
     'Forex': [
         'AN', 'BN', 'CN', 'DX', 'FN', 'JN', 'MP', 'NK', 'SN',  # All Grade A
@@ -83,19 +94,15 @@ ASSET_CLASSES = {
 }
 
 EXCLUDED_CONTRACTS = {
-    'ZH': 'Heating Oil Electronic — 0 rows in test period, 0.8% roll issues (Grade D)',
-    'ZI': 'Soybean Oil Electronic — 4676% max gap, 0.58% roll issues (Grade D)',
-    'ZN': '10-Year T-Note — 10451x price ratio, 1.01% roll issues (Grade D)',
-    'ZU': 'Crude Oil Electronic — 0 rows in test period (Grade F)',
-    'US': 'T-Bonds Composite — 0 rows in test period (Grade C)',
-    # LX anomaly is in 2026, outside test period (2011-2019) — included in Equity Index
+    # LX anomaly is in 2026, outside test period (2011-2019) — still included in Equity Index
+    # ZH, ZI, ZN, ZU, US: previously excluded; reinstated via fix_contracts.py (FIXED.CSV)
 }
 
 # Quality summary
 DATA_QUALITY_SUMMARY = {
     'total_paper_contracts': 50,
-    'usable_contracts': 45,
-    'excluded_contracts': 5,
+    'usable_contracts': 50,
+    'excluded_contracts': 0,
     'grade_A': 28,
     'grade_B': 17,
     'grade_C': 1,
