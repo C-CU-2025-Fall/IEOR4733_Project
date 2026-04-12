@@ -15,6 +15,7 @@ DATA_DIR = PROJECT_ROOT / 'data' / 'CLC'
 TEMP_DIR = CONFIG_DIR / 'TEMP'
 OUTPUT_DIR = DATA_DIR
 
+# 测试期（用于验证对比，不用于生成）
 TEST_START = pd.Timestamp('2011-01-01')
 TEST_END = pd.Timestamp('2019-12-31')
 
