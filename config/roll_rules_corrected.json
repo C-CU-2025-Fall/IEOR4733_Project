@@ -1,0 +1,74 @@
+{
+  "THUR_PRIOR_2ND_FRI_OF_DM": {
+    "description": "交割月第 2 个星期五之前的星期四",
+    "symbols": ["AP", "CA", "DJ", "EN", "ER", "ES", "MD", "ND", "RL", "SC", "SP", "AX", "XU", "XX", "YM", "ZD"]
+  },
+  "DM_1": {
+    "description": "交割月第 1 天",
+    "symbols": ["LB"]
+  },
+  "DM_3": {
+    "description": "交割月第 3 天",
+    "symbols": ["NK", "SS"]
+  },
+  "DM_5": {
+    "description": "交割月第 5 天",
+    "symbols": ["FC", "ZF"]
+  },
+  "DM_6": {
+    "description": "交割月第 6 天",
+    "symbols": ["CR"]
+  },
+  "DM_8": {
+    "description": "交割月第 8 天",
+    "symbols": ["AD", "AN", "BN", "CN", "DX", "FN", "FX", "JN", "JY", "MP", "SF", "SN"]
+  },
+  "DM_9": {
+    "description": "交割月第 9 天",
+    "symbols": ["GI"]
+  },
+  "DM_13": {
+    "description": "交割月第 13 天",
+    "symbols": ["LX"]
+  },
+  "DM_22": {
+    "description": "交割月第 22 天",
+    "symbols": ["FF"]
+  },
+  "MPDM_9": {
+    "description": "交割月前一个月第 9 天",
+    "symbols": ["CC"]
+  },
+  "MPDM_11": {
+    "description": "交割月前一个月第 11 天",
+    "symbols": ["BC", "BG", "CL", "HO", "HU", "KC", "RB"]
+  },
+  "MPDM_13": {
+    "description": "交割月前一个月第 13 天",
+    "symbols": ["O_", "ZO"]
+  },
+  "MPDM_15": {
+    "description": "交割月前一个月第 15 天",
+    "symbols": ["CT"]
+  },
+  "MPDM_18": {
+    "description": "交割月前一个月第 18 天",
+    "symbols": ["NG"]
+  },
+  "MPDM_22": {
+    "description": "交割月前一个月第 22 天",
+    "symbols": ["BO", "C_", "ED", "EC", "GC", "HG", "KW", "MW", "NR", "PA", "PL", "S_", "SB", "SI", "SM", "W_", "ZC", "ZG", "ZI", "ZL", "ZP", "ZA"]
+  },
+  "MPDM_24": {
+    "description": "交割月前一个月第 24 天",
+    "symbols": ["CB", "DT", "FA", "FB", "GS", "TA", "TD", "TU", "TY", "UA", "UB", "US", "UZ"]
+  },
+  "MPDM_25": {
+    "description": "交割月前一个月第 25 天",
+    "symbols": ["JO"]
+  },
+  "MPDM_27": {
+    "description": "交割月前一个月第 27 天",
+    "symbols": ["DA", "LC", "LH", "ZT", "ZZ"]
+  }
+}
