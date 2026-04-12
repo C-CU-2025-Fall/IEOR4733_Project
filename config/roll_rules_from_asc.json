@@ -1,0 +1,118 @@
+{
+  "description": "Roll rules 基于 ASC 文件实际换月日期统计 (2026-04-12)",
+  "note": "直接从 CLC ASC 原始文件提取的换月日期模式，而非 APPENDIX B-1 的文本规则",
+  
+  "DM_2_WED": {
+    "description": "交割月第 2 个星期三 (2nd Wednesday of DM)",
+    "symbols": ["CA", "DJ", "EN", "ER", "ES", "MD", "ND", "RL", "SC", "SP", "AX", "XU", "XX", "YM", "ZD"],
+    "contract_months": "H,M,U,Z"
+  },
+  
+  "DM_7": {
+    "description": "交割月第 7 天",
+    "symbols": ["AN", "BN", "CN", "DX", "FN", "FX", "JN", "MP", "SF", "SN"],
+    "contract_months": "F,H,K,N,Q,U,X,Z"
+  },
+  
+  "DM_8": {
+    "description": "交割月第 8 天",
+    "symbols": ["GI"],
+    "contract_months": "F,G,H,J,K,M,N,Q,U,V,X,Z"
+  },
+  
+  "DM_10": {
+    "description": "交割月第 10 天",
+    "symbols": ["CL", "HO", "HS", "KC"],
+    "contract_months": "ALL"
+  },
+  
+  "DM_11": {
+    "description": "交割月第 11 天",
+    "symbols": ["CR"],
+    "contract_months": "F,G,J,M,V,Z"
+  },
+  
+  "DM_12": {
+    "description": "交割月第 12 天",
+    "symbols": ["LX"],
+    "contract_months": "F,G,H,J,K,M,N,Q,U,V,X,Z"
+  },
+  
+  "DM_14": {
+    "description": "交割月第 14 天",
+    "symbols": ["CT"],
+    "contract_months": "H,K,N,U,Z"
+  },
+  
+  "DM_21": {
+    "description": "交割月第 21 天",
+    "symbols": ["LB"],
+    "contract_months": "ALL"
+  },
+  
+  "DM_31": {
+    "description": "交割月第 31 天",
+    "symbols": ["BC", "BG"],
+    "contract_months": "ALL"
+  },
+  
+  "MPDM_9": {
+    "description": "交割月前一个月第 9 天",
+    "symbols": ["CC"],
+    "contract_months": "H,K,N,U,Z"
+  },
+  
+  "MPDM_11": {
+    "description": "交割月前一个月第 11 天",
+    "symbols": ["NK", "SS"],
+    "contract_months": "F,H,K,M,N,Q,U,X,Z"
+  },
+  
+  "MPDM_18": {
+    "description": "交割月前一个月第 18 天",
+    "symbols": ["NG"],
+    "contract_months": "F,G,H,J,K,M,N,Q,U,V,X,Z"
+  },
+  
+  "MPDM_21": {
+    "description": "交割月前一个月第 21 天",
+    "symbols": ["BO", "C_", "EC", "ED", "GC", "HG", "KW", "MW", "NR", "O_", "PA", "PL", "SB", "SI", "SM", "S_", "W_", "ZC", "ZG", "ZI", "ZL", "ZP", "ZA"],
+    "contract_months": "H,K,N,U,Z"
+  },
+  
+  "MPDM_22": {
+    "description": "交割月前一个月第 22 天",
+    "symbols": ["CB", "DT", "FA", "FB", "GS"],
+    "contract_months": "H,M,U,Z"
+  },
+  
+  "MPDM_23": {
+    "description": "交割月前一个月第 23 天",
+    "symbols": ["JO"],
+    "contract_months": "H,K,N,U,Z"
+  },
+  
+  "MPDM_24": {
+    "description": "交割月前一个月第 24 天",
+    "symbols": ["TU"],
+    "contract_months": "H,M,U,Z"
+  },
+  
+  "MPDM_25": {
+    "description": "交割月前一个月第 25 天",
+    "symbols": ["DA", "FC", "LC", "LH", "ZF", "ZT", "ZZ"],
+    "contract_months": "H,K,N,U,Z"
+  },
+  
+  "MPDM_26": {
+    "description": "交割月前一个月第 26 天",
+    "symbols": ["US", "TY", "UA"],
+    "contract_months": "H,M,U,Z"
+  },
+  
+  "MPDM_27": {
+    "description": "交割月前一个月第 27 天",
+    "symbols": ["ZB", "ZH", "ZU"],
+    "contract_months": "H,M,U,Z"
+  }
+}
