@@ -8,21 +8,35 @@
 import pandas as pd
 from pathlib import Path
 
-TEMP_DIR = Path('config/TEMP')
-DATA_DIR = Path('data/CLC')
+# 项目根目录（相对于当前脚本）
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CONFIG_DIR = PROJECT_ROOT / 'config'
+DATA_DIR = PROJECT_ROOT / 'data' / 'CLC'
+TEMP_DIR = CONFIG_DIR / 'TEMP'
+OUTPUT_DIR = DATA_DIR
+
 TEST_START = pd.Timestamp('2011-01-01')
 TEST_END = pd.Timestamp('2019-12-31')
 
 
-def generate_rad_v2_fixed(symbol):
-    """生成 RAD_v2_fixed"""
+def generate_rad_v2_fixed(symbol: str) -> dict:
+    """
+    生成单个合约的 RAD_v2_fixed 文件
+    
+    Args:
+        symbol: 合约代码 (如 'ES', 'DJ')
+    
+    Returns:
+        生成结果字典，包含 status, corr, scale 等信息
+    """
     asc_file = TEMP_DIR / f'{symbol}_CLC.ASC'
     non_file = DATA_DIR / f'{symbol}_NON.CSV'
     rollover_file = DATA_DIR / f'{symbol}_rollovers.csv'
-    output_file = DATA_DIR / f'{symbol}_RAD_v2_fixed.CSV'
+    output_file = OUTPUT_DIR / f'{symbol}_RAD_v2_fixed.CSV'
     
     if not all(f.exists() for f in [asc_file, non_file, rollover_file]):
-        return {'status': 'MISSING_FILES'}
+        missing = [f for f in [asc_file, non_file, rollover_file] if not f.exists()]
+        return {'status': f'MISSING_FILES: {", ".join(f.name for f in missing)}'}
     
     # 读取换月数据
     rollover_df = pd.read_csv(rollover_file)
@@ -134,8 +148,8 @@ def main():
     
     # 保存
     results_df = pd.DataFrame(results)
-    results_df.to_csv(DATA_DIR / 'rad_v2_fixed_summary.csv', index=False)
-    print(f"\n已保存到：{DATA_DIR / 'rad_v2_fixed_summary.csv'}")
+    results_df.to_csv(OUTPUT_DIR / 'rad_v2_fixed_summary.csv', index=False)
+    print(f"\n已保存到：{OUTPUT_DIR / 'rad_v2_fixed_summary.csv'}")
     
     # 统计
     ok_df = results_df[results_df['status'] == 'OK']
