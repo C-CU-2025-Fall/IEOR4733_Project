@@ -14,8 +14,12 @@ Usage:
 import pandas as pd
 from pathlib import Path
 
-TEMP_DIR = Path('/home/congge2026/.openclaw/workspace/IEOR4733_Project/config/TEMP')
-OUTPUT_DIR = Path('/home/congge2026/.openclaw/workspace/IEOR4733_Project/data/CLC')
+# 项目根目录（相对于当前脚本）
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CONFIG_DIR = PROJECT_ROOT / 'config'
+DATA_DIR = PROJECT_ROOT / 'data' / 'CLC'
+TEMP_DIR = CONFIG_DIR / 'TEMP'
+OUTPUT_DIR = DATA_DIR
 
 
 def parse_asc_file(asc_file):
