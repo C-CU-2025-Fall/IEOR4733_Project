@@ -7,7 +7,8 @@ Usage:
     python tests/test_rad_v2.py
     
 配置:
-    config/roll_rules_corrected.json - 90 个合约的 roll rules
+    config/roll_rules_corrected.json - 合约的 roll rules
+    config/contract_months.json - 合约的交割月份映射
 """
 
 import pandas as pd
@@ -16,8 +17,10 @@ import json
 from pathlib import Path
 
 # 配置
-DATA_DIR = Path('/home/congge2026/.openclaw/workspace/IEOR4733_Project/data/CLC')
-CONFIG_FILE = Path('/home/congge2026/.openclaw/workspace/IEOR4733_Project/config/roll_rules_corrected.json')
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = _PROJECT_ROOT / 'data' / 'CLC'
+CONFIG_FILE = _PROJECT_ROOT / 'config' / 'roll_rules_corrected.json'
+CONTRACT_MONTHS_FILE = _PROJECT_ROOT / 'config' / 'contract_months.json'
 TEST_START = pd.Timestamp('2011-01-01')
 TEST_END = pd.Timestamp('2019-12-31')
 
@@ -115,7 +118,13 @@ def match_to_trading_days(roll_dates, trading_days, max_diff_days=5):
 
 def generate_rad_v2(non_file, output_file, rule_type, day, contract_months):
     """
-    生成 RAD_v2，以测试期第一天为基准
+    生成 RAD_v2
+    
+    方法:
+        - ratio 从数据第一天 = 1.0 开始
+        - 在每个 roll date, ratio *= (prev_Close / current_Close)
+        - RAD = NON * ratio
+        - 自然结果: 第一个 roll 之前 RAD = NON (ratio=1.0)
     
     参数:
         non_file: NON 数据文件路径
@@ -132,34 +141,34 @@ def generate_rad_v2(non_file, output_file, rule_type, day, contract_months):
     df['Date'] = pd.to_datetime(df['Date'])
     df = df.sort_values('Date').reset_index(drop=True)
     
-    test_start_idx = df[df['Date'] >= TEST_START].index[0]
-    
     start_year = df['Date'].dt.year.min()
     end_year = df['Date'].dt.year.max()
     
     roll_dates = get_roll_dates(rule_type, day, contract_months, start_year, end_year)
     actual_rolls = match_to_trading_days(roll_dates, df['Date'])
-    rolls_after_test_start = [r for r in actual_rolls if r >= test_start_idx]
     
-    if len(rolls_after_test_start) == 0:
-        return 0, len(df), "NO_ROLLS_IN_TEST"
+    if len(actual_rolls) == 0:
+        return 0, len(df), "NO_ROLLS"
     
-    # 初始化 ratio
+    # 初始化 ratio = 1.0 for all rows
     df['ratio'] = 1.0
-    df.loc[:test_start_idx, 'ratio'] = 1.0
     
-    # 从前往后累积
+    # 从第一个 roll 开始，逐个应用 ratio 变化
+    # 在 roll date: ratio *= (prev_day_Close / roll_day_Close)
+    # 即 roll day 及之后的 ratio 是累积后的值
     current_ratio = 1.0
-    for i, roll_idx in enumerate(rolls_after_test_start):
+    for i, roll_idx in enumerate(actual_rolls):
         if roll_idx > 0 and roll_idx < len(df):
-            C = df.iloc[roll_idx]['Close']
+            # c = 前一天 close, C = roll day close
             c = df.iloc[roll_idx - 1]['Close']
+            C = df.iloc[roll_idx]['Close']
             
             if c > 0 and C > 0:
                 ratio_change = c / C
                 current_ratio *= ratio_change
                 
-                next_roll = rolls_after_test_start[i + 1] if i + 1 < len(rolls_after_test_start) else len(df)
+                # 这个 ratio 从 roll_idx 到下一个 roll 之前
+                next_roll = actual_rolls[i + 1] if i + 1 < len(actual_rolls) else len(df)
                 df.loc[roll_idx:next_roll - 1, 'ratio'] = current_ratio
     
     # 生成 RAD
@@ -236,36 +245,43 @@ def load_roll_rules(config_file=CONFIG_FILE):
         return json.load(f)
 
 
-def build_symbol_to_rule(roll_rules):
-    """构建 symbol -> rule 映射"""
+def load_contract_months(config_file=CONTRACT_MONTHS_FILE):
+    """加载合约交割月份映射"""
+    with open(config_file) as f:
+        data = json.load(f)
+    # 过滤掉 _source, _method 等元数据
+    return {k: v for k, v in data.items() if not k.startswith('_')}
+
+
+def build_symbol_to_rule(roll_rules, contract_months_map):
+    """构建 symbol -> rule 映射，使用 per-symbol 的交割月份"""
     symbol_to_rule = {}
     
     for rule_type, rule_data in roll_rules.items():
         symbols = rule_data.get('symbols', [])
         
         if rule_type == 'THUR_PRIOR_2ND_FRI_OF_DM':
-            for symbol in symbols:
-                symbol_to_rule[symbol] = {
-                    'rule_type': 'THUR_PRIOR_2ND_FRI',
-                    'day': None,
-                    'contract_months': 'H,M,U,Z'
-                }
+            rule_key = 'THUR_PRIOR_2ND_FRI'
+            day = None
         elif rule_type.startswith('DM_'):
+            rule_key = 'DM'
             day = int(rule_type.split('_')[1])
-            for symbol in symbols:
-                symbol_to_rule[symbol] = {
-                    'rule_type': 'DM',
-                    'day': day,
-                    'contract_months': 'F,H,K,N,Q,U,X,Z'
-                }
         elif rule_type.startswith('MPDM_'):
+            rule_key = 'MPDM'
             day = int(rule_type.split('_')[1])
-            for symbol in symbols:
-                symbol_to_rule[symbol] = {
-                    'rule_type': 'MPDM',
-                    'day': day,
-                    'contract_months': 'H,M,U,Z'
-                }
+        else:
+            continue
+        
+        for symbol in symbols:
+            # 使用从 CLC 数据提取的实际交割月份
+            cm = contract_months_map.get(symbol)
+            if not cm:
+                continue
+            symbol_to_rule[symbol] = {
+                'rule_type': rule_key,
+                'day': day,
+                'contract_months': cm
+            }
     
     return symbol_to_rule
 
@@ -278,12 +294,22 @@ def run_all_tests():
     
     # 加载配置
     roll_rules = load_roll_rules()
-    symbol_to_rule = build_symbol_to_rule(roll_rules)
-    print(f"\n加载 {len(symbol_to_rule)} 个合约的 roll rules")
+    contract_months_map = load_contract_months()
+    symbol_to_rule = build_symbol_to_rule(roll_rules, contract_months_map)
+    print(f"\n加载 {len(symbol_to_rule)} 个合约的 roll rules + contract months")
     
     # 找到所有 NON 文件
-    non_files = list(DATA_DIR.glob('*_NON.CSV'))
+    non_files = sorted(DATA_DIR.glob('*_NON.CSV'))
     print(f"找到 {len(non_files)} 个 NON 文件")
+    
+    # 统计缺失的 contract months
+    missing_cm = []
+    for non_file in non_files:
+        symbol = non_file.stem.replace('_NON', '')
+        if symbol not in contract_months_map:
+            missing_cm.append(symbol)
+    if missing_cm:
+        print(f"注意: {len(missing_cm)} 个合约无 contract months: {missing_cm}")
     
     # 生成 RAD_v2
     print("\n生成 RAD_v2...")
@@ -327,6 +353,10 @@ def run_all_tests():
     val_df = pd.DataFrame(validation_results)
     val_df.to_csv(DATA_DIR / 'rad_v2_corrected_validation.csv', index=False)
     
+    if len(val_df) == 0:
+        print("无验证结果")
+        return results_df, val_df
+    
     # 统计
     print(f"\n验证合约数：{len(val_df)}")
     print(f"\n相关性分布:")
@@ -334,7 +364,7 @@ def run_all_tests():
     print(f"  0.95-0.99: {len(val_df[(val_df['Corr(v2,RAD)']>=0.95) & (val_df['Corr(v2,RAD)']<0.99)])} ({len(val_df[(val_df['Corr(v2,RAD)']>=0.95) & (val_df['Corr(v2,RAD)']<0.99)])/len(val_df)*100:.1f}%)")
     print(f"  <0.95: {len(val_df[val_df['Corr(v2,RAD)']<0.95])} ({len(val_df[val_df['Corr(v2,RAD)']<0.95])/len(val_df)*100:.1f}%)")
     
-    print(f"\n第一天对齐 (<0.01%): {len(val_df[val_df['First_Diff%']<0.01])} ({len(val_df[val_df['First_Diff%']<0.01])/len(val_df)*100:.1f}%)")
+    print(f"\n第一天对齐 NON (<0.01%): {len(val_df[val_df['First_Diff%']<0.01])} ({len(val_df[val_df['First_Diff%']<0.01])/len(val_df)*100:.1f}%)")
     
     valid_last_diff = val_df[val_df['Last_Diff%'].notna()]
     if len(valid_last_diff) > 0:
