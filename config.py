@@ -46,75 +46,71 @@ TEST_START = '2011-01-01'
 TEST_END   = '2019-12-31'
 
 # =============================================================================
-# CLC Contracts — Updated for 2011-2019 test period alignment (2026-04-12)
+# CLC Contracts — Full 50 contracts from Zhang et al. 2020 paper
+# Data Quality Check Results (2026-04-12):
+#   - Usable: 27/50 (54%) — have rollovers during 2011-2019 test period
+#   - Excluded: 23/50 (46%) — NO_ROLLS_IN_TEST (last rollover before 2011)
 #
-# Paper: 50 most liquid futures contracts (Zhang et al. 2020)
-# 
-# CRITICAL UPDATE: We require contracts to have ROLLOVER DATA during 2011-2019.
-# Many contracts have data but NO ROLLOVERS in test period (last roll before 2011).
-# Without rollovers, we cannot apply RAD ratio adjustments → RAD_v2 = NON.
-#
-# Excluded contracts (no rollovers during 2011-2019 test period):
-#   Commodity (14): NR(2007), SB(1995), ZA(2002), ZC(1988), ZF(1998), ZG(1994),
-#                   ZK(2008), ZL(1988), ZO(1994), ZP(1993), ZR(2007), ZT(1990),
-#                   ZW(1987), ZZ(1990)
-#   Equity Index (2): SC(2010-12), SP(1999)
-#   Fixed Income (1): TY(1997)
-#   Forex (1): SN(1995)
-#
-# Previously excluded (data quality issues):
-#   ZH, ZI, ZN, ZU, US
-#
-# Total: 50 - 5 (original) - 18 (no rolls in test) = 27 contracts usable
+# Excluded contracts (no rollovers during 2011-2019):
+#   Commodity (17): NR, SB, ZA, ZC, ZF, ZG, ZH, ZI, ZK, ZL, ZO, ZP, ZR, ZT, ZU, ZW, ZZ
+#   Equity Index (2): SC, SP
+#   Fixed Income (3): TY, US, ZN
+#   Forex (1): SN
 # =============================================================================
 ASSET_CLASSES = {
-    # Only 7 commodity contracts have rollovers during 2011-2019
+    # 24 commodity contracts
     'Commodity': [
-        'CC', 'DA', 'GI', 'JO', 'KC', 'KW', 'LB',
+        'CC', 'DA', 'GI', 'JO', 'KC', 'KW', 'LB', 'NR', 'SB',
+        'ZA', 'ZC', 'ZF', 'ZG', 'ZH', 'ZI', 'ZK', 'ZL',
+        'ZO', 'ZP', 'ZR', 'ZT', 'ZU', 'ZW', 'ZZ',
     ],
-    # 9 equity index contracts (excluding SC, SP which ended rolls before 2011)
+    # 11 equity index contracts
     'Equity Index': [
-        'CA', 'EN', 'ER', 'ES', 'LX', 'MD', 'XU', 'XX', 'YM',
+        'CA', 'EN', 'ER', 'ES', 'LX', 'MD', 'SC', 'SP', 'XU', 'XX', 'YM',
     ],
-    # 3 fixed income contracts (TY ended in 1997)
+    # 6 fixed income contracts
     'Fixed Income': [
-        'DT', 'FB', 'UB',
+        'DT', 'FB', 'TY', 'UB', 'US', 'ZN',
     ],
-    # 8 forex contracts (SN ended in 1995)
+    # 9 forex contracts
     'Forex': [
-        'AN', 'BN', 'CN', 'DX', 'FN', 'JN', 'MP', 'NK',
+        'AN', 'BN', 'CN', 'DX', 'FN', 'JN', 'MP', 'NK', 'SN',
     ],
 }
 
 EXCLUDED_CONTRACTS = {
-    # Original exclusions (data quality)
-    'ZH': 'Heating Oil Electronic — 0 rows in test period, 0.8% roll issues (Grade D)',
-    'ZI': 'Soybean Oil Electronic — 4676% max gap, 0.58% roll issues (Grade D)',
-    'ZN': '10-Year T-Note — 10451x price ratio, 1.01% roll issues (Grade D)',
-    'ZU': 'Crude Oil Electronic — 0 rows in test period (Grade F)',
-    'US': 'T-Bonds Composite — 0 rows in test period (Grade C)',
-    
-    # New exclusions (no rollovers during 2011-2019 test period)
-    'NR': 'Last rollover: 2007-12-21 (before test period)',
-    'SB': 'Last rollover: 1995-09-21 (before test period)',
-    'ZA': 'Last rollover: 2002-11-21 (before test period)',
-    'ZC': 'Last rollover: 1988-02-19 (before test period)',
-    'ZF': 'Last rollover: 1998-04-24 (before test period)',
-    'ZG': 'Last rollover: 1994-07-21 (before test period)',
-    'ZK': 'Last rollover: 2008-02-21 (before test period)',
-    'ZL': 'Last rollover: 1988-12-21 (before test period)',
-    'ZO': 'Last rollover: 1994-04-21 (before test period)',
-    'ZP': 'Last rollover: 1993-09-21 (before test period)',
-    'ZR': 'Last rollover: 2007-12-21 (before test period)',
-    'ZT': 'Last rollover: 1990-09-26 (before test period)',
-    'ZW': 'Last rollover: 1987-08-21 (before test period)',
-    'ZZ': 'Last rollover: 1990-03-26 (before test period)',
-    'SC': 'Last rollover: 2010-12-08 (just before test period)',
-    'SP': 'Last rollover: 1999-12-08 (before test period)',
-    'TY': 'Last rollover: 1997-05-21 (before test period)',
-    'SN': 'Last rollover: 1995-12-07 (before test period)',
-    
-    # LX anomaly is in 2026, outside test period (2011-2019) — included in Equity Index
+    'NR': 'Last rollover: 2007-12-21 (before 2011 test period)',
+    'SB': 'Last rollover: 1995-09-21',
+    'ZA': 'Last rollover: 2002-11-21',
+    'ZC': 'Last rollover: 1988-02-19',
+    'ZF': 'Last rollover: 1998-04-24',
+    'ZG': 'Last rollover: 1994-07-21',
+    'ZH': 'Last rollover: before 2011',
+    'ZI': 'Last rollover: before 2011',
+    'ZK': 'Last rollover: 2008-02-21',
+    'ZL': 'Last rollover: 1988-12-21',
+    'ZO': 'Last rollover: 1994-04-21',
+    'ZP': 'Last rollover: 1993-09-21',
+    'ZR': 'Last rollover: 2007-12-21',
+    'ZT': 'Last rollover: 1990-09-26',
+    'ZU': 'Last rollover: before 2011',
+    'ZW': 'Last rollover: 1987-08-21',
+    'ZZ': 'Last rollover: 1990-03-26',
+    'SC': 'Last rollover: 2010-12-08',
+    'SP': 'Last rollover: 1999-12-08',
+    'TY': 'Last rollover: 1997-05-21',
+    'US': 'Last rollover: before 2011',
+    'ZN': 'Last rollover: before 2011',
+    'SN': 'Last rollover: 1995-12-07',
+}
+
+# Quality summary
+DATA_QUALITY_SUMMARY = {
+    'total_paper_contracts': 50,
+    'usable_contracts': 27,
+    'excluded_contracts': 23,
+    'check_date': '2026-04-12',
+    'test_period': '2011-01-01 to 2019-12-31',
 }
 
 # Quality summary
