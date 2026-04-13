@@ -141,7 +141,10 @@ IEOR4733_Project/
 |-------------|-----------|---------|
 | Commodity | 24 | CC,DA,GI,JO,KC,KW,LB,NR,SB,ZA,ZC,ZF,ZG,ZH,ZI,ZK,ZL,ZO,ZP,ZR,ZT,ZU,ZW,ZZ |
 | Equity Index | 11 | CA,EN,ER,ES,LX,MD,SC,SP,XU,XX,YM |
-| Fixed Income | 5 | DT,FB,TY,UB,US (ZN excluded: data corrupted) |
+| Fixed Income | 5 | DT,FB,TY,UB,US |
+| Commodity | 25 | CC,DA,GI,JO,KC,KW,LB,NR,SB,ZA,ZC,ZF,ZG,ZH,ZI,ZK,ZL,ZO,ZP,ZR,ZT,ZU,ZW,ZZ,**ZN** |
+
+**Note**: ZN moved from Fixed Income to Commodity — ZN in CLC data is actually Natural Gas (price range 1.6-5.5, vol 42%), not 10-Year T-Note. RAD file regenerated using RAD_v2 method.
 | Forex | 9 | AN,BN,CN,DX,FN,JN,MP,NK,SN |
 
 **Data Quality (cross-validation v3, 2026-04-12)**:
@@ -161,14 +164,16 @@ Excluded (5): ZH, ZI, ZN (data quality), ZU, US (no test period data)
 
 **GRAND TOTAL: ≤10%: 41/108 (38%) | ≤15%: 49/108 (45%)**
 
-*Note: Fixed Income excludes ZN (data corrupted); 5 contracts used instead of 6.*
+*Note: ZN moved from Fixed Income to Commodity (ZN in CLC data is Natural Gas). Fixed Income: 5 contracts, Commodity: 25 contracts.*
 
 **DD Fix (2026-04-12)**: DD calculation updated per Paper Section 4.4 definition (std of negative returns only).
 Improved DD ≤15%: 6/12 → 7/12.
 
 ---
 
-### Commodity (24 contracts)
+### Commodity (25 contracts)
+
+**Note**: ZN added (moved from Fixed Income — ZN in CLC data is Natural Gas, RAD regenerated using RAD_v2 method).
 
 | Strategy | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L | ≤10% | ≤15% |
 |----------|------|-----|----|--------|---------|-----|--------|------|--------|----|----|
@@ -192,9 +197,9 @@ Improved DD ≤15%: 6/12 → 7/12.
 
 ---
 
-### Fixed Income (5 contracts — ZN excluded due to data corruption)
+### Fixed Income (5 contracts)
 
-**Note**: ZN excluded (RAD price abnormal ~10000x). Paper targets based on 6 contracts; our results based on 5 (DT,FB,TY,UB,US).
+**Note**: ZN moved to Commodity category (ZN in CLC data is Natural Gas, not 10-Year T-Note).
 
 | Strategy | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L | ≤10% | ≤15% |
 |----------|------|-----|----|--------|---------|-----|--------|------|--------|----|----|
@@ -395,7 +400,8 @@ Improved DD ≤15%: 6/12 → 7/12.
 - [x] Full baseline alignment (4 assets × 3 strategies × 9 metrics) — **41/108 ≤10%, 49/108 ≤15%**
 - [x] Equity Index Long Only: 9/9 ≤15% — Perfect replication ✅
 - [x] DD calculation fixed per Paper Section 4.4 (2026-04-12) — DD ≤15%: 6/12 → 7/12
-- [x] Fixed Income std aligned (2026-04-13) — **ZN excluded** (data corrupted), 5 contracts: std error 0.9%
+- [x] Fixed Income std aligned (2026-04-13) — **ZN moved to Commodity** (ZN=Natural Gas in CLC data), 5 contracts: std error 0.9%
+- [x] ZN RAD regenerated using RAD_v2 method (RAD price abnormal ~10000x fixed)
 - [ ] MDD investigation — Current: 1/12 ≤15%, avg error 122.7% (see `docs/mdd_dd_diagnosis.md`)
 - [ ] Investigate C-grade contracts (NR, ZO, ZR, ZT, ZZ, DA, JO, LB, FB; TY fixed)
 - [ ] DQN training and comparison with baselines

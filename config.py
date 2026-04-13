@@ -58,17 +58,18 @@ TEST_END   = '2019-12-31'
 #   Forex (1): SN
 # =============================================================================
 ASSET_CLASSES = {
-    # 24 commodity contracts
+    # 25 commodity contracts (ZN added: actually Natural Gas, not 10-Year T-Note)
     'Commodity': [
         'CC', 'DA', 'GI', 'JO', 'KC', 'KW', 'LB', 'NR', 'SB',
         'ZA', 'ZC', 'ZF', 'ZG', 'ZH', 'ZI', 'ZK', 'ZL',
-        'ZO', 'ZP', 'ZR', 'ZT', 'ZU', 'ZW', 'ZZ',
+        'ZO', 'ZP', 'ZR', 'ZT', 'ZU', 'ZW', 'ZZ', 'ZN',
     ],
     # 11 equity index contracts
     'Equity Index': [
         'CA', 'EN', 'ER', 'ES', 'LX', 'MD', 'SC', 'SP', 'XU', 'XX', 'YM',
     ],
-    # 5 fixed income contracts (ZN excluded: data corrupted, RAD price ~10000x abnormal)
+    # 5 fixed income contracts
+    # Note: ZN moved to Commodity (ZN in CLC data is Natural Gas, not 10-Year T-Note)
     'Fixed Income': [
         'DT', 'FB', 'TY', 'UB', 'US',
     ],
