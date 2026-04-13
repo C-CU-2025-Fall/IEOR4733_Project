@@ -71,10 +71,19 @@ def load_asc(symbol):
     if not fpath.exists():
         return None
     
-    # ASC 格式：Date,Open,High,Low,Close,Volume,OI,Adj
-    df = pd.read_csv(fpath)
-    df['Date'] = pd.to_datetime(df['Date'])
-    return df
+    try:
+        # ASC 格式：Date Open High Low Close Volume OI Adj (空格分隔，无 header)
+        df = pd.read_csv(fpath, sep=r'\s+', header=None, engine='python',
+                         names=['Date','O','H','L','C','V','OI','Adj'],
+                         on_bad_lines='skip')
+        # 转换日期，过滤无效行
+        df['Date'] = pd.to_datetime(df['Date'].astype(str), format='%Y%m%d', errors='coerce')
+        df = df.dropna(subset=['Date'])
+        df['Date'] = df['Date'].dt.normalize()
+        return df
+    except Exception as e:
+        print(f"  ⚠️  {symbol} ASC 加载失败：{e}")
+        return None
 
 
 def load_rollover(symbol):
@@ -188,21 +197,25 @@ def validate_roll_date_consistency(symbol):
     rad = load_rad(symbol)
     non = load_non(symbol)
     
-    # 1. ASC roll dates
+    # 1. ASC roll dates - 检测 Adj 列的跳变
     if asc is not None and 'Adj' in asc.columns:
-        # 检测调整日
-        asc_adj = asc[asc['Adj'] != 0]
-        result['ASC_Count'] = len(asc_adj)
+        # 计算 Adj 的变化（roll 发生时 Adj 会跳变）
+        asc = asc.copy()
+        asc['Adj'] = pd.to_numeric(asc['Adj'], errors='coerce')
+        asc['Adj_change'] = asc['Adj'].diff().abs()
+        # 检测 Adj 跳变 (>100 认为是 roll)
+        asc_rolls = asc[asc['Adj_change'] > 100]
+        result['ASC_Count'] = len(asc_rolls)
     
     # 2. RAD 检测 roll dates
     if rad is not None and non is not None:
         # 计算 ratio = RAD / NON
         merged = pd.merge(rad, non, on='Date', suffixes=('_rad', '_non'))
         merged['ratio'] = merged['C_rad'] / merged['C_non']
-        merged['ratio_change'] = merged['ratio'].diff()
+        merged['ratio_change'] = merged['ratio'].diff().abs()
         
-        # 检测 ratio 跳变
-        ratio_jumps = merged[merged['ratio_change'].abs() > 0.01]
+        # 检测 ratio 跳变 (>1% 认为是 roll)
+        ratio_jumps = merged[merged['ratio_change'] > 0.01]
         result['RAD_Count'] = len(ratio_jumps)
     
     # 3. 理论 roll dates
