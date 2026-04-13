@@ -14,7 +14,13 @@ T = TRADING_DAYS
 SIGMA_TGT = 0.064  # Per-contract vol scaling
 
 def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31'):
-    tickers = ASSET_CLASSES.get(ac_name, [])
+    if ac_name == 'All':
+        # Combine all contracts from all asset classes
+        tickers = []
+        for ac_contracts in ASSET_CLASSES.values():
+            tickers.extend(ac_contracts)
+    else:
+        tickers = ASSET_CLASSES.get(ac_name, [])
     raw = []
     for tk in tickers:
         df = load_clc_full(tk)
@@ -119,6 +125,39 @@ for ac in asset_classes:
 # Save results
 df = pd.DataFrame(results)
 df.to_csv('tests/results/full_baseline_table3.csv', index=False)
+
+# =============================================================================
+# Additional: "All" portfolio (all 50 contracts combined)
+# =============================================================================
+print("\n\n" + "="*140)
+print("  ALL CONTRACTS (50 contracts combined)")
+print("="*140)
+
+all_raw = load_contracts('All')
+N_all = len(all_raw)
+print(f"\n  Total contracts: {N_all}")
+print(f"  Contracts: {', '.join([rd['tk'] for rd in all_raw])}")
+
+# Portfolio-level vol scaling to match Table 2 methodology
+sigma_tgt_portfolio = SIGMA_TGT / np.sqrt(N_all)
+
+for strat in strategies:
+    R_all = compute_portfolio_returns(all_raw, strat, SIGMA_TGT)  # Per-contract scaling
+    m_all = compute_metrics(R_all, N_all)
+    
+    print(f"\n  {strat:8s}")
+    print(f"  Ours  : {'  '.join(f'{v:+7.3f}' for v in m_all)}")
+    
+    results.append({
+        'Asset_Class': 'All',
+        'Strategy': strat,
+        'N_Contracts': N_all,
+        'E(R)': m_all[0], 'std(R)': m_all[1], 'DD': m_all[2], 'Sharpe': m_all[3],
+        'Sortino': m_all[4], 'MDD': m_all[5], 'Calmar': m_all[6], '%_ve': m_all[7], 'Ave_P/L': m_all[8],
+        'Paper_E(R)': None, 'Paper_std': None, 'Paper_Sharpe': None,
+        'Err_E(R)': None, 'Err_std': None, 'Err_Sharpe': None,
+        'All_Errs': 'N/A'
+    })
 
 # Generate summary table
 print("\n\n" + "="*140)
