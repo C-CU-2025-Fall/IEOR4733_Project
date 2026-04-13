@@ -68,9 +68,9 @@ ASSET_CLASSES = {
     'Equity Index': [
         'CA', 'EN', 'ER', 'ES', 'LX', 'MD', 'SC', 'SP', 'XU', 'XX', 'YM',
     ],
-    # 6 fixed income contracts
+    # 5 fixed income contracts (ZN excluded: data corrupted, RAD price ~10000x abnormal)
     'Fixed Income': [
-        'DT', 'FB', 'TY', 'UB', 'US', 'ZN',
+        'DT', 'FB', 'TY', 'UB', 'US',
     ],
     # 9 forex contracts
     'Forex': [
