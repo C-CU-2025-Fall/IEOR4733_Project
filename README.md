@@ -137,24 +137,59 @@ IEOR4733_Project/
 
 ### Asset Classes & Contracts (50 contracts total)
 
-| Asset Class | Contracts | Tickers |
-|-------------|-----------|---------|
-| Commodity | 24 | CC,DA,GI,JO,KC,KW,LB,NR,SB,ZA,ZC,ZF,ZG,ZH,ZI,ZK,ZL,ZO,ZP,ZR,ZT,ZU,ZW,ZZ |
+| Asset Class | # | Tickers |
+|-------------|---|---------|
+| Commodity | 25 | CC,DA,GI,JO,KC,KW,LB,NR,SB,ZA,ZC,ZF,ZG,ZH,ZI,ZK,ZL,ZO,ZP,ZR,ZT,ZU,ZW,ZZ,**ZN** |
 | Equity Index | 11 | CA,EN,ER,ES,LX,MD,SC,SP,XU,XX,YM |
 | Fixed Income | 5 | DT,FB,TY,UB,US |
-| Commodity | 25 | CC,DA,GI,JO,KC,KW,LB,NR,SB,ZA,ZC,ZF,ZG,ZH,ZI,ZK,ZL,ZO,ZP,ZR,ZT,ZU,ZW,ZZ,**ZN** |
-
-**Note**: ZN moved from Fixed Income to Commodity — ZN in CLC data is actually Natural Gas (price range 1.6-5.5, vol 42%), not 10-Year T-Note. RAD file regenerated using RAD_v2 method.
 | Forex | 9 | AN,BN,CN,DX,FN,JN,MP,NK,SN |
 
-**Data Quality (cross-validation v3, 2026-04-12)**:
-- A grade: 17 contracts (corr≥0.95)
-- B grade: 23 contracts (corr≥0.90)
-- C grade: 10 contracts (corr<0.90)
-- **40/50 (80%) A/B grade** — Suitable for backtesting
-| Forex | 9 | AN,BN,CN,DX,FN,JN,MP,NK,SN |
+**Note**: ZN in CLC data = 24HR NATL GAS (Natural Gas), not 10-Year T-Note. Moved to Commodity.
 
-Excluded (5): ZH, ZI, ZN (data quality), ZU, US (no test period data)
+### RAD Data Status (deterministic cross-validation, 2026-04-13)
+
+**Method**: REV adj 是分段常数 → `adj_change ≠ 0` = 确定性 roll 检测（无阈值）
+
+**Vendor RAD 可用**: 46/50
+**Vendor RAD 损坏**: 4/50 → 使用 RAD_v2
+
+| 损坏合约 | 问题 | Roll Rule | CME 验证 |
+|---------|------|-----------|---------|
+| ZH | 全零 | H<M>UZ | ✅ |
+| ZU | 全零 | 12个月 | ✅ |
+| US | 99% NaN | H<M>UZ | ✅ |
+| ZN | 只有季度调整(缺月度) | ALL<K> (12月/年) | ✅ |
+
+**`data_loader.py`**: ZH, ZU, US, ZN → 使用 `*_RAD_v2.CSV`
+
+### 交叉验证结果 (`tests/roll_validation_final.py`)
+
+| 状态 | # | 说明 |
+|------|---|------|
+| ✅ VERIFIED | 27 | 有 ASC，ASC vs REV price error <0.25% (mean 0.01%) |
+| ✅ CROSS_VALIDATED | 21 | 无 ASC，REV adj 非roll日噪声 = 精确 0 |
+| ❌ INCOMPLETE | 1 (ZN) | vendor RAD 只有季度调整 |
+| ❌ CORRUPT | 1 (US) | vendor RAD 99% NaN |
+
+- REV adj 非roll日噪声 = 精确 0: **50/50**
+- ASC vs REV price error: mean=0.01%, max=0.23%
+- CLC roll rules vs CME 官方: **全部一致**
+
+---
+
+## 📊 CLC 数据关系
+
+```
+NON = 纯原始价格（无 roll 信息）
+ASC = NON + vendor roll_date + prev_close + new_close（版本1）
+  → NON[roll_date] = prev_close（旧合约收盘价）
+  → 次日 RAD ratio 跳变, REV adj 跳变
+RAD = NON × cumulative_ratio (forward adjustment, 论文用这个)
+REV = NON + cumulative_adj (backward adjustment, 独立验证源)
+
+任意两源可精确推导 roll_date + prev_close + new_close
+REV adj 是分段常数 → adj_change ≠ 0 就是确定性 roll 检测
+```
 
 ---
 
@@ -396,14 +431,12 @@ Improved DD ≤15%: 6/12 → 7/12.
 
 ## TODO
 
-- [x] Cross-validation v3 completed (2026-04-12) — 40/50 (80%) A/B grade
-- [x] Full baseline alignment (4 assets × 3 strategies × 9 metrics) — **41/108 ≤10%, 49/108 ≤15%**
-- [x] Equity Index Long Only: 9/9 ≤15% — Perfect replication ✅
-- [x] DD calculation fixed per Paper Section 4.4 (2026-04-12) — DD ≤15%: 6/12 → 7/12
-- [x] Fixed Income std aligned (2026-04-13) — **ZN moved to Commodity** (ZN=Natural Gas in CLC data), 5 contracts: std error 0.9%
-- [x] ZN RAD regenerated using RAD_v2 method (RAD price abnormal ~10000x fixed)
-- [ ] MDD investigation — Current: 1/12 ≤15%, avg error 122.7% (see `docs/mdd_dd_diagnosis.md`)
-- [ ] Investigate C-grade contracts (NR, ZO, ZR, ZT, ZZ, DA, JO, LB, FB; TY fixed)
+- [x] Deterministic 50-contract RAD cross-validation (2026-04-13) — 48/50 VERIFIED/CROSS_VALIDATED
+- [x] ZN moved to Commodity (ZN = Natural Gas in CLC data)
+- [x] 4 damaged contracts: ZH, ZU, US (corrupt), ZN (incomplete)
+- [x] CLC roll rules verified against CME official
+- [ ] ZN, US RAD_v2 需要用正确 forward adjustment 方法重新生成（当前版本方法有误）
+- [ ] ZH, ZU RAD_v2 需要验证生成方法是否正确
+- [ ] Run Table 2 & Table 3 backtesting with all 50 contracts
 - [ ] DQN training and comparison with baselines
-- [ ] Sensitivity analysis for σ_tgt
 - [ ] Final presentation
