@@ -3,13 +3,15 @@ CLC 数据交叉验证脚本
 
 验证 NON / ASC / REV / RAD 四类文件的一致性
 
-阶段 1: Roll Date 验证
-阶段 2: Roll Price 验证  
-阶段 3: 数据完整性验证
+阶段 1: Roll Date 验证 (核心) - 确认 Roll Date 的唯一真相
+阶段 2: Roll Price 验证 (核心) - 确认 ASC 价格与 NON 一致
+阶段 3: 调整参数验证 - 验证 RAD/REV 调整参数正确
+阶段 4: 数据完整性评分 - 对 50 合约进行质量分级
 
 输出：
-- tests/results/cross_validation_summary.csv
-- tests/results/cross_validation_details.csv
+- tests/results/roll_date_truth.csv
+- tests/results/roll_price_truth.csv
+- tests/results/adjustment_validation.csv
 - tests/results/data_quality_scores.csv
 """
 
@@ -333,13 +335,13 @@ def main():
     RESULTS_DIR.mkdir(exist_ok=True)
     
     df1 = pd.DataFrame(roll_date_results)
-    df1.to_csv(RESULTS_DIR / 'cross_validation_roll_dates.csv', index=False)
+    df1.to_csv(RESULTS_DIR / 'roll_date_truth.csv', index=False)
     
     df2 = pd.DataFrame(roll_price_results)
-    df2.to_csv(RESULTS_DIR / 'cross_validation_roll_prices.csv', index=False)
+    df2.to_csv(RESULTS_DIR / 'roll_price_truth.csv', index=False)
     
     df3 = pd.DataFrame(integrity_results)
-    df3.to_csv(RESULTS_DIR / 'cross_validation_integrity.csv', index=False)
+    df3.to_csv(RESULTS_DIR / 'data_quality_scores.csv', index=False)
     
     # 汇总
     summary = pd.merge(df1, df3[['Symbol', 'Quality_Score']], on='Symbol')
@@ -348,6 +350,11 @@ def main():
     print("\n" + "="*100)
     print("验证完成！结果保存到 tests/results/")
     print("="*100)
+    print("\n输出文件:")
+    print("  - roll_date_truth.csv (Roll Date 验证)")
+    print("  - roll_price_truth.csv (Roll Price 验证)")
+    print("  - data_quality_scores.csv (数据质量评分)")
+    print("  - cross_validation_summary.csv (汇总)")
     
     # 统计
     print("\n数据质量评分分布:")
