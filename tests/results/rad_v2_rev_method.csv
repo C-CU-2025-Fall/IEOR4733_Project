@@ -1,0 +1,4 @@
+Symbol,Status,Theoretical_Rolls,Detected_Rolls,Matched_Rolls,Test_Days,Price_Range,RAD_v2_Range,Method
+ZH,OK,40,131,1,2267,87.78 - 331.97,96.10 - 338.53,REV-inspired (theoretical rolls + ratio adjustment)
+ZU,OK,109,148,3,2267,27.45 - 113.93,31.51 - 113.08,REV-inspired (theoretical rolls + ratio adjustment)
+US,OK,40,4,0,2268,117.31 - 176.94,117.31 - 184.22,REV-inspired (theoretical rolls + ratio adjustment)

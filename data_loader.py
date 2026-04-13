@@ -14,8 +14,15 @@ def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01'):
 
     CSV format (no header): Date,Open,High,Low,Close,Volume,OpenInterest
     Date format: MM/DD/YYYY
+    
+    Note: For ZH, ZN, ZU, US (vendor RAD corrupted), uses RAD_v2 generated files.
     """
-    fpath = os.path.join(data_dir, f'{ticker}_RAD.CSV')
+    # Use RAD_v2 for contracts with corrupted vendor RAD
+    if ticker in ['ZH', 'ZN', 'ZU', 'US']:
+        fpath = os.path.join(data_dir, f'{ticker}_RAD_v2.CSV')
+    else:
+        fpath = os.path.join(data_dir, f'{ticker}_RAD.CSV')
+    
     if not os.path.exists(fpath):
         return None
     df = pd.read_csv(fpath, header=None,
