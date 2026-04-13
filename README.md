@@ -177,8 +177,99 @@ Excluded (5): ZH, ZI, ZN (data quality), ZU, US (no test period data)
 
 ---
 
+## 📊 CLC 数据文件概念图
+
+### 四类文件的关系
+
+```
+                    ┌─────────────────────────────────────┐
+                    │          原始数据 (Raw)              │
+                    │                                     │
+                    │  NON = 原始合约价格序列              │
+                    │  - 每个合约有多个到期月 (H,M,U,Z...) │
+                    │  - 换月时存在价格跳空 (gap)          │
+                    └─────────────────────────────────────┘
+                                     │
+                                     │ + roll_dates
+                                     ▼
+        ┌────────────────────────────────────────────────┐
+        │            调整方法 (Adjustment)                │
+        │                                                │
+        │  ┌──────────────┐      ┌──────────────┐       │
+        │  │   REV        │      │    RAD       │       │
+        │  │  加法调整     │      │   乘法调整    │       │
+        │  │  +adjustment │      │  × ratio     │       │
+        │  └──────────────┘      └──────────────┘       │
+        │                                                │
+        │  关键：REV 和 RAD 在 roll date 应产生相同价格     │
+        │  NON + adjustment = NON × ratio                │
+        └────────────────────────────────────────────────┘
+                                     │
+                                     ▼
+        ┌────────────────────────────────────────────────┐
+        │          验证文件 (Verification)                │
+        │                                                │
+        │  ASC / Rollover Log = "黄金标准"               │
+        │  - 记录每个 roll date 的日期/价格/调整量         │
+        │  - 用于验证 REV 和 RAD 是否正确                  │
+        └────────────────────────────────────────────────┘
+```
+
+### 交叉验证矩阵
+
+| 验证目标 | 数据源 A | 数据源 B | 验证方法 | 期望 |
+|---------|---------|---------|---------|------|
+| Roll date | ASC | RAD (跳变) | 检测 ratio 跳变日 | ≥95% 匹配 |
+| Roll price | ASC | NON | 对比 prev/new close | <0.1% 差异 |
+| REV↔RAD | REV | RAD | 对比调整后价格 | <0.1% 差异 |
+| 理论规则 | roll_rules | ASC | 理论 vs 实际 | ≤1 天差异 |
+| 数据完整 | NON | RAD | RAD = NON × ratio | 完全匹配 |
+
+### 50 合约数据状态
+
+| 类别 | 合约数 | 数据来源 | 验证状态 |
+|------|--------|---------|----------|
+| A 类 (完整) | ~20 | ASC+RAD+rollover | ✅ 已验证 |
+| B 类 (部分) | ~15 | RAD+ 理论规则 | ⚠️ 待验证 |
+| C 类 (仅 NON) | ~11 | 理论规则 | ❌ 无法验证 |
+| 损坏修复 | 4 | RAD_v2 | ✅ 已生成 |
+
+**损坏合约修复 (RAD_v2)**:
+- ZH: MPDM_11, H,M,U,Z → 生成成功
+- ZN: MPDM_24, H,M,U,Z → 生成成功  
+- ZU: MPDM_11, 12 个月份 → 生成成功
+- US: MPDM_24, H,M,U,Z → 生成成功
+- ZI: ✅ vendor RAD 正常 (ratio=1.32±0.06)
+
+---
+
+## 🔍 交叉验证设计
+
+### 阶段 1: Roll Date 验证
+- 有 ASC 合约：对比 ASC vs RAD 跳变 vs 理论规则
+- 无 ASC 合约：对比 RAD 跳变 vs 理论规则
+
+### 阶段 2: Roll Price 验证
+- ASC.prev_close vs NON[roll_date-1]
+- ASC.new_close vs NON[roll_date]
+- 隐含 ratio vs RAD 实际 ratio
+
+### 阶段 3: 数据完整性
+- RAD = NON × ratio (逐日验证)
+- 检测异常值 (如 ZN 的 10000x)
+- 检测非 roll date 跳空
+
+### 输出
+1. Roll Date 匹配率报告
+2. Roll Price 一致性报告
+3. 异常合约列表
+4. 数据质量评分 (A/B/C/D)
+
+---
+
 ## TODO
 
+- [ ] 运行交叉验证脚本 (`tests/cross_validate.py`)
 - [ ] Complete all 4 asset classes × 3 strategies comparison tables
 - [ ] DQN training and comparison with baselines
 - [ ] Sensitivity analysis for σ_tgt
