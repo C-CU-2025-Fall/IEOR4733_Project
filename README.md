@@ -141,7 +141,7 @@ IEOR4733_Project/
 |-------------|-----------|---------|
 | Commodity | 24 | CC,DA,GI,JO,KC,KW,LB,NR,SB,ZA,ZC,ZF,ZG,ZH,ZI,ZK,ZL,ZO,ZP,ZR,ZT,ZU,ZW,ZZ |
 | Equity Index | 11 | CA,EN,ER,ES,LX,MD,SC,SP,XU,XX,YM |
-| Fixed Income | 6 | DT,FB,TY,UB,US,ZN |
+| Fixed Income | 5 | DT,FB,TY,UB,US (ZN excluded: data corrupted) |
 | Forex | 9 | AN,BN,CN,DX,FN,JN,MP,NK,SN |
 
 **Data Quality (cross-validation v3, 2026-04-12)**:
@@ -159,7 +159,9 @@ Excluded (5): ZH, ZI, ZN (data quality), ZU, US (no test period data)
 
 ### Full Baseline Alignment (Table 3, σ_tgt = 0.064, 2011-2019)
 
-**GRAND TOTAL: ≤10%: 42/108 (39%) | ≤15%: 50/108 (46%)**
+**GRAND TOTAL: ≤10%: 41/108 (38%) | ≤15%: 49/108 (45%)**
+
+*Note: Fixed Income excludes ZN (data corrupted); 5 contracts used instead of 6.*
 
 **DD Fix (2026-04-12)**: DD calculation updated per Paper Section 4.4 definition (std of negative returns only).
 Improved DD ≤15%: 6/12 → 7/12.
@@ -190,15 +192,17 @@ Improved DD ≤15%: 6/12 → 7/12.
 
 ---
 
-### Fixed Income (6 contracts)
+### Fixed Income (5 contracts — ZN excluded due to data corruption)
+
+**Note**: ZN excluded (RAD price abnormal ~10000x). Paper targets based on 6 contracts; our results based on 5 (DT,FB,TY,UB,US).
 
 | Strategy | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L | ≤10% | ≤15% |
 |----------|------|-----|----|--------|---------|-----|--------|------|--------|----|----|
-| **Long** | +0.315 | 0.802 | **0.528** | +0.393 | +0.597 | 0.207 | +0.262 | 0.523 | 0.972 | 3/9 | 4/9 |
-| Paper | +0.605 | 0.939 | **0.561** | +0.645 | +1.081 | 0.108 | +0.455 | 0.515 | 1.048 | | |
-| **%Err** | 47.9% | 14.6% | **5.9%** | 39.1% | 44.8% | 91.7% | 42.4% | **1.6%** | **7.3%** | | |
-| **Sign(R)** | -0.324 | 0.692 | 0.512 | -0.469 | -0.634 | 0.635 | -0.084 | 0.500 | 0.925 | 3/9 | 4/9 |
-| **MACD** | -0.518 | 0.549 | 0.400 | -0.943 | -1.296 | 0.810 | -0.106 | 0.448 | 1.047 | 4/9 | 4/9 |
+| **Long** | +0.299 | **0.947** | 0.629 | +0.316 | +0.475 | 0.285 | +0.219 | 0.524 | 0.956 | 3/9 | 4/9 |
+| Paper | +0.605 | **0.939** | 0.561 | +0.645 | +1.081 | 0.108 | +0.455 | 0.515 | 1.048 | | |
+| **%Err** | 50.6% | **0.9%** | 12.1% | 51.0% | 56.1% | 163.9% | 51.9% | **1.7%** | **8.8%** | | |
+| **Sign(R)** | -0.361 | **0.803** | 0.564 | -0.450 | -0.640 | 0.829 | -0.086 | 0.500 | 0.926 | 3/9 | 4/9 |
+| **MACD** | -0.562 | **0.640** | 0.434 | -0.879 | -1.295 | 1.066 | -0.105 | 0.456 | 1.023 | 3/9 | 3/9 |
 
 ---
 
@@ -222,7 +226,7 @@ Improved DD ≤15%: 6/12 → 7/12.
 
 **✅ Volatility Scaling Verified**:
 - **All asset classes std(R) error <15%**
-- Commodity: 1.6-4.4%, Equity: 0.5-5.3%, Fixed Income: 9.9-14.6%, Forex: 0.2-5.2%
+- Commodity: 1.6-4.4%, Equity: 0.5-5.3%, Fixed Income: **0.9%** (ex-ZN), Forex: 0.2-5.2%
 - → **Equation 4 implementation correct**
 
 **⚠️ E(R)/Sharpe Bias Analysis**:
@@ -234,7 +238,7 @@ Improved DD ≤15%: 6/12 → 7/12.
 - **Equity Index**: 8/11 A/B grade → Best replication ✅
 - **Forex**: 7/9 A/B grade → std precise, E(R) bias
 - **Commodity**: Partial C grade → Larger errors
-- **Fixed Income**: Partial C grade (TY, FB) → Largest errors
+- **Fixed Income**: **ZN excluded** (data corrupted); remaining 5 contracts: std ✅ (0.9%), E(R) bias
 
 ---
 
@@ -388,11 +392,12 @@ Improved DD ≤15%: 6/12 → 7/12.
 ## TODO
 
 - [x] Cross-validation v3 completed (2026-04-12) — 40/50 (80%) A/B grade
-- [x] Full baseline alignment (4 assets × 3 strategies × 9 metrics) — **42/108 ≤10%, 50/108 ≤15%**
+- [x] Full baseline alignment (4 assets × 3 strategies × 9 metrics) — **41/108 ≤10%, 49/108 ≤15%**
 - [x] Equity Index Long Only: 9/9 ≤15% — Perfect replication ✅
 - [x] DD calculation fixed per Paper Section 4.4 (2026-04-12) — DD ≤15%: 6/12 → 7/12
+- [x] Fixed Income std aligned (2026-04-13) — **ZN excluded** (data corrupted), 5 contracts: std error 0.9%
 - [ ] MDD investigation — Current: 1/12 ≤15%, avg error 122.7% (see `docs/mdd_dd_diagnosis.md`)
-- [ ] Investigate 10 C-grade contracts (NR, TY, ZO, ZR, ZT, ZZ, DA, JO, LB, FB)
+- [ ] Investigate C-grade contracts (NR, ZO, ZR, ZT, ZZ, DA, JO, LB, FB; TY fixed)
 - [ ] DQN training and comparison with baselines
 - [ ] Sensitivity analysis for σ_tgt
 - [ ] Final presentation
