@@ -435,8 +435,8 @@ Improved DD ≤15%: 6/12 → 7/12.
 - [x] ZN moved to Commodity (ZN = Natural Gas in CLC data)
 - [x] 4 damaged contracts: ZH, ZU, US (corrupt), ZN (incomplete)
 - [x] CLC roll rules verified against CME official
-- [ ] ZN, US RAD_v2 需要用正确 forward adjustment 方法重新生成（当前版本方法有误）
-- [ ] ZH, ZU RAD_v2 需要验证生成方法是否正确
+- [x] 4 合约 RAD_v2 已用交叉验证方法论生成 (REV→roll date→ratio→cumulative×NON)
+- [x] Roll rules vs REV 检测验证: ZH(12/年), ZU(12/年), ZN(12/年), US(4/年) 全部一致
 - [ ] Run Table 2 & Table 3 backtesting with all 50 contracts
 - [ ] DQN training and comparison with baselines
 - [ ] Final presentation
