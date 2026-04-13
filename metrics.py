@@ -56,10 +56,14 @@ def compute_metrics(R_eq, n_contracts, w0=1.0):
     er = R_eq.mean() * T
     std = R_eq.std(ddof=0) * np.sqrt(T)
 
-    # DD: zero-target downside deviation (LPM(2) with MAR=0)
-    # Per standard Sortino framework and [27] "Downside Deviation"
-    shortfall = np.minimum(R_eq, 0.0)
-    dd = np.sqrt(np.mean(shortfall ** 2)) * np.sqrt(T)
+    # DD: Downside Deviation per Paper Section 4.4 and [27]
+    # "annualised standard deviation of trade returns that are negative"
+    # This is NOT zero-target LPM(2), but std of negative returns only
+    neg_returns = R_eq[R_eq < 0]
+    if len(neg_returns) < 2:
+        dd = 0.0
+    else:
+        dd = np.std(neg_returns, ddof=0) * np.sqrt(T)
 
     sharpe = er / std if std > 0 else 0.0
     sortino = er / dd if dd > 0 else 0.0
