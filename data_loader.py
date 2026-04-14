@@ -15,11 +15,18 @@ def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01'):
     CSV format (no header): Date,Open,High,Low,Close,Volume,OpenInterest
     Date format: MM/DD/YYYY
     
-    Note: For ZH, ZN, ZU, US (vendor RAD corrupted), uses RAD_v2 generated files.
+    Note: Damaged contracts handling (2026-04-14 fix):
+      - ZH, ZU: Use RAD_v2 (REV quality poor: 738/224 >5% moves)
+      - US, ZN: Use REV (REV quality better: 0/3 vs RAD_v2's 2/154 >5% moves)
+      - RAD_v2 formula fixed: ratio = (REV[t] × NON[t-1]) / (REV[t-1] × NON[t])
     """
-    # Use RAD_v2 for contracts with corrupted vendor RAD
-    if ticker in ['ZH', 'ZN', 'ZU', 'US']:
+    # Damaged contracts handling (2026-04-14 fix)
+    # ZH, ZU: RAD_v2 (REV quality poor)
+    # US, ZN: REV (better than RAD_v2)
+    if ticker in ['ZH', 'ZU']:
         fpath = os.path.join(data_dir, f'{ticker}_RAD_v2.CSV')
+    elif ticker in ['US', 'ZN']:
+        fpath = os.path.join(data_dir, f'{ticker}_REV.CSV')
     else:
         fpath = os.path.join(data_dir, f'{ticker}_RAD.CSV')
     
