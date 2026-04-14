@@ -35,9 +35,9 @@ def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31'):
     """Load and prepare all contracts for an asset class.
 
     Returns list of dicts with:
-      rt[t] = p_t - p_{t-1}  (additive, p0-normalized)  [Paper Section 3.2]
-      sigma[t] = EWMA(60) std of rt                      [Paper Section 3.2]
-      norm_p = prices / prices[0]                         (p0-normalized)
+      rt[t] = p_t - p_{t-1}  (additive)  [Paper Section 3.2]
+      sigma[t] = EWMA(60) std of rt                   [Paper Section 3.2]
+      prices used directly (p0 normalization is a no-op)
       pos_macd = MACD positions                           [Paper Eq 3,11,12]
       start, t1 = test period indices
     """
@@ -50,11 +50,11 @@ def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31'):
         prices = df['Close'].values.astype(float)
         if len(prices) < 500:
             continue
-        p0 = prices[0]
-        norm_p = prices / p0
-        # rt[t] = p_t - p_{t-1}, same length as norm_p  [Paper Eq below 4]
-        rt = np.zeros(len(norm_p))
-        rt[1:] = norm_p[1:] - norm_p[:-1]
+        # rt[t] = p_t - p_{t-1}  [Paper Eq below 4]
+        # p0 normalization is a no-op: both terms in Eq 4 scale with p0,
+        # and σ_tgt just rescales — ratio metrics (Sharpe, etc.) are p0-invariant.
+        rt = np.zeros(len(prices))
+        rt[1:] = prices[1:] - prices[:-1]
         # σ_t = EWMA(60) std of rt  [Paper Section 3.2]
         sigma = pd.Series(rt).ewm(span=EWMA_SPAN, adjust=False).std().values
         # Test period boundaries
@@ -68,9 +68,9 @@ def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31'):
         # dates for index alignment (exclusive of t1, matching table3_final.py)
         dates = df['Date'].iloc[start:t1].values
         raw.append({
-            'tk': tk, 'rt': rt, 'sigma': sigma, 'norm_p': norm_p,
+            'tk': tk, 'rt': rt, 'sigma': sigma, 'prices': prices,
             'prices': prices, 'start': start, 't1': t1, 'dates': dates,
-            'macd_pos': strategy_macd(norm_p),
+            'macd_pos': strategy_macd(prices),
         })
     return raw
 
@@ -84,7 +84,7 @@ def compute_contract_returns(rd, strat, sigma_tgt):
 
     Returns full-length Rt array (slice to test period later).
     """
-    rt, sigma, norm_p = rd['rt'], rd['sigma'], rd['norm_p']
+    rt, sigma, prices = rd['rt'], rd['sigma'], rd['prices']
     n = len(rt)
 
     # Position signal A_t
@@ -102,7 +102,7 @@ def compute_contract_returns(rd, strat, sigma_tgt):
             a_prev2 = pos[t - 2] if strat != 'Long' else 1.0
             sp = a_prev * sigma_tgt / sigma[t - 1]
             spp = a_prev2 * sigma_tgt / sigma[t - 2] if t >= 2 else 0.0
-            Rt[t] = sp * rt[t] - BP * norm_p[t - 1] * abs(sp - spp)
+            Rt[t] = sp * rt[t] - BP * prices[t - 1] * abs(sp - spp)
     return Rt
 
 
@@ -115,8 +115,12 @@ def compute_portfolio_returns(raw_data, strat, sigma_tgt):
         start, t1, dates = rd['start'], rd['t1'], rd['dates']
         slc = Rt[start:t1]
         series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
-    return pd.DataFrame(series).T.dropna().mean(axis=1).values
-
+    # Forward-fill missing dates with R_t=0 for exchange holidays.
+    # On a holiday, the contract is unchanged -> return = 0, still counted in 1/N average.
+    # This keeps the denominator constant at N contracts every day.
+    df_all = pd.DataFrame(series)
+    port = df_all.T.fillna(0.0).mean(axis=1)
+    return port.values
 
 # ─── Table 2: Portfolio-level vol scaling ─────────────────────────
 def apply_portfolio_vol_scaling(R_eq, target_std):

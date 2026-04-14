@@ -1,37 +1,33 @@
 """
-metrics.py — 9 portfolio metrics (single source of truth)
+metrics.py — Paper-literal additive metrics (single source of truth)
 
 Paper: Zhang, Zohren, Roberts (2019) Section 4.4
 Reference: [27] Lim et al. (Deep Momentum Networks)
 
-Framework: ADDITIVE profits on p0-normalized prices.
+Framework: ADDITIVE profits on raw prices.
   r_t = p_t - p_{t-1}  (additive)
-  Wealth = N × W_0 + cumsum(R_eq)
+  R_t = Eq 4 trade return (contract-level, volatility-scaled)
+  R_port = (1/N) Σ R_i  (Eq 13, equal-weight portfolio)
+  All metrics computed on R_port directly.
 
-Metrics (per paper Section 4.4, "as suggested in [27]"):
-  1. E(R)     — mean(R) × 252
-  2. std(R)   — std(R) × √252
-  3. DD       — sqrt(mean(min(R,0)²)) × √252  [zero-target downside deviation]
+Metrics (paper-literal):
+  1. E(R)     — mean(R_port) × 252
+  2. std(R)   — std(R_port) × √252
+  3. DD       — std(R_port[R<0]) × √252  [paper: "annualised std of negative returns"]
   4. Sharpe   — E(R) / std(R)
   5. Sortino  — E(R) / DD
-  6. MDD      — max drawdown from additive wealth path
-  7. Calmar   — realised annual return / MDD
-  8. % +ve    — fraction of positive return days
+  6. MDD      — max drawdown from additive wealth = W₀ + cumsum(R_port)
+  7. Calmar   — E(R) / MDD
+  8. % +ve    — fraction of positive R_port days
   9. Ave P/L  — mean(R>0) / |mean(R<0)|
 
-Notes:
-  - DD uses zero-target LPM(2) per standard Sortino framework (MAR=0).
-    This is more orthodox than std(R[R<0]) per CFA guidance.
-  - Calmar uses realised_ann/MDD. While [27] says "compares expected annual return
-    with MDD", using E(R)/MDD with N×W0 init_wealth produces values 10x off paper.
-    realised_ann/MDD keeps numerator and denominator on the same wealth scale.
-  - MDD uses N×W_0 as init_wealth (empirically closest to paper values).
+NOTE: Paper's reported Calmar values are internally inconsistent with
+E(R)/MDD (e.g., Table 3 Equity Index Long: 0.504/0.127 ≠ 0.466).
+We use the paper-literal formula; matching the table exactly is not possible.
 """
 import numpy as np
-from config import TRADING_DAYS
 
-T = TRADING_DAYS
-W0 = 1.0  # initial wealth per contract
+TRADING_DAYS = 252
 
 METRIC_NAMES = [
     'E(R)', 'std(R)', 'DD', 'Sharpe', 'Sortino',
@@ -39,56 +35,45 @@ METRIC_NAMES = [
 ]
 
 
-def compute_metrics(R_eq, n_contracts, w0=1.0):
-    """Compute all 9 metrics from portfolio daily returns.
+def compute_metrics(R_port, _unused=None, w0=1.0):
+    """Compute all 9 metrics from portfolio daily returns (additive).
 
     Args:
-        R_eq:         1D array of equal-weight portfolio daily returns (additive)
-        n_contracts:  number of contracts in portfolio
-        w0:           initial wealth per contract
+        R_port:  1D array of equal-weight portfolio daily returns
+        _unused: ignored (kept for backward compat)
+        w0:      initial wealth for MDD calculation (default 1.0)
 
     Returns:
         list of 9 rounded values [E(R), std, DD, Sharpe, Sortino, MDD, Calmar, %+ve, AveP/L]
     """
-    R_eq = np.asarray(R_eq, dtype=float)
-    n_years = len(R_eq) / T
+    R = np.asarray(R_port, dtype=float)
+    R = R[np.isfinite(R)]
+    T = TRADING_DAYS
 
-    er = R_eq.mean() * T
-    std = R_eq.std(ddof=0) * np.sqrt(T)
+    # ── Tier A: core return & risk metrics ──
+    er = R.mean() * T
+    vol = R.std(ddof=0) * np.sqrt(T)
+    sharpe = er / vol if vol > 0 else 0.0
 
-    # DD: Downside Deviation per Paper Section 4.4 and [27]
-    # "annualised standard deviation of trade returns that are negative"
-    # This is NOT zero-target LPM(2), but std of negative returns only
-    neg_returns = R_eq[R_eq < 0]
-    if len(neg_returns) < 2:
-        dd = 0.0
-    else:
-        dd = np.std(neg_returns, ddof=0) * np.sqrt(T)
-
-    sharpe = er / std if std > 0 else 0.0
+    # DD: paper-literal "annualised standard deviation of trade returns that are negative"
+    neg = R[R < 0]
+    dd = neg.std(ddof=0) * np.sqrt(T) if len(neg) > 1 else 0.0
     sortino = er / dd if dd > 0 else 0.0
 
-    pct_pos = (R_eq > 0).mean()
+    # ── Tier B: distribution metrics ──
+    pos = R[R > 0]
+    pct_pos = len(pos) / len(R) if len(R) > 0 else 0.0
+    avg_pl = (pos.mean() / abs(neg.mean())) if len(pos) > 0 and len(neg) > 0 else 0.0
 
-    pos_r = R_eq[R_eq > 0]
-    neg_r = R_eq[R_eq < 0]
-    avg_pl = (
-        pos_r.mean() / abs(neg_r.mean())
-        if len(pos_r) > 0 and len(neg_r) > 0 else 0.0
-    )
-
-    # MDD: from additive wealth path with init_wealth = N × W_0
-    cumret = np.cumsum(R_eq)
-    wealth = n_contracts * w0 + cumret
+    # ── MDD: additive wealth path ──
+    # wealth = W₀ + cumsum(R_port); MDD = max((peak - wealth) / peak)
+    wealth = w0 + np.cumsum(R)
     peak = np.maximum.accumulate(wealth)
-    mdd = float(np.max((peak - wealth) / peak))
+    drawdown = (peak - wealth) / peak
+    mdd = float(np.nanmax(drawdown)) if len(drawdown) > 0 else 0.0
 
-    # Calmar: realised annual return / MDD
-    # Using realised_ann (not E(R)) so numerator scales with init_wealth like MDD.
-    # This empirically matches paper values; E(R)/MDD would be 10x off due to
-    # init_wealth scaling mismatch.
-    realised_ann = (wealth[-1] - wealth[0]) / wealth[0] / n_years
-    calmar = realised_ann / mdd if mdd > 0 else 0.0
+    # Calmar: paper-literal E(R) / MDD
+    calmar = er / mdd if mdd > 0 else 0.0
 
     return [round(v, 3) for v in
-            [er, std, dd, sharpe, sortino, mdd, calmar, pct_pos, avg_pl]]
+            [er, vol, dd, sharpe, sortino, mdd, calmar, pct_pos, avg_pl]]
