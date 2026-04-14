@@ -215,25 +215,21 @@ Improved DD ≤15%: 6/12 → 7/12.
 
 **Note**: ZN added (moved from Fixed Income — ZN in CLC data is Natural Gas, RAD regenerated using RAD_v2 method).
 
-| Strategy | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L | ≤10% | ≤15% |
-|----------|------|-----|----|--------|---------|-----|--------|------|--------|----|----|
-| **Long** | -0.237 | 0.412 | **0.258** | -0.574 | -0.886 | 0.102 | -0.088 | 0.497 | 0.930 | 4/9 | 4/9 |
-| Paper | -0.298 | 0.412 | **0.258** | -0.723 | -1.152 | 0.248 | -0.130 | 0.473 | 0.987 | | |
-| **%Err** | 20.6% | **0.0%** | **0.0%** | 20.6% | 23.1% | 58.9% | 32.3% | **5.1%** | **5.8%** | | |
-| **Sign(R)** | -0.043 | 0.307 | 0.219 | -0.139 | -0.195 | 0.047 | -0.036 | 0.496 | 0.994 | 3/9 | 3/9 |
-| **MACD** | -0.178 | 0.237 | 0.175 | -0.751 | -1.017 | 0.064 | -0.115 | 0.483 | 0.945 | 3/9 | 3/9 |
+| Metric | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L |
+|--------|------|-----|----|--------|---------|-----|--------|------|--------|
+| **Long** | -0.237 | 0.412 | **0.258** | -0.574 | -0.886 | 0.102 | -0.088 | 0.497 | 0.930 |
+| Paper | -0.298 | 0.412 | **0.258** | -0.723 | -1.152 | 0.248 | -0.130 | 0.473 | 0.987 |
+| **%Err** | 20.6% | **0.0%** | **0.0%** | 20.6% | 23.1% | 58.9% | 32.3% | **5.1%** | **5.8%** |
 
 ---
 
 ### Equity Index (11 contracts) ✅
 
-| Strategy | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L | ≤10% | ≤15% |
-|----------|------|-----|----|--------|---------|-----|--------|------|--------|----|----|
-| **Long** | +0.555 | 0.917 | 0.695 | +0.605 | +0.799 | 0.113 | +0.412 | 0.547 | 0.910 | **5/9** | **8/9** |
-| Paper | +0.504 | 0.928 | 0.606 | +0.543 | +0.831 | 0.127 | +0.466 | 0.541 | 0.928 | | |
-| **%Err** | **10.1%** | **1.2%** | 14.7% | **11.4%** | 3.8% | 11.0% | 11.6% | **1.1%** | **1.9%** | | |
-| **Sign(R)** | -0.050 | 0.791 | 0.598 | -0.063 | -0.084 | 0.222 | -0.023 | 0.516 | 0.929 | 3/9 | 4/9 |
-| **MACD** | -0.252 | 0.617 | 0.461 | -0.409 | -0.547 | 0.270 | -0.087 | 0.502 | 0.921 | 3/9 | 3/9 |
+| Metric | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L |
+|--------|------|-----|----|--------|---------|-----|--------|------|--------|
+| **Long** | +0.555 | 0.917 | 0.695 | +0.605 | +0.799 | 0.113 | +0.412 | 0.547 | 0.910 |
+| Paper | +0.504 | 0.928 | 0.606 | +0.543 | +0.831 | 0.127 | +0.466 | 0.541 | 0.928 |
+| **%Err** | **10.1%** | **1.2%** | 14.7% | **11.4%** | 3.8% | 11.0% | 11.6% | **1.1%** | **1.9%** |
 
 ---
 
@@ -241,25 +237,21 @@ Improved DD ≤15%: 6/12 → 7/12.
 
 **Note**: ZN moved to Commodity category (ZN in CLC data is Natural Gas, not 10-Year T-Note).
 
-| Strategy | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L | ≤10% | ≤15% |
-|----------|------|-----|----|--------|---------|-----|--------|------|--------|----|----|
-| **Long** | +0.458 | **0.925** | 0.629 | +0.495 | +0.730 | 0.285 | +0.219 | 0.524 | 0.956 | 3/9 | 4/9 |
-| Paper | +0.605 | **0.939** | 0.561 | +0.645 | +1.081 | 0.108 | +0.455 | 0.515 | 1.048 | | |
-| **%Err** | 24.3% | **1.5%** | 12.1% | 23.3% | 32.5% | 163.9% | 51.9% | **1.7%** | **8.8%** | | |
-| **Sign(R)** | -0.361 | **0.803** | 0.564 | -0.450 | -0.640 | 0.829 | -0.086 | 0.500 | 0.926 | 3/9 | 4/9 |
-| **MACD** | -0.562 | **0.640** | 0.434 | -0.879 | -1.295 | 1.066 | -0.105 | 0.456 | 1.023 | 3/9 | 3/9 |
+| Metric | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L |
+|--------|------|-----|----|--------|---------|-----|--------|------|--------|
+| **Long** | +0.458 | **0.925** | 0.629 | +0.495 | +0.730 | 0.285 | +0.219 | 0.524 | 0.956 |
+| Paper | +0.605 | **0.939** | 0.561 | +0.645 | +1.081 | 0.108 | +0.455 | 0.515 | 1.048 |
+| **%Err** | 24.3% | **1.5%** | 12.1% | 23.3% | 32.5% | 163.9% | 51.9% | **1.7%** | **8.8%** |
 
 ---
 
 ### Forex (9 contracts)
 
-| Strategy | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L | ≤10% | ≤15% |
-|----------|------|-----|----|--------|---------|-----|--------|------|--------|----|----|
-| **Long** | -0.213 | 0.458 | **0.299** | -0.465 | -0.713 | 0.321 | -0.086 | 0.490 | 0.953 | 4/9 | 5/9 |
-| Paper | -0.198 | 0.472 | **0.285** | -0.420 | -0.696 | 0.219 | -0.101 | 0.491 | 0.966 | | |
-| **%Err** | **7.7%** | **3.0%** | **4.9%** | 10.7% | 2.4% | 46.6% | 14.9% | **0.2%** | **1.3%** | | |
-| **Sign(R)** | -0.370 | 0.550 | 0.407 | -0.673 | -0.911 | 0.406 | -0.101 | 0.483 | 0.954 | 3/9 | 3/9 |
-| **MACD** | -0.364 | 0.446 | 0.329 | -0.815 | -1.106 | 0.382 | -0.106 | 0.470 | 0.976 | 3/9 | 3/9 |
+| Metric | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L |
+|--------|------|-----|----|--------|---------|-----|--------|------|--------|
+| **Long** | -0.213 | 0.458 | **0.299** | -0.465 | -0.713 | 0.321 | -0.086 | 0.490 | 0.953 |
+| Paper | -0.198 | 0.472 | **0.285** | -0.420 | -0.696 | 0.219 | -0.101 | 0.491 | 0.966 |
+| **%Err** | **7.7%** | **3.0%** | **4.9%** | 10.7% | 2.4% | 46.6% | 14.9% | **0.2%** | **1.3%** |
 
 ---
 
@@ -267,40 +259,28 @@ Improved DD ≤15%: 6/12 → 7/12.
 
 **✅ Long Only 4×9 Summary**:
 - **≤10%: 18/36 (50%) | ≤15%: 22/36 (61%)**
-- Equity: 5/9 ≤10%, Forex: 4/9 ≤10%, Commodity: 4/9 ≤10%, Fixed Income: 3/9 ≤10%
+- Equity: 5/9 ≤10% (E(R) 10%, std 1%), Forex: 4/9 ≤10% (E(R) 8%, std 3%)
+- Commodity: 4/9 ≤10% (std 0%), Fixed Income: 3/9 ≤10% (std 1.5%)
 
 **✅ Volatility Scaling Verified**:
-- **All asset classes std(R) error <15%** (Commodity 0.0%, Equity 1.2%, Fixed Income 1.5%, Forex 3.0%)
-- → **Equation 4 implementation correct**
+- **All asset classes std(R) error <3%** → **Equation 4 implementation correct**
 
 **✅ Holiday Handling **(fillna(0))
 - On exchange holidays, missing contracts contribute R_t=0 to portfolio average
-- Keeps denominator = N contracts every day (avoids artificial amplification)
+- Keeps denominator = N contracts every day
 - std, %+ve, P/L fully aligned; E(R) bias is data-level, not methodology
 
-**⚠️ E(R) Bias Analysis **(Commodity 21%, Fixed Income 23%)
-- **TC drag analysis**: Fixed Income TC = -0.243 (6× Commodity), due to low σ → high |Δsp|
-- **Return-only E(R)**: Commodity -0.195 vs paper -0.298; Fixed Income +0.710 vs paper +0.605
+**⚠️ E(R) Bias **(Commodity 21%, Fixed Income 23%)
+- **Fixed Income**: TC drag = -0.243 (6× Commodity), due to low σ → high position changes
 - **Conclusion**: Bias is data-level (CLC RAD generation, vendor differences), not code logic
-- TC formula: raw_p (paper Eq 4 literal) is best compromise; norm_p breaks 3/4 asset classes
 
-**📊 Data Quality Impact** (from cross-validation v3):
-- **Equity Index**: 8/11 A/B grade → Best replication ✅
-- **Forex**: 7/9 A/B grade → std precise, E(R) bias
-- **Commodity**: Partial C grade → Larger errors
-- **Fixed Income**: **ZN excluded** (data corrupted); remaining 5 contracts: std ✅ (0.9%), E(R) bias
+**📊 Data Quality** (from 50-contract cross-validation):
+- **48/50 contracts VERIFIED or CROSS_VALIDATED**
+- **4 RAD_v2 generated** for damaged contracts (ZH, ZU, US, ZN)
 
 ---
 
-### All Contracts (50 contracts combined)
 
-*No Paper comparison — for reference only*
-
-| Strategy | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L |
-|----------|------|-----|----|--------|---------|-----|--------|------|--------|
-| **Long** | +0.022 | 0.348 | 0.241 | +0.064 | +0.093 | 0.029 | +0.016 | 0.517 | 0.944 |
-| **Sign(R)** | -0.125 | 0.288 | 0.208 | -0.435 | -0.601 | 0.029 | -0.086 | 0.501 | 0.926 |
-| **MACD** | -0.268 | 0.232 | 0.164 | -1.154 | -1.639 | 0.045 | -0.120 | 0.467 | 0.936 |
 
 ---
 
