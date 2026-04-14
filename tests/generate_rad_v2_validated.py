@@ -39,7 +39,14 @@ def load(filepath):
 
 
 def detect_rolls_from_rev(non_df, rev_df):
-    """确定性 roll 检测：adj_change ≠ 0"""
+    """确定性 roll 检测：adj_change ≠ 0
+    
+    ratio 公式推导：
+      要让 RAD_ret = REV_ret，即 RAD[t]/RAD[t-1] = REV[t]/REV[t-1]
+      因为 RAD = NON × cum_ratio，所以:
+      (NON[t] × ratio) / NON[t-1] = REV[t] / REV[t-1]
+      ratio = (REV[t] × NON[t-1]) / (REV[t-1] × NON[t])
+    """
     merged = non_df[['Date', 'C']].merge(
         rev_df[['Date', 'C']], on='Date', suffixes=('_non', '_rev'))
     merged = merged.sort_values('Date').reset_index(drop=True)
@@ -52,14 +59,19 @@ def detect_rolls_from_rev(non_df, rev_df):
         if abs(ac) < 1e-10:
             continue
         roll_date = merged.loc[i - 1, 'Date']
-        prev_close = merged.loc[i - 1, 'C_non']
-        new_close = prev_close - ac
-        ratio = prev_close / new_close if new_close != 0 else 1.0
+        non_t_minus_1 = merged.loc[i - 1, 'C_non']
+        non_t = merged.loc[i, 'C_non']
+        rev_t_minus_1 = merged.loc[i - 1, 'C_rev']
+        rev_t = merged.loc[i, 'C_rev']
+        # 正确公式：ratio = (REV[t] × NON[t-1]) / (REV[t-1] × NON[t])
+        ratio = (rev_t * non_t_minus_1) / (rev_t_minus_1 * non_t) if (rev_t_minus_1 * non_t) != 0 else 1.0
         rolls.append({
             'idx': i - 1,
             'date': roll_date,
-            'prev': prev_close,
-            'new': new_close,
+            'non_t_minus_1': non_t_minus_1,
+            'non_t': non_t,
+            'rev_t_minus_1': rev_t_minus_1,
+            'rev_t': rev_t,
             'ratio': ratio,
             'adj_change': ac,
         })
@@ -78,8 +90,8 @@ def generate_rad(symbol):
     rolls.sort(key=lambda r: r['idx'])
 
     print(f'\n{symbol}: {len(rolls)} rolls detected')
-    print(f'  First roll: {rolls[0]["date"].date()} prev={rolls[0]["prev"]:.4f} new={rolls[0]["new"]:.4f} ratio={rolls[0]["ratio"]:.6f}')
-    print(f'  Last roll:  {rolls[-1]["date"].date()} prev={rolls[-1]["prev"]:.4f} new={rolls[-1]["new"]:.4f} ratio={rolls[-1]["ratio"]:.6f}')
+    print(f'  First roll: {rolls[0]["date"].date()} NON={rolls[0]["non_t_minus_1"]:.4f}→{rolls[0]["non_t"]:.4f} REV={rolls[0]["rev_t_minus_1"]:.4f}→{rolls[0]["rev_t"]:.4f} ratio={rolls[0]["ratio"]:.6f}')
+    print(f'  Last roll:  {rolls[-1]["date"].date()} NON={rolls[-1]["non_t_minus_1"]:.4f}→{rolls[-1]["non_t"]:.4f} REV={rolls[-1]["rev_t_minus_1"]:.4f}→{rolls[-1]["rev_t"]:.4f} ratio={rolls[-1]["ratio"]:.6f}')
 
     # Forward adjustment: cumulative ratio from earliest data
     # ZN 等月度换月合约从合理起点开始，减少累积误差
