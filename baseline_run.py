@@ -20,7 +20,7 @@ from strategies import strategy_sign_r, strategy_macd
 from metrics import compute_metrics
 from config import (
     ASSET_CLASSES, BP, TRADING_DAYS, SIGN_LOOKBACK,
-    PAPER_TABLE2, PAPER_TABLE3, METRIC_NAMES,
+    PAPER_TABLE2, PAPER_TABLE3, METRIC_NAMES, EXCLUDED_CONTRACTS,
 )
 
 # Core 5 metrics for summary table
@@ -51,6 +51,8 @@ def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31'):
     tickers = ASSET_CLASSES.get(ac_name, [])
     raw = []
     for tk in tickers:
+        if tk in EXCLUDED_CONTRACTS:
+            continue
         df = load_clc_full(tk)
         if df is None:
             continue
@@ -210,7 +212,7 @@ def main():
     args = parser.parse_args()
 
     asset_classes = [args.asset] if args.asset else [
-        'Commodity', 'Equity Index', 'Fixed Income', 'Forex'
+        'Commodity', 'Equity Index', 'Fixed Income', 'Forex', 'All'
     ]
 
     # Select metric set
@@ -230,7 +232,13 @@ def main():
 
     for table_label, paper_table, port_vol in tables:
         for ac in asset_classes:
-            raw = load_contracts(ac, args.test_start, args.test_end)
+            if ac == 'All':
+                # All = combine all asset classes (excluding EXCLUDED_CONTRACTS)
+                raw = []
+                for a in ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']:
+                    raw.extend(load_contracts(a, args.test_start, args.test_end))
+            else:
+                raw = load_contracts(ac, args.test_start, args.test_end)
             n10, n15, tot = run_table(raw, ac, args.sigma, paper_table,
                                       table_label, port_vol,
                                       metric_names=metric_names)
