@@ -28,7 +28,7 @@ CORE_METRICS = ['E(R)', 'std(R)', 'Sharpe', '% +ve', 'Ave P/L']
 CORE_METRIC_IDX = [METRIC_NAMES.index(n) for n in CORE_METRICS]
 
 # ─── Parameters ───────────────────────────────────────────────────
-DEFAULT_SIGMA_TGT = 0.063   # σ_tgt per contract [Paper Eq 4]
+DEFAULT_SIGMA_TGT = 0.0627   # σ_tgt per contract [Paper Eq 4]
 EWMA_SPAN = 60              # EWMA span for σ_t [Paper Section 3.2]
 T = TRADING_DAYS            # 252
 W0 = 1.0                    # Initial wealth per contract
