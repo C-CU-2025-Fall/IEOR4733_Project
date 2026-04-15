@@ -137,34 +137,33 @@ ASC = vendor roll records     REV = NON + cum_adj    (backward, for validation)
 
 ## Current Results
 
+> 以下结果由 `baseline_run.py` 生成，排除 5 合约 (LB/JO/ZO/ZH/CC)
+
 ### Table 3 — Long Only (per-contract vol scaling, Eq 4 only)
 
-**排除 5 合约方案** (LB/JO/ZO/ZH/CC，原因见下文 §Problem Contracts)
+**n10=17/25, n15=21/25** (5 核心指标 × 5 资产类别)
 
-| Asset Class | # | E(R) | Paper | std(R) | Paper | n10 | n15 |
-|-------------|---|------|-------|--------|-------|-----|-----|
-| Commodity | 20 | -0.281 | -0.298 | 0.434 | 0.412 | 4 | **5** |
-| Equity Index | 11 | +0.581 | +0.504 | 0.912 | 0.928 | 3 | 3 |
-| Fixed Income | 5 | +0.519 | +0.605 | 0.927 | 0.939 | 3 | **5** |
-| Forex | 9 | -0.216 | -0.198 | 0.461 | 0.472 | 4 | **5** |
-| **Total** | 45 | | | | | **14** | **18** |
+| Asset Class | # | E(R) | Paper | std(R) | Paper | Sharpe | Paper | %+ve | Paper | P/L | Paper | n10 | n15 |
+|-------------|---|------|-------|--------|-------|--------|-------|------|-------|-----|-------|-----|-----|
+| Commodity | 20 | -0.281 | -0.298 | 0.434 | 0.412 | -0.646 | -0.723 | 0.485 | 0.473 | 0.955 | 0.987 | 4 | **5** |
+| Equity Index | 11 | +0.581 | +0.504 | 0.912 | 0.928 | +0.637 | +0.543 | 0.548 | 0.541 | 0.921 | 0.928 | 3 | 3 |
+| Fixed Income | 5 | +0.519 | +0.605 | 0.927 | 0.939 | +0.560 | +0.645 | 0.529 | 0.515 | 0.976 | 1.048 | 3 | **5** |
+| Forex | 9 | -0.216 | -0.198 | 0.461 | 0.472 | -0.469 | -0.420 | 0.491 | 0.491 | 0.958 | 0.966 | 4 | **5** |
+| All | 45 | +0.052 | -0.013 | 0.370 | 0.363 | +0.141 | -0.036 | 0.529 | 0.519 | 0.911 | 0.919 | 3 | 3 |
 
-> n10/n15 = 5 个核心指标中误差 <10% / <15% 的个数
-
-**全 50 合约方案**：n10=13, n15=16
+> n10/n15 = 5 个核心指标中误差 <10% / <15% 的个数。All E(R)/Sharpe 百分比误差大是因为论文值≈0。
 
 ### Table 2 — Long Only (+ portfolio-level vol scaling → std≈0.97)
 
-**排除 5 合约方案**
+**n10=17/25, n15=19/25**
 
-| Asset Class | # | E(R) | Paper | std(R) | Paper | n10 | n15 |
-|-------------|---|------|-------|--------|-------|-----|-----|
-| Commodity | 20 | -0.626 | -0.710 | 0.970 | 0.979 | 3 | **5** |
-| Equity Index | 11 | +0.617 | +0.668 | 0.970 | 0.970 | **5** | **5** |
-| Fixed Income | 5 | +0.543 | +0.680 | 0.970 | 0.975 | 3 | 3 |
-| Forex | 9 | -0.455 | -0.344 | 0.970 | 0.973 | 3 | 3 |
-| All | 45 | +0.137 | +0.055 | 0.970 | 0.975 | 3 | 3 |
-| **Total** | | | | | | **17** | **19** |
+| Asset Class | # | E(R) | Paper | std(R) | Paper | Sharpe | Paper | %+ve | Paper | P/L | Paper | n10 | n15 |
+|-------------|---|------|-------|--------|-------|--------|-------|------|-------|-----|-------|-----|-----|
+| Commodity | 20 | -0.626 | -0.710 | 0.970 | 0.979 | -0.646 | -0.726 | 0.485 | 0.473 | 0.955 | 0.989 | 3 | **5** |
+| Equity Index | 11 | +0.617 | +0.668 | 0.970 | 0.970 | +0.637 | +0.688 | 0.548 | 0.542 | 0.921 | 0.948 | **5** | **5** |
+| Fixed Income | 5 | +0.543 | +0.680 | 0.970 | 0.975 | +0.560 | +0.698 | 0.529 | 0.515 | 0.976 | 1.054 | 3 | 3 |
+| Forex | 9 | -0.455 | -0.344 | 0.970 | 0.973 | -0.469 | -0.353 | 0.491 | 0.491 | 0.958 | 0.979 | 3 | 3 |
+| All | 45 | +0.137 | +0.055 | 0.970 | 0.975 | +0.141 | +0.058 | 0.529 | 0.520 | 0.911 | 0.933 | 3 | 3 |
 
 > Table 2 std 全部 ≤1%（portfolio vol scaling 强制对齐）。Equity 全 5/5 ✅
 
@@ -241,8 +240,9 @@ Rp = df.T.dropna().mean(axis=1)  # ← 不要用
 - [x] Data source comparison (NON/REV/RAD/YF/YF_RAD)
 - [x] TC formula verification
 - [x] p_0 normalization analysis
-- [x] Table 2 results
-- [ ] Fix MDD calculation (multiplicative wealth)
+- [x] Table 2 & Table 3 results (baseline_run.py)
+- [x] Exclude 5 contracts (LB/JO/ZO/ZH/CC)
+- [x] All portfolio row added
 - [ ] Run Sign(R) and MACD baselines
 - [ ] DQN training and comparison
 - [ ] Final presentation

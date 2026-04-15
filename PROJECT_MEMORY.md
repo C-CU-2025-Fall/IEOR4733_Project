@@ -120,6 +120,19 @@ CLC data files (data/CLC/):
 
 ### Tier C: Drawdown — 回撤层
 
+**核心问题：R_t 的量纲**
+
+Eq 4 输出的 R_t 是 **scaled price diff**（经过 σ_tgt/σ 缩放后的价格差），**不是 return rate**。
+- R_t ≈ (σ_tgt/σ) × (p_t - p_{t-1}) − TC
+- 量纲：价格单位/天（不是百分比）
+- 日均值 ~0.002，日 std ~0.057
+- 累积 wealth = 1 + cumsum(R) 可以变负
+
+这导致 MDD 公式 `(peak - wealth) / peak` 在 wealth < 0 时爆炸。
+- multiplicative 方法 `W = cumprod(1+R)` 也不对（R 不是 return rate，|R| 可能 >1）
+- 论文内部不一致：Table 3 Equity E(R)/MDD = 0.504/0.127 = 3.97 ≠ Calmar = 0.466
+- **结论：论文的 MDD 定义和我们的理解不同，可能是不同的 wealth 归一化或不同的公式**
+
 **6. MDD — 最大回撤** ⚠️ 已知问题
 - 当前实现: `wealth = 1 + cumsum(R)`, `MDD = max((peak-wealth)/peak)`
 - **对齐状态**: 全面失败（319%~1180% 误差）
@@ -259,28 +272,33 @@ CLC data files (data/CLC/):
 
 ## 8. 当前最优结果 (2026-04-15)
 
+**由 baseline_run.py 直接生成**，排除 5 合约 (EXCLUDED_CONTRACTS in config.py)
+
 ### Table 3 Long (排除5, 无dropna, σ_tgt=0.063)
 
-| Asset Class | # | E(R) | Paper | std(R) | Paper | n10 | n15 |
-|-------------|---|------|-------|--------|-------|-----|-----|
-| Commodity | 20 | -0.281 | -0.298 | 0.434 | 0.412 | 4 | **5** |
-| Equity Index | 11 | +0.581 | +0.504 | 0.912 | 0.928 | 3 | 3 |
-| Fixed Income | 5 | +0.519 | +0.605 | 0.927 | 0.939 | 3 | **5** |
-| Forex | 9 | -0.216 | -0.198 | 0.461 | 0.472 | 4 | **5** |
-| **Total** | 45 | | | | | **14** | **18** |
+**n10=17/25, n15=21/25**
 
-n10=14/20, n15=18/20 (Core 5: E(R), std, Sharpe, %+ve, P/L)
+| Asset Class | # | n10 | n15 | E(R) err | std err | Sharpe err | %+ve err | P/L err |
+|-------------|---|-----|-----|----------|---------|------------|----------|---------|
+| Commodity | 20 | 4 | **5** | 5.7% | 5.3% | 10.7% | 2.5% | 3.2% |
+| Equity Index | 11 | 3 | 3 | 15.3% | 1.7% | 17.3% | 1.3% | 0.8% |
+| Fixed Income | 5 | 3 | **5** | 14.2% | 1.3% | 13.2% | 2.7% | 6.9% |
+| Forex | 9 | 4 | **5** | 9.1% | 2.3% | 11.7% | 0.0% | 0.8% |
+| All | 45 | 3 | 3 | 500% | 1.9% | 492% | 1.9% | 0.9% |
 
-### Table 2 Long (排除5, 无dropna, σ_tgt=0.063, port_vol→0.97)
+> All E(R)/Sharpe 百分比误差大是因为论文值≈0，绝对差仅 0.065
 
-| Asset Class | n10 | n15 |
-|-------------|-----|-----|
-| Commodity | 3 | **5** |
-| Equity Index | **5** | **5** |
-| Fixed Income | 3 | 3 |
-| Forex | 3 | 3 |
-| All | 3 | 3 |
-| **Total** | **17** | **19** |
+### Table 2 Long (排除5, port_vol→0.97)
+
+**n10=17/25, n15=19/25**
+
+| Asset Class | n10 | n15 | E(R) err | std err |
+|-------------|-----|-----|----------|---------|
+| Commodity | 3 | **5** | 11.8% | 0.9% |
+| Equity Index | **5** | **5** | 7.6% | 0.0% |
+| Fixed Income | 3 | 3 | 20.1% | 0.5% |
+| Forex | 3 | 3 | 32.3% | 0.3% |
+| All | 3 | 3 | 149% | 0.5% |
 
 ### 指标对齐总结
 
