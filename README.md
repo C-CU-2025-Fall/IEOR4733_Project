@@ -137,7 +137,7 @@ ASC = vendor roll records     REV = NON + cum_adj    (backward, for validation)
 
 ## Current Results
 
-> 以下结果由 `baseline_run.py` 生成，排除 5 合约 (LB/JO/ZO/ZH/CC)
+> 以下结果由 `baseline_run.py` 生成，排除 5 合约 (LB/JO/ZO/CC/FB)
 
 ### Table 3 — Long Only (per-contract vol scaling, Eq 4 only)
 
@@ -242,7 +242,7 @@ Rp = df.T.dropna().mean(axis=1)  # ← 不要用
 - [x] TC formula verification
 - [x] p_0 normalization analysis
 - [x] Table 2 & Table 3 results (baseline_run.py)
-- [x] Exclude 5 contracts (LB/JO/ZO/ZH/CC)
+- [x] Exclude 5 contracts (LB/JO/ZO/CC/FB)
 - [x] All portfolio row added
 - [ ] Run Sign(R) and MACD baselines
 - [ ] DQN training and comparison
