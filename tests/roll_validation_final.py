@@ -101,6 +101,15 @@ def detect_rolls_from_rev(non_df, rev_df):
     return [r for r in rolls if TEST_START <= r['date'] <= TEST_END]
 
 
+# ── RAD_v2 检测 ──────────────────────────────────────────
+
+# RAD_v2 contracts: 4 damaged contracts where vendor RAD is all-zero, all-NaN, or incomplete
+# ZH: vendor RAD all-zero, ZU: vendor RAD all-zero
+# US: vendor RAD 99% NaN, ZN: vendor RAD only quarterly adjustments
+# RAD_v2 generated via correct ratio-adjustment algorithm (test_rad_algorithm.py)
+RAD_V2_CONTRACTS = ['ZH', 'ZU', 'US', 'ZN']
+
+
 # ── RAD 检测 ─────────────────────────────────────────────
 
 def detect_rolls_from_rad(non_df, rad_df):
@@ -178,10 +187,18 @@ def main():
             non_roll = test[test['adj_change'].abs() <= 1e-10]
             rev_noise_std = non_roll['adj_change'].std() if len(non_roll) > 0 else 0.0
 
-        # RAD
+        # RAD — use RAD_v2 for contracts with regenerated data
         rad_rolls = []
         rad_ok = False
-        if has_rad and has_non:
+        rad_source = 'vendor'
+        v2_f = DATA_DIR / f'{sym}_RAD_v2.CSV'
+        if sym in RAD_V2_CONTRACTS and v2_f.exists() and has_non:
+            rad_df = load(v2_f)
+            if rad_df['C'].abs().sum() > 0:
+                rad_ok = True
+                rad_source = 'v2'
+                rad_rolls = detect_rolls_from_rad(load(non_f), rad_df)
+        elif has_rad and has_non:
             rad_df = load(rad_f)
             if rad_df['C'].abs().sum() > 0:
                 rad_ok = True
@@ -242,14 +259,15 @@ def main():
             'asc_rev_err_pct': asc_rev_err,
             'asc_rad_err_pct': asc_rad_err,
             'rad_verdict': rad_verdict,
+            'rad_source': rad_source,
         })
 
     df = pd.DataFrame(results)
     df.to_csv(RESULTS_DIR / 'roll_validation_final.csv', index=False)
 
     # ── 打印结果 ──────────────────────────────────────────
-    print(f'\n{"Symbol":>4} | {"ASC":>4} {"REV":>4} {"RAD":>4} | {"noise_std":>12} | {"ASC→REV":>8} {"ASC→RAD":>8} | {"R-V":>4} | {"Verdict":>16}')
-    print('-' * 100)
+    print(f'\n{"Symbol":>4} | {"ASC":>4} {"REV":>4} {"RAD":>4} | {"Src":>6} | {"noise_std":>12} | {"ASC→REV":>8} {"ASC→RAD":>8} | {"R-V":>4} | {"Verdict":>16}')
+    print('-' * 110)
 
     for _, r in df.iterrows():
         asc_r = f'{r["asc_rev_err_pct"]}%' if r['asc_rev_err_pct'] is not None else '-'
@@ -257,8 +275,9 @@ def main():
         noise = f'{r["rev_noise_std"]:.1e}' if r['rev_noise_std'] is not None else '-'
         rv = str(r['rev_rad_match']) if r['n_rev'] and r['n_rad'] else '-'
         v = r['rad_verdict']
+        src = r['rad_source']
         marker = '✅' if v in ('VERIFIED', 'CROSS_VALIDATED') else '⚠️' if v == 'DEVIATED' else '❌'
-        print(f'{r["symbol"]:>4} | {r["n_asc"]:>4} {r["n_rev"]:>4} {r["n_rad"]:>4} | {noise:>12} | {asc_r:>8} {asc_d:>8} | {rv:>4} | {marker} {v}')
+        print(f'{r["symbol"]:>4} | {r["n_asc"]:>4} {r["n_rev"]:>4} {r["n_rad"]:>4} | {src:>6} | {noise:>12} | {asc_r:>8} {asc_d:>8} | {rv:>4} | {marker} {v}')
 
     # ── 汇总 ──────────────────────────────────────────────
     print(f'\n{"=" * 100}')

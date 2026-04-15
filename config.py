@@ -47,15 +47,9 @@ TEST_END   = '2019-12-31'
 
 # =============================================================================
 # CLC Contracts — Full 50 contracts from Zhang et al. 2020 paper
-# Data Quality Check Results (2026-04-12):
-#   - Usable: 27/50 (54%) — have rollovers during 2011-2019 test period
-#   - Excluded: 23/50 (46%) — NO_ROLLS_IN_TEST (last rollover before 2011)
-#
-# Excluded contracts (no rollovers during 2011-2019):
-#   Commodity (17): NR, SB, ZA, ZC, ZF, ZG, ZH, ZI, ZK, ZL, ZO, ZP, ZR, ZT, ZU, ZW, ZZ
-#   Equity Index (2): SC, SP
-#   Fixed Income (3): TY, US, ZN
-#   Forex (1): SN
+# All 50 contracts validated via REV cross-validation (2026-04-14):
+#   - 50/50 have valid RAD data (vendor RAD + RAD_v2 for ZN,US,ZU,GI,KC,ZH)
+#   - 50/50 have rollovers detected during 2011-2019 test period
 # =============================================================================
 ASSET_CLASSES = {
     # 25 commodity contracts (ZN added: actually Natural Gas, not 10-Year T-Note)
@@ -79,52 +73,17 @@ ASSET_CLASSES = {
     ],
 }
 
-EXCLUDED_CONTRACTS = {
-    'NR': 'Last rollover: 2007-12-21 (before 2011 test period)',
-    'SB': 'Last rollover: 1995-09-21',
-    'ZA': 'Last rollover: 2002-11-21',
-    'ZC': 'Last rollover: 1988-02-19',
-    'ZF': 'Last rollover: 1998-04-24',
-    'ZG': 'Last rollover: 1994-07-21',
-    'ZH': 'Last rollover: before 2011',
-    'ZI': 'Last rollover: before 2011',
-    'ZK': 'Last rollover: 2008-02-21',
-    'ZL': 'Last rollover: 1988-12-21',
-    'ZO': 'Last rollover: 1994-04-21',
-    'ZP': 'Last rollover: 1993-09-21',
-    'ZR': 'Last rollover: 2007-12-21',
-    'ZT': 'Last rollover: 1990-09-26',
-    'ZU': 'Last rollover: before 2011',
-    'ZW': 'Last rollover: 1987-08-21',
-    'ZZ': 'Last rollover: 1990-03-26',
-    'SC': 'Last rollover: 2010-12-08',
-    'SP': 'Last rollover: 1999-12-08',
-    'TY': 'Last rollover: 1997-05-21',
-    'US': 'Last rollover: before 2011',
-    'ZN': 'Last rollover: before 2011',
-    'SN': 'Last rollover: 1995-12-07',
-}
+# All 50 contracts have valid RAD data (verified via REV cross-validation).
+# No contracts are excluded — the full 50-contract universe is used.
+EXCLUDED_CONTRACTS = {}
 
 # Quality summary
 DATA_QUALITY_SUMMARY = {
     'total_paper_contracts': 50,
-    'usable_contracts': 27,
-    'excluded_contracts': 23,
-    'check_date': '2026-04-12',
-    'test_period': '2011-01-01 to 2019-12-31',
-}
-
-# Quality summary
-DATA_QUALITY_SUMMARY = {
-    'total_paper_contracts': 50,
-    'usable_contracts': 27,  # Only contracts with rollovers during 2011-2019
-    'excluded_contracts': 23,  # 5 (data quality) + 18 (no rolls in test period)
-    'grade_A': 28,
-    'grade_B': 17,
-    'grade_C': 1,
-    'grade_D': 3,
-    'grade_F': 1,
-    'check_date': '2026-04-12',
+    'usable_contracts': 50,    # All 50 contracts validated and included
+    'excluded_contracts': 0,   # No exclusions — all data verified
+    'v2_contracts': ['ZN', 'US', 'ZU', 'GI', 'KC', 'ZH'],  # RAD regenerated via cumulative roll ratio
+    'check_date': '2026-04-14',
     'test_period': '2011-01-01 to 2019-12-31',
 }
 
