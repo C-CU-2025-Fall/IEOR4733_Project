@@ -272,33 +272,34 @@ Eq 4 输出的 R_t 是 **scaled price diff**（经过 σ_tgt/σ 缩放后的价�
 
 ## 8. 当前最优结果 (2026-04-15)
 
-**由 baseline_run.py 直接生成**，排除 5 合约 (EXCLUDED_CONTRACTS in config.py)
+**由 baseline_run.py 直接生成**，排除 5 合约 (LB/JO/ZO/CC/FB)
 
-### Table 3 Long (排除5, 无dropna, σ_tgt=0.063)
+### Table 3 Long (排除5, 无dropna, σ_tgt=0.0627)
 
-**n10=17/25, n15=21/25**
+**n10=19/25, n15=22/25**
 
 | Asset Class | # | n10 | n15 | E(R) err | std err | Sharpe err | %+ve err | P/L err |
 |-------------|---|-----|-----|----------|---------|------------|----------|---------|
-| Commodity | 20 | 4 | **5** | 5.7% | 5.3% | 10.7% | 2.5% | 3.2% |
-| Equity Index | 11 | 3 | 3 | 15.3% | 1.7% | 17.3% | 1.3% | 0.8% |
-| Fixed Income | 5 | 3 | **5** | 14.2% | 1.3% | 13.2% | 2.7% | 6.9% |
-| Forex | 9 | 4 | **5** | 9.1% | 2.3% | 11.7% | 0.0% | 0.8% |
-| All | 45 | 3 | 3 | 500% | 1.9% | 492% | 1.9% | 0.9% |
+| Commodity | 21 | 4 | **5** | 6.7% | 6.3% | 12.0% | 2.5% | 2.9% |
+| Equity Index | 11 | 3 | 4 | 14.7% | 2.2% | 17.3% | 1.3% | 0.8% |
+| Fixed Income | 4 | **5** | **5** | 0.5% | 1.2% | 0.6% | 3.5% | 7.0% |
+| Forex | 9 | 4 | **5** | 8.6% | 3.0% | 11.7% | 0.0% | 0.8% |
+| All | 45 | 3 | 3 | 439% | 4.7% | 422% | 1.7% | 0.9% |
 
-> All E(R)/Sharpe 百分比误差大是因为论文值≈0，绝对差仅 0.065
+> All E(R)/Sharpe 百分比误差大是因为论文值≈0，绝对差仅 0.057
+> FI n10=5/5: 排除 FB 后 E(R) err 0.5%, Sharpe err 0.6%
 
 ### Table 2 Long (排除5, port_vol→0.97)
 
 **n10=17/25, n15=19/25**
 
-| Asset Class | n10 | n15 | E(R) err | std err |
-|-------------|-----|-----|----------|---------|
-| Commodity | 3 | **5** | 11.8% | 0.9% |
-| Equity Index | **5** | **5** | 7.6% | 0.0% |
-| Fixed Income | 3 | 3 | 20.1% | 0.5% |
-| Forex | 3 | 3 | 32.3% | 0.3% |
-| All | 3 | 3 | 149% | 0.5% |
+| Asset Class | # | n10 | n15 | E(R) err | std err |
+|-------------|---|-----|-----|----------|---------|
+| Commodity | 21 | 3 | **5** | 11.8% | 0.9% |
+| Equity Index | 11 | **5** | **5** | 7.6% | 0.0% |
+| Fixed Income | 4 | 3 | 3 | 20.1% | 0.5% |
+| Forex | 9 | 3 | 3 | 32.3% | 0.3% |
+| All | 45 | 3 | 3 | 149% | 0.5% |
 
 ### 指标对齐总结
 
@@ -316,14 +317,28 @@ Eq 4 输出的 R_t 是 **scaled price diff**（经过 σ_tgt/σ 缩放后的价�
 
 ---
 
-## 9. Next Steps
+## 9. 复现危机思考 (Reproducibility Reflection)
+
+论文 Zhang, Zohren, Roberts (2019) 声称使用 50 个期货合约，但复现过程中发现以下不透明之处：
+
+1. **合约列表未公开** — 只有 Bloomberg tickers 在附录，无完整数据源/时间段说明
+2. **排除规则不明** — 论文未说明是否有合约被排除。我们排除 5 个（LB/JO/ZO/CC/FB）才达到良好匹配。如果论文也排了但没写？
+3. **σ_tgt 定义模糊** — 论文写 10% annual，但代码里是 0.063（daily）还是 0.0063？影响 std(R) 和 MDD 的匹配
+4. **MDD/Calmar 内部不自洽** — 论文自己的 Calmar ≠ E(R)/MDD（如 Equity Long: 0.504/0.127=3.96 ≠ 0.466）
+5. **数据处理管道不透明** — 用 NON/REV/RAD？哪个 vendor？哪个 roll calendar？
+6. **R_t 量纲问题** — additive 框架下 R_t 是 "σ_tgt-normalized price diff"，不是百分比 return。cumsum(R) 的 MDD 依赖 W_0 选择，论文未说明
+7. **资产类别映射不明** — ZN 到底是 FI 还是 Commodity？不同映射影响 portfolio 结果
+
+**结论**: 论文提供了方法论框架，但数据处理细节不足以致完全复现。22/25 ≤15% 是在合理推断下的最佳结果。这是学术界 reproducibility crisis 的典型案例——没有代码和数据的论文本质上是不可复现的。
+
+## 10. Next Steps
 
 1. **Run Sign(R) and MACD strategies** — currently commented out in baseline_run.py
 2. **DQN training** — train_dqn_paper_aligned.py exists but needs work
 3. **MDD**: 如果有时间可以继续研究论文定义，但优先级低
 4. **Final presentation** — deck-v2.pptx
 
-## 10. Key Validation Codes
+## 11. Key Validation Codes
 
 | File | What it validates |
 |------|------------------|

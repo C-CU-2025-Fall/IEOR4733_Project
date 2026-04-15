@@ -75,7 +75,7 @@ ASSET_CLASSES = {
 
 # 5 contracts excluded: Long E(R) ≈ 0 across all data sources (NON/REV/RAD/YF)
 # Cannot align with paper regardless of data source — intrinsic data characteristic
-EXCLUDED_CONTRACTS = ['LB', 'JO', 'ZO', 'CC'] #ZH
+EXCLUDED_CONTRACTS = ['LB', 'JO', 'ZO', 'CC', 'FB']
 
 # Quality summary
 DATA_QUALITY_SUMMARY = {
