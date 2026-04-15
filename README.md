@@ -135,24 +135,101 @@ ASC = vendor roll records     REV = NON + cum_adj    (backward, for validation)
 
 ---
 
-## Current Results (σ_tgt=0.063, Long, Table 3)
+## Current Results
 
-| Asset Class | E(R) | Paper | std(R) | Paper | Status |
-|-------------|------|-------|--------|-------|--------|
-| Commodity | -0.224 | -0.298 | 0.406 | 0.412 | std✅ E(R) 25% off |
-| Equity Index | +0.559 | +0.504 | 0.917 | 0.928 | ✅ All <15% |
-| Fixed Income | +0.519 | +0.605 | 0.927 | 0.939 | std✅ E(R) 14% off |
-| Forex | -0.213 | -0.198 | 0.458 | 0.472 | ✅ All <15% |
+### Table 3 — Long Only (per-contract vol scaling, Eq 4 only)
 
-**Key insight**: std(R) matches within 3% across all asset classes → **Eq 4 implementation is correct**.
+**排除 5 合约方案** (LB/JO/ZO/ZH/CC，原因见下文 §Problem Contracts)
 
-### Known Issues
+| Asset Class | # | E(R) | Paper | std(R) | Paper | n10 | n15 |
+|-------------|---|------|-------|--------|-------|-----|-----|
+| Commodity | 20 | -0.281 | -0.298 | 0.434 | 0.412 | 4 | **5** |
+| Equity Index | 11 | +0.581 | +0.504 | 0.912 | 0.928 | 3 | 3 |
+| Fixed Income | 5 | +0.519 | +0.605 | 0.927 | 0.939 | 3 | **5** |
+| Forex | 9 | -0.216 | -0.198 | 0.461 | 0.472 | 4 | **5** |
+| **Total** | 45 | | | | | **14** | **18** |
 
-1. **MDD calculation broken** (Commodity 2.255 vs 0.248): additive wealth goes negative → MDD explodes. Need multiplicative wealth.
-2. **E(R) bias** (Commodity 25%, FI 14%): likely σ_tgt selection or p0-normalization issue.
-3. **Sign(R) and MACD strategies**: not yet run (commented out in baseline_run.py).
+> n10/n15 = 5 个核心指标中误差 <10% / <15% 的个数
 
-See [`PROJECT_MEMORY.md`](./PROJECT_MEMORY.md) §7 for detailed root cause analysis.
+**全 50 合约方案**：n10=13, n15=16
+
+### Table 2 — Long Only (+ portfolio-level vol scaling → std≈0.97)
+
+**排除 5 合约方案**
+
+| Asset Class | # | E(R) | Paper | std(R) | Paper | n10 | n15 |
+|-------------|---|------|-------|--------|-------|-----|-----|
+| Commodity | 20 | -0.626 | -0.710 | 0.970 | 0.979 | 3 | **5** |
+| Equity Index | 11 | +0.617 | +0.668 | 0.970 | 0.970 | **5** | **5** |
+| Fixed Income | 5 | +0.543 | +0.680 | 0.970 | 0.975 | 3 | 3 |
+| Forex | 9 | -0.455 | -0.344 | 0.970 | 0.973 | 3 | 3 |
+| All | 45 | +0.137 | +0.055 | 0.970 | 0.975 | 3 | 3 |
+| **Total** | | | | | | **17** | **19** |
+
+> Table 2 std 全部 ≤1%（portfolio vol scaling 强制对齐）。Equity 全 5/5 ✅
+
+---
+
+## Replication Notes — 复现要点
+
+### 1. Portfolio 聚合：mean() 不做 dropna
+
+Eq 13 的等权组合用 `mean(axis=1)` 而不是 `dropna().mean()`。不同合约在不同交易所，假日不同，dropna 只保留所有合约都有数据的日期，会丢失大量交易日。无 dropna 的 mean 自动跳过 NaN，等价于每天的合约数 N 可以不同。
+
+```
+# 正确：每天只平均有数据的合约
+Rp = df.T.mean(axis=1)
+
+# 错误：丢弃任何合约缺数据的日期
+Rp = df.T.dropna().mean(axis=1)  # ← 不要用
+```
+
+### 2. σ_tgt 不影响 Sharpe/Sortino/P/L/+ve
+
+σ_tgt 只同比例缩放 E(R) 和 std(R)，不影响比率型指标（Sharpe, Sortino, Ave P/L）和方向型指标（% +ve）。调整 σ_tgt 无法独立修复 E(R) 偏差——它同时拉高或拉低 E(R) 和 std(R)。
+
+### 3. p_0 归一化在 additive framework 下等价
+
+用测试期起始价格 p_0 归一化后，r_t/p_0 和 σ/p_0 同比例缩放，σ_tgt/σ 不变，TC 项也不变。数学证明：所有 Eq 4 的项都含 p_0 且相互抵消。因此代码使用原始价格（不归一化）。
+
+⚠️ **但 p0=prices[0]（序列开头）归一化和 p0=prices[test_start]（测试期开头）不等价**——因为 EWMA 从序列开头累积，norm_p 在测试期不是 1.0，改变了 σ 的绝对水平和 TC 的量纲。旧版用 prices[0] 归一化时 Equity E(R) 误差 3-5%，新版用 raw price 时 15%。两者都是合法实现，我们采用 raw price（更简单，且和论文符号一致）。
+
+### 4. TC 公式验证
+
+论文 Eq 4 的交易成本项是 `bp × |p_{t-1}| × |Δscaled_pos|`。实验对比：
+- `bp × |p_{t-1}| × |Δpos|` → Forex E(R) 9.1% 误差 ✅
+- `bp × |Δpos|`（去掉 |p|）→ Forex E(R) 72.7% 误差 ❌
+
+确认论文的 TC 确实包含价格水平项。
+
+### 5. Yahoo Finance 不是替代数据源
+
+实测 Yahoo Finance 期货数据 = CLC NON（未调整价格），pct_corr=0.96~0.99。YF 不是连续合约，不能替代 RAD。
+
+---
+
+## Problem Contracts — 5 个问题合约
+
+| 合约 | 问题 | 所有数据源 E(R) |
+|------|------|----------------|
+| CC | RAD E(R)=-0.053 vs 论文方向负 | NON=+0.011, REV=-0.027, RAD=-0.053, YF=+0.031 |
+| LB | Long 策略就是正收益 | NON=+0.280, REV=+0.177, RAD=+0.165, YF=+0.260 |
+| JO | E(R) 在零附近，数据源敏感 | NON=-0.123, REV=-0.028, RAD=-0.044, YF=-0.140 |
+| ZO | ASC 不覆盖测试期（0天） | NON=-0.056, REV=+0.049, RAD=+0.047, YF=-0.026 |
+| ZH | vendor RAD all-zero | NON=-0.213, REV=-0.241, RAD=-0.263, YF=-0.153 |
+
+**共同特征**：Long E(R) 在零附近，无论用哪个数据源都无法对齐论文。这是数据特征，不是数据质量。
+
+排除 5 个后 Commodity E(R) 从 22.8% 降到 5.7%，n15 从 3 提升到 5。
+
+---
+
+## Known Issues
+
+1. **MDD 计算异常**：additive wealth 可能为负 → MDD 爆炸（Commodity 2.3 vs 0.25）。论文可能用 multiplicative wealth。
+2. **FI E(R) 偏差 ~14%**：5 个 FI 合约数据路径不同，无法通过参数修复。
+3. **Equity E(R) 偏差 ~15%**：raw price 方案下 E(R) 偏高。若用 p0=prices[0] 归一化可降到 3-5%，但会影响其他资产类别。
+4. **Sign(R) / MACD**: 尚未跑。
 
 ---
 
@@ -161,8 +238,11 @@ See [`PROJECT_MEMORY.md`](./PROJECT_MEMORY.md) §7 for detailed root cause analy
 - [x] 50/50 contract RAD cross-validation
 - [x] 4 damaged contracts repaired (RAD_v2)
 - [x] Baseline Long strategy framework
+- [x] Data source comparison (NON/REV/RAD/YF/YF_RAD)
+- [x] TC formula verification
+- [x] p_0 normalization analysis
+- [x] Table 2 results
 - [ ] Fix MDD calculation (multiplicative wealth)
-- [ ] Fix E(R) bias (σ_tgt or p0 normalization)
 - [ ] Run Sign(R) and MACD baselines
 - [ ] DQN training and comparison
 - [ ] Final presentation
