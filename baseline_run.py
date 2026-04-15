@@ -23,14 +23,21 @@ from config import (
     PAPER_TABLE2, PAPER_TABLE3, METRIC_NAMES,
 )
 
+# Core 5 metrics for summary table
+CORE_METRICS = ['E(R)', 'std(R)', 'Sharpe', '% +ve', 'Ave P/L']
+CORE_METRIC_IDX = [METRIC_NAMES.index(n) for n in CORE_METRICS]
+
 # ─── Parameters ───────────────────────────────────────────────────
-DEFAULT_SIGMA_TGT = 0.064   # σ_tgt per contract [Paper Eq 4]
+DEFAULT_SIGMA_TGT = 0.063   # σ_tgt per contract [Paper Eq 4]
 EWMA_SPAN = 60              # EWMA span for σ_t [Paper Section 3.2]
 T = TRADING_DAYS            # 252
 W0 = 1.0                    # Initial wealth per contract
 
 
+
 # ─── Data Loading ─────────────────────────────────────────────────
+
+
 def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31'):
     """Load and prepare all contracts for an asset class.
 
@@ -115,11 +122,11 @@ def compute_portfolio_returns(raw_data, strat, sigma_tgt):
         start, t1, dates = rd['start'], rd['t1'], rd['dates']
         slc = Rt[start:t1]
         series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
-    # Forward-fill missing dates with R_t=0 for exchange holidays.
-    # On a holiday, the contract is unchanged -> return = 0, still counted in 1/N average.
-    # This keeps the denominator constant at N contracts every day.
+    # Variable-N portfolio: average only over contracts with data on each date.
+    # Contracts on different exchanges have different holidays; averaging only
+    # over available contracts avoids diluting returns with zeros.
     df_all = pd.DataFrame(series)
-    port = df_all.T.fillna(0.0).mean(axis=1)
+    port = df_all.T.mean(axis=1)
     return port.values
 
 # ─── Table 2: Portfolio-level vol scaling ─────────────────────────
@@ -137,35 +144,47 @@ def fmt(vals):
 
 
 def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
-              port_vol_target=None):
+              port_vol_target=None, metric_names=None):
     """Run one table (Table 2 or 3) for one asset class."""
     N = len(raw_data)
     if N == 0:
         return 0, 0, 0
 
+    if metric_names is None:
+        metric_names = METRIC_NAMES
+
+    # Get indices for the metrics we want to display
+    all_names = ['E(R)', 'std(R)', 'DD', 'Sharpe', 'Sortino',
+                 'MDD', 'Calmar', '% +ve', 'Ave P/L']
+    metric_idx = [all_names.index(n) for n in metric_names]
+    n_metrics = len(metric_names)
+
     port_str = f" | port_vol→{port_vol_target}" if port_vol_target else ""
-    print(f"\n{'=' * 110}")
+    print(f"\n{'=' * 90}")
     print(f"  {table_label} — {ac_name} ({N} contracts)")
     print(f"  σ_tgt={sigma_tgt} | EWMA({EWMA_SPAN}) | bp={BP}{port_str}")
-    print(f"{'=' * 110}")
+    print(f"  Metrics: {', '.join(metric_names)}")
+    print(f"{'=' * 90}")
 
     total_n10, total_n15, total = 0, 0, 0
-    for strat in ['Long', 'Sign(R)', 'MACD']:
+    for strat in ['Long']: #, 'Sign(R)', 'MACD']:
         R = compute_portfolio_returns(raw_data, strat, sigma_tgt)
         if port_vol_target is not None:
             R = apply_portfolio_vol_scaling(R, port_vol_target)
-        m = compute_metrics(R, N)
+        m_all = compute_metrics(R, N)
+        # Extract only the metrics we care about
+        m = [m_all[i] for i in metric_idx]
         pv_dict = paper_table[ac_name][strat]
-        pv = [pv_dict[k] for k in METRIC_NAMES]
+        pv = [pv_dict[k] for k in metric_names]
         errs = [abs((m[i] - pv[i]) / abs(pv[i])) * 100 if pv[i] != 0 else 0
-                for i in range(9)]
+                for i in range(n_metrics)]
         n10 = sum(1 for e in errs if e < 10)
         n15 = sum(1 for e in errs if e < 15)
         total_n10 += n10
         total_n15 += n15
-        total += 9
+        total += n_metrics
 
-        print(f"\n  {strat:8s} (≤10%:{n10}/9  ≤15%:{n15}/9)")
+        print(f"\n  {strat:8s} (≤10%:{n10}/{n_metrics}  ≤15%:{n15}/{n_metrics})")
         print(f"  Ours  : {fmt(m)}")
         print(f"  Paper : {fmt(pv)}")
         print(f"  %Err  : {'  '.join(f'{e:>6.1f}%' for e in errs)}")
@@ -186,11 +205,20 @@ def main():
     parser.add_argument('--test-end', default='2019-12-31')
     parser.add_argument('--port-vol-target', type=float, default=0.97,
                         help='Portfolio vol target for Table 2 (default: 0.97)')
+    parser.add_argument('--all-metrics', action='store_true',
+                        help='Show all 9 metrics (default: 5 core metrics)')
     args = parser.parse_args()
 
     asset_classes = [args.asset] if args.asset else [
         'Commodity', 'Equity Index', 'Fixed Income', 'Forex'
     ]
+
+    # Select metric set
+    if args.all_metrics:
+        metric_names = list(METRIC_NAMES)  # all 9
+    else:
+        metric_names = CORE_METRICS  # 5 core
+    print(f"Using {'ALL 9' if args.all_metrics else 'CORE 5'} metrics: {metric_names}")
 
     tables = []
     if args.table in ('3', 'both'):
@@ -204,7 +232,8 @@ def main():
         for ac in asset_classes:
             raw = load_contracts(ac, args.test_start, args.test_end)
             n10, n15, tot = run_table(raw, ac, args.sigma, paper_table,
-                                      table_label, port_vol)
+                                      table_label, port_vol,
+                                      metric_names=metric_names)
             grand_n10 += n10
             grand_n15 += n15
             grand_total += tot

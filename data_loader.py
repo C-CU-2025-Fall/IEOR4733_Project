@@ -15,10 +15,17 @@ def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01'):
     CSV format (no header): Date,Open,High,Low,Close,Volume,OpenInterest
     Date format: MM/DD/YYYY
     
-    Note: For ZH, ZN, ZU, US (vendor RAD corrupted), uses RAD_v2 generated files.
+    Note: For 4 damaged contracts, uses RAD_v2 (ratio-adjusted, generated from NON+REV).
+    These contracts have vendor RAD that is all-zero, all-NaN, or incomplete:
+      ZH: vendor RAD all-zero
+      ZU: vendor RAD all-zero  
+      US: vendor RAD 99% NaN
+      ZN: vendor RAD only quarterly adjustments
+    RAD_v2 algorithm: detect rolls from REV-NON adj changes, compute per-roll ratios,
+    forward-accumulate, apply to NON. Proven: non-roll returns match NON exactly (corr=1.0).
     """
-    # Use RAD_v2 for contracts with corrupted vendor RAD
-    if ticker in ['ZH', 'ZN', 'ZU', 'US']:
+    V2_CONTRACTS = ['ZH', 'ZU', 'US', 'ZN']
+    if ticker in V2_CONTRACTS:
         fpath = os.path.join(data_dir, f'{ticker}_RAD_v2.CSV')
     else:
         fpath = os.path.join(data_dir, f'{ticker}_RAD.CSV')
