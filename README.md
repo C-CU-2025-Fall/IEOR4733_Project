@@ -175,6 +175,37 @@ For the step-by-step iteration path from the older frontier to the current `34/4
 
 - [docs/table3_iteration_to_34.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/table3_iteration_to_34.md:1)
 
+### Latest Comparison Results
+
+The most useful direct comparison is:
+
+- old post-`JO` baseline: `aggregation=variable_n`, `sigma_tgt=0.0627`, no contract-level source override frontier yet
+- current frontier: `aggregation=variable_n`, `sigma_tgt=0.0600`, source-aware overrides active
+
+Full-9 score comparison:
+
+| Scenario | ≤10% | ≤15% |
+|---|---:|---:|
+| Old post-`JO` baseline | 24/45 | 29/45 |
+| Current source-aware frontier | 27/45 | 34/45 |
+
+Asset-level comparison:
+
+| Asset Class | Old E(R) | Current E(R) | Paper E(R) | Old Sharpe | Current Sharpe | Paper Sharpe |
+|---|---:|---:|---:|---:|---:|---:|
+| Commodity | -0.268 | -0.293 | -0.298 | -0.631 | -0.720 | -0.723 |
+| Equity Index | +0.578 | +0.536 | +0.504 | +0.637 | +0.617 | +0.543 |
+| Fixed Income | +0.602 | +0.576 | +0.605 | +0.649 | +0.649 | +0.645 |
+| Forex | -0.215 | -0.173 | -0.198 | -0.469 | -0.395 | -0.420 |
+| All | +0.043 | +0.029 | -0.013 | +0.114 | +0.082 | -0.036 |
+
+Interpretation:
+
+- Commodity is where the biggest real gain happened; the source-path fixes moved it from clearly off-target to nearly aligned.
+- Equity improved materially in `E(R)`, but still remains one of the main replication bottlenecks.
+- `All` improved, but it is still hard because the paper target is near zero.
+- Fixed Income stayed strong throughout; it was not the main place to search for gains.
+
 ---
 
 ## Replication Notes — 复现要点
