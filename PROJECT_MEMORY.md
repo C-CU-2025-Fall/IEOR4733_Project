@@ -1,5 +1,5 @@
 # PROJECT_MEMORY.md — AI Context Pickup File
-# > Last updated: 2026-04-15
+# > Last updated: 2026-04-15 (commit cba0625)
 # > Read this FIRST when starting a new session on this project
 
 ---
@@ -331,12 +331,89 @@ Eq 4 输出的 R_t 是 **scaled price diff**（经过 σ_tgt/σ 缩放后的价�
 
 **结论**: 论文提供了方法论框架，但数据处理细节不足以致完全复现。22/25 ≤15% 是在合理推断下的最佳结果。这是学术界 reproducibility crisis 的典型案例——没有代码和数据的论文本质上是不可复现的。
 
-## 10. Next Steps
+## 9. Current Results (2026-04-15, commit cba0625)
 
-1. **Run Sign(R) and MACD strategies** — currently commented out in baseline_run.py
-2. **DQN training** — train_dqn_paper_aligned.py exists but needs work
-3. **MDD**: 如果有时间可以继续研究论文定义，但优先级低
-4. **Final presentation** — deck-v2.pptx
+### Excluded Contracts: LB, ZO, CC, FB (46 contracts total)
+
+**2026-04-15 Update: JO added back to Commodity**
+
+Marginal contribution analysis (DD perspective):
+- Current (excl LB/JO/ZO/CC): DD=0.301, err=16.7% ❌
+- +JO (excl LB/ZO/CC): DD=0.290, err=**12.4%** ✅, n15=6/9
+- +LB (excl JO/ZO/CC): DD=0.291, err=12.9% ✅, E(R) worsens to 13.4%
+- +ALL: DD=0.277, err=7.4% ✅, but E(R) worsens to 23.2%
+
+**JO is the best candidate**: DD improves while E(R)/std/Sharpe remain acceptable.
+
+**Fixed Income**: Adding back FB improves DD (9.9%→7.1%) but worsens E(R) (0.5%→14.5%), keep excluded.
+
+### Table 3 — Long Only (per-contract vol scaling)
+
+**5 Core Metrics (n10=18/25, n15=22/25)**
+
+| AC | # | E(R) | std | Sharpe | %+ve | P/L | n10 | n15 |
+|----|---|------|-----|--------|------|-----|-----|-----|
+| Commodity | 22 | 10.1% | 3.2% ✅ | 12.7% ✅ | 3.2% ✅ | 4.2% ✅ | 3 | **5** |
+| Equity | 11 | 14.7% | 2.2% ✅ | 17.3% | 1.3% ✅ | 0.8% ✅ | 3 | 4 |
+| FI | 4 | 0.5% ✅ | 1.2% ✅ | 0.6% ✅ | 3.5% ✅ | 7.0% ✅ | **5** | **5** |
+| Forex | 9 | 8.6% ✅ | 3.0% ✅ | 11.7% | 0.0% ✅ | 0.8% ✅ | 4 | **5** |
+| All | 46 | 431% | 3.3% | 417% | 1.5% | 0.4% ✅ | 3 | 3 |
+
+**All 9 Metrics (n10=24/45, n15=29/45)**
+
+| AC | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | P/L | n10 | n15 |
+|----|------|-----|-----|--------|---------|-----|--------|------|-----|-----|-----|
+| Commodity | 10.1% | 3.2% ✅ | **12.4%** ✅ | 12.7% ✅ | 19.9% | 42.3% | 1345% | 3.2% ✅ | 4.2% ✅ | 3 | **6** |
+| Equity | 14.7% | 2.2% ✅ | 17.5% | 17.3% | 2.3% ✅ | **6.3%** ✅ | 942% | 1.3% ✅ | 0.8% ✅ | 5 | **6** |
+| FI | 0.5% ✅ | 1.2% ✅ | 10.0% ✅ | 0.6% ✅ | 9.6% ✅ | 109% | 486% | 3.5% ✅ | 7.0% ✅ | 7 | **7** |
+| Forex | 8.6% ✅ | 3.0% ✅ | 4.2% ✅ | 11.7% | 3.9% ✅ | 31.1% | 641% | 0.0% ✅ | 0.8% ✅ | 6 | **7** |
+| All | 431% | 3.3% | 16.1% | 417% | 381% | 16.2% | 15378% | 1.5% | 0.4% | 3 | 3 |
+
+### Key Changes in cba0625
+
+1. **JO added back to Commodity** (excluded: LB, ZO, CC, FB)
+   - Commodity DD: 16.7% → **12.4%** ✅
+   - Commodity n15: 5 → **6**
+
+2. **MDD uses W₀=N_contracts** (equal-weight: 1 per contract)
+   - Equity MDD: **6.3%** ✅
+   - All MDD: **16.2%** ✅
+   - Other AC MDD still misaligned (data-level differences)
+
+3. **Calmar remains broken** (486%-15378% errors)
+   - Paper's Calmar ≠ E(R)/MDD (internal inconsistency)
+   - MDD formula likely differs from our implementation
+   - **Recommendation: Accept MDD/Calmar as known limitations**
+
+### Table 2 — + Portfolio Vol Scaling
+
+**n10=23/45, n15=27/45** (all 9 metrics)
+
+| AC | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | P/L | n10 | n15 |
+|----|------|-----|-----|--------|---------|-----|--------|------|-----|-----|-----|
+| Commodity | 13.8% | 0.9% | 9.8% ✅ | 13.1% | 21.6% | 8.6% ✅ | 1266% | 3.2% ✅ | 4.3% | 5 | **7** |
+| Equity | 7.6% | 0.0% ✅ | 25.6% | 7.4% | 26.3% | 3.8% ✅ | 857% | 1.1% ✅ | 2.8% | 6 | 6 |
+| FI | 7.5% | 0.5% ✅ | 11.8% | 7.0% | 17.2% | 280% | 511% | 3.5% ✅ | 7.5% | 5 | 6 |
+| Forex | 32.3% | 0.3% ✅ | 7.9% ✅ | 32.9% | 22.5% | 35.9% | 715% | 0.0% ✅ | 2.1% | 4 | 4 |
+| All | 102% | 0.5% ✅ | 15.6% | 96.6% | 74% | 11.3% ✅ | 10646% | 1.3% | 1.9% | 3 | 4 |
+
+---
+
+## 10. Open Issues
+
+1. **Calmar ratio** — All ACs misaligned (486%-15378% errors). Paper's Calmar ≠ E(R)/MDD.
+2. **Equity DD** — 17.5% error, likely data-level differences.
+3. **All portfolio E(R)/Sharpe/Sortino** — Sign flip (ours positive, paper negative).
+4. **MDD formula** — Unclear if paper uses different wealth calculation or smoothing.
+
+---
+
+## 11. Next Steps
+
+1. ✅ Push cba0625 to `origin/basic-replication_2`
+2. ⏳ Run Sign(R) and MACD strategies (Table 2/3 Short, Long+Short)
+3. ⏳ DQN training and comparison
+4. ⏳ Prepare final presentation deck
 
 ## 11. Key Validation Codes
 
