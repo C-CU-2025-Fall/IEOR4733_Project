@@ -105,6 +105,12 @@ R_port = (1/N) × Σ R_i    (equal-weight)
 
 > ZN = 24HR NATL GAS (Natural Gas), not 10-Year T-Note.
 
+### Excluded Contracts (2026-04-15)
+
+**Current**: LB, ZO, CC, FB (4 contracts, 46 total)
+- **JO added back** to Commodity — improves DD from 16.7% → 12.4%
+- Previously excluded: LB/JO/ZO/CC (E(R)≈0 or wrong sign) + FB (FI drag)
+
 ---
 
 ## Data Validation
@@ -135,7 +141,7 @@ ASC = vendor roll records     REV = NON + cum_adj    (backward, for validation)
 
 ---
 
-## Current Results
+## Current Results (2026-04-16)
 
 > 当前 README 只保留 **最新 Table 3 frontier**。Table 2 仍然故意放在次要位置，等 Table 3 更接近 `40/45` 再重新整理。
 

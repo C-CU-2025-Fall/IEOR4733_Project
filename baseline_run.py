@@ -14,6 +14,7 @@ Usage:
 """
 import argparse
 from functools import lru_cache
+import os
 import numpy as np
 import pandas as pd
 from data_loader import load_clc_full
@@ -94,13 +95,16 @@ def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31',
 
 
 # ─── Eq 4: Trade Return ──────────────────────────────────────────
-def compute_contract_returns(rd, strat, sigma_tgt):
+def compute_contract_returns(rd, strat, sigma_tgt, detail=False):
     """Compute daily R_t for one contract using Paper Eq 4:
 
     R_t = A_{t-1} × (σ_tgt / σ_{t-1}) × r_t
         − bp × p_{t-1} × |(σ_tgt/σ_{t-1})×A_{t-1} − (σ_tgt/σ_{t-2})×A_{t-2}|
 
-    Returns full-length Rt array (slice to test period later).
+    Args:
+        detail: if True, return dict with Rt + position/scale/TC details
+    Returns:
+        Rt array (default), or dict with full diagnostic info (detail=True)
     """
     rt, sigma, prices = rd['rt'], rd['sigma'], rd['prices']
     n = len(rt)
@@ -114,13 +118,25 @@ def compute_contract_returns(rd, strat, sigma_tgt):
         pos = rd['macd_pos']
 
     Rt = np.zeros(n)
+    scaled_pos = np.zeros(n)   # A_{t-1} × σ_tgt/σ_{t-1}
+    gross_pnl = np.zeros(n)    # sp × r_t  (before TC)
+    tc_cost = np.zeros(n)      # bp × p_{t-1} × |Δscaled_pos|
+
     for t in range(1, n):
         if sigma[t - 1] > 0 and (t < 2 or sigma[t - 2] > 0):
             a_prev = pos[t - 1] if strat != 'Long' else 1.0
             a_prev2 = pos[t - 2] if strat != 'Long' else 1.0
             sp = a_prev * sigma_tgt / sigma[t - 1]
             spp = a_prev2 * sigma_tgt / sigma[t - 2] if t >= 2 else 0.0
-            Rt[t] = sp * rt[t] - BP * prices[t - 1] * abs(sp - spp)
+            scaled_pos[t] = sp
+            gross_pnl[t] = sp * rt[t]
+            tc_cost[t] = BP * prices[t - 1] * abs(sp - spp)
+            Rt[t] = gross_pnl[t] - tc_cost[t]
+
+    if detail:
+        return {'Rt': Rt, 'A_t': pos, 'scaled_pos': scaled_pos,
+                'gross_pnl': gross_pnl, 'tc_cost': tc_cost,
+                'sigma': sigma, 'prices': prices, 'rt': rt}
     return Rt
 
 
@@ -190,6 +206,7 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
         if port_vol_target is not None:
             R = apply_portfolio_vol_scaling(R, port_vol_target)
         m_all = compute_metrics(R, n_contracts=N)
+        m_all = compute_metrics(R, n_contracts=N)
         # Extract only the metrics we care about
         m = [m_all[i] for i in metric_idx]
         pv_dict = paper_table[ac_name][strat]
@@ -211,6 +228,65 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
 
 
 # ─── Main ─────────────────────────────────────────────────────────
+def run_diagnostics(raw_data, ac_name, sigma_tgt, test_start='2011-01-01', test_end='2019-12-31'):
+    """Output full portfolio diagnostic with per-contract positions.
+    Saves a CSV with daily scaled_pos, gross_pnl, tc_cost for each contract
+    plus portfolio-level R_port and cumsum.
+    """
+    all_details = {}
+    for rd in raw_data:
+        tk = rd['tk']
+        det = compute_contract_returns(rd, 'Long', sigma_tgt, detail=True)
+        start, t1, dates = rd['start'], rd['t1'], rd['dates']
+        slc = slice(start, t1)
+        df = pd.DataFrame({
+            f'{tk}_price': det['prices'][slc],
+            f'{tk}_rt': det['rt'][slc],
+            f'{tk}_sigma': det['sigma'][slc],
+            f'{tk}_scaled_pos': det['scaled_pos'][slc],
+            f'{tk}_gross_pnl': det['gross_pnl'][slc],
+            f'{tk}_tc': det['tc_cost'][slc],
+            f'{tk}_Rt': det['Rt'][slc],
+        }, index=dates[:t1 - start])
+        all_details[tk] = df
+
+    # Merge all contracts on date index
+    merged = pd.concat(all_details.values(), axis=1)
+
+    # Portfolio-level columns
+    rt_cols = [c for c in merged.columns if c.endswith('_Rt')]
+    pos_cols = [c for c in merged.columns if c.endswith('_scaled_pos')]
+    pnl_cols = [c for c in merged.columns if c.endswith('_gross_pnl')]
+    tc_cols = [c for c in merged.columns if c.endswith('_tc')]
+
+    merged['port_Rt'] = merged[rt_cols].mean(axis=1)
+    merged['port_gross_pnl'] = merged[pnl_cols].mean(axis=1)
+    merged['port_tc'] = merged[tc_cols].mean(axis=1)
+    merged['port_cumsum'] = merged['port_Rt'].cumsum()
+    merged['N_contracts'] = merged[rt_cols].notna().sum(axis=1)
+    # Per-contract mean stats
+    merged['mean_scaled_pos'] = merged[pos_cols].mean(axis=1)
+    merged['port_daily_std'] = merged['port_Rt'].rolling(60).std()
+
+    outdir = f'diagnostics/{ac_name.replace(" ", "_")}'
+    os.makedirs(outdir, exist_ok=True)
+    fname = f'{outdir}/portfolio_diagnostic_{sigma_tgt}.csv'
+    merged.to_csv(fname)
+    print(f'  → Saved {fname} ({len(merged)} rows × {len(merged.columns)} cols)')
+
+    # Summary
+    Rt = merged['port_Rt'].dropna().values
+    if len(Rt) > 100:
+        er = np.mean(Rt) * T
+        std = np.std(Rt) * np.sqrt(T)
+        print(f'  Summary: E(R)={er:+.3f}  std={std:.3f}  Sharpe={er/std:.3f}')
+        print(f'  Cumsum range: [{merged["port_cumsum"].min():.2f}, {merged["port_cumsum"].max():.2f}]')
+        print(f'  Mean scaled_pos: {merged["mean_scaled_pos"].mean():.4f}')
+        print(f'  Mean TC/contract: {merged["port_tc"].mean():.6f}')
+        print(f'  TC as % of gross: {abs(merged["port_tc"].mean()) / abs(merged["port_gross_pnl"].mean()) * 100:.2f}%')
+    return fname
+
+
 def main():
     parser = argparse.ArgumentParser(description='Baseline reproduction')
     parser.add_argument('--table', choices=['2', '3', 'both'], default='3',
@@ -225,6 +301,8 @@ def main():
                         help='Portfolio vol target for Table 2 (default: 0.97)')
     parser.add_argument('--all-metrics', action='store_true',
                         help='Show all 9 metrics (default: 5 core metrics)')
+    parser.add_argument('--diagnostic', action='store_true',
+                        help='Save full portfolio diagnostic CSV with positions')
     parser.add_argument('--aggregation', choices=['variable_n', 'dropna'],
                         default='variable_n',
                         help='Portfolio aggregation mode (default: variable_n)')
@@ -262,6 +340,8 @@ def main():
                                       table_label, port_vol,
                                       metric_names=metric_names,
                                       aggregation_mode=args.aggregation)
+            if args.diagnostic and port_vol is None:  # only Table 3
+                run_diagnostics(raw, ac, args.sigma, args.test_start, args.test_end)
             grand_n10 += n10
             grand_n15 += n15
             grand_total += tot
