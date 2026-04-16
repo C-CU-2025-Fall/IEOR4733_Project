@@ -19,7 +19,11 @@ import numpy as np
 import pandas as pd
 from data_loader import load_clc_full
 from strategies import strategy_sign_r, strategy_macd
-from metrics import compute_metrics
+from metrics import (
+    cagr_from_path,
+    compute_metrics,
+    max_drawdown_from_path,
+)
 from config import (
     ASSET_CLASSES, BP, TRADING_DAYS, SIGN_LOOKBACK,
     PAPER_TABLE2, PAPER_TABLE3, METRIC_NAMES, EXCLUDED_CONTRACTS,
@@ -31,10 +35,12 @@ CORE_METRICS = ['E(R)', 'std(R)', 'Sharpe', '% +ve', 'Ave P/L']
 CORE_METRIC_IDX = [METRIC_NAMES.index(n) for n in CORE_METRICS]
 
 # ─── Parameters ───────────────────────────────────────────────────
-DEFAULT_SIGMA_TGT = 0.0600   # Working frontier from source-override + sigma search
+DEFAULT_SIGMA_TGT = 0.0630   # Working frontier after adjusted-only MDD-first v4 re-search
 EWMA_SPAN = 60              # EWMA span for σ_t [Paper Section 3.2]
 T = TRADING_DAYS            # 252
 W0 = 1.0                    # Initial wealth per contract
+DEFAULT_REPORT_SOURCE = 'RISK_PRICE_SIGMA0'  # current split-world start: 7 trade metrics + risk/price t0 bridge for MDD/Calmar
+TRADE_CALMAR_MODE = 'wealth_cagr'
 
 
 
@@ -92,6 +98,48 @@ def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31',
         if prepared is not None:
             raw.append(prepared)
     return raw
+
+
+def compute_reporting_mdd_calmar_risk_price_sigma0(raw_data, sigma_tgt, strat='Long'):
+    """
+    Reporting-world bridge:
+
+    - keep Eq. 4 trade rewards R_i,t
+    - define sleeve initial capital as p_i,0 * sigma_tgt / sigma_i,0
+    - accumulate normalized sleeve wealth:
+          w_i,t = 1 + cumsum(R_i,t / C_i,0)
+    - equal-weight sleeve wealth paths into a portfolio path
+
+    This keeps the trade lane untouched while giving MDD/Calmar a portfolio
+    wealth object that uses both initial price and initial risk scale.
+    """
+    sleeve_paths = []
+    for rd in raw_data:
+        detail = compute_contract_returns(rd, strat, sigma_tgt, detail=True)
+        start, t1 = rd['start'], rd['t1']
+        Rt = detail['Rt'][start:t1]
+        prices = detail['prices'][start:t1]
+        sigma = detail['sigma'][start:t1]
+        if len(Rt) == 0 or len(prices) == 0 or len(sigma) == 0:
+            continue
+        p0 = float(prices[0])
+        sigma0 = float(sigma[0])
+        if not np.isfinite(p0) or not np.isfinite(sigma0) or sigma0 <= 0:
+            continue
+        capital0 = p0 * sigma_tgt / sigma0
+        if not np.isfinite(capital0) or capital0 <= 0:
+            continue
+        sleeve_paths.append(1.0 + np.cumsum(Rt / capital0))
+    if not sleeve_paths:
+        return None
+    min_len = min(len(path) for path in sleeve_paths)
+    if min_len == 0:
+        return None
+    port = np.column_stack([path[:min_len] for path in sleeve_paths]).mean(axis=1)
+    mdd = max_drawdown_from_path(port)
+    cagr = cagr_from_path(port)
+    calmar = cagr / mdd if mdd > 0 else 0.0
+    return round(mdd, 3), round(calmar, 3), min_len
 
 
 # ─── Eq 4: Trade Return ──────────────────────────────────────────
@@ -177,7 +225,10 @@ def fmt(vals):
 
 def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
               port_vol_target=None, metric_names=None,
-              aggregation_mode='variable_n'):
+              aggregation_mode='variable_n',
+              report_source=DEFAULT_REPORT_SOURCE,
+              test_start='2011-01-01',
+              test_end='2019-12-31'):
     """Run one table (Table 2 or 3) for one asset class."""
     N = len(raw_data)
     if N == 0:
@@ -193,9 +244,10 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
     n_metrics = len(metric_names)
 
     port_str = f" | port_vol→{port_vol_target}" if port_vol_target else ""
+    report_str = f" | report={report_source}" if report_source != 'trade' else ""
     print(f"\n{'=' * 90}")
     print(f"  {table_label} — {ac_name} ({N} contracts)")
-    print(f"  σ_tgt={sigma_tgt} | EWMA({EWMA_SPAN}) | bp={BP}{port_str}")
+    print(f"  σ_tgt={sigma_tgt} | EWMA({EWMA_SPAN}) | bp={BP}{port_str}{report_str}")
     print(f"  Metrics: {', '.join(metric_names)}")
     print(f"{'=' * 90}")
 
@@ -205,8 +257,17 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
                                       aggregation_mode=aggregation_mode)
         if port_vol_target is not None:
             R = apply_portfolio_vol_scaling(R, port_vol_target)
-        m_all = compute_metrics(R, n_contracts=N)
-        m_all = compute_metrics(R, n_contracts=N)
+        m_all = compute_metrics(R, n_contracts=N, calmar_mode=TRADE_CALMAR_MODE)
+        if report_source != 'trade':
+            reporting = compute_reporting_mdd_calmar_risk_price_sigma0(
+                raw_data,
+                sigma_tgt=sigma_tgt,
+                strat=strat,
+            )
+            if reporting is not None:
+                mdd_rep, calmar_rep, _ = reporting
+                m_all[all_names.index('MDD')] = mdd_rep
+                m_all[all_names.index('Calmar')] = calmar_rep
         # Extract only the metrics we care about
         m = [m_all[i] for i in metric_idx]
         pv_dict = paper_table[ac_name][strat]
@@ -306,6 +367,10 @@ def main():
     parser.add_argument('--aggregation', choices=['variable_n', 'dropna'],
                         default='variable_n',
                         help='Portfolio aggregation mode (default: variable_n)')
+    parser.add_argument('--report-source',
+                        choices=['trade', 'RISK_PRICE_SIGMA0'],
+                        default=DEFAULT_REPORT_SOURCE,
+                        help='Reporting source / bridge for MDD and Calmar only')
     args = parser.parse_args()
 
     asset_classes = [args.asset] if args.asset else [
@@ -339,7 +404,10 @@ def main():
             n10, n15, tot = run_table(raw, ac, args.sigma, paper_table,
                                       table_label, port_vol,
                                       metric_names=metric_names,
-                                      aggregation_mode=args.aggregation)
+                                      aggregation_mode=args.aggregation,
+                                      report_source=args.report_source,
+                                      test_start=args.test_start,
+                                      test_end=args.test_end)
             if args.diagnostic and port_vol is None:  # only Table 3
                 run_diagnostics(raw, ac, args.sigma, args.test_start, args.test_end)
             grand_n10 += n10

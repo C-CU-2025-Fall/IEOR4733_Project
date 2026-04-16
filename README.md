@@ -19,6 +19,18 @@ python baseline_run.py
 # Run Table 2 (+ portfolio-level vol scaling)
 python baseline_run.py --table 2
 
+# Reproduction reference run used in the current notes
+python baseline_run.py --table 3 --all-metrics --sigma 0.058
+
+# Pure trade-world reference for all 9 metrics
+python baseline_run.py --table 3 --all-metrics --sigma 0.058 --report-source trade
+
+# Current split-world start:
+# keep 7 trade metrics in Eq. 4 / Eq. 13 trade space,
+# report only MDD/Calmar from the risk-price-sigma0 sleeve-capital bridge
+python baseline_run.py --table 3 --all-metrics --sigma 0.058 \
+  --report-source RISK_PRICE_SIGMA0
+
 # Single asset class
 python baseline_run.py --asset Commodity --all-metrics
 
@@ -52,6 +64,27 @@ R_port = (1/N) × Σ R_i    (equal-weight)
 ### Table 2 vs Table 3
 - **Table 3**: Per-contract vol scaling (Eq 4) only
 - **Table 2**: Table 3 + portfolio-level vol scaling → target std ≈ 0.97
+- **Calmar reporting default**: additive-wealth CAGR / MDD for the trade world
+
+### Current Metric-World Interpretation
+
+- **Trade world**:
+  - `A_t` is the position signal / action
+  - Eq. 4 `R_t` is a **standardized additive trading reward**, not an equal-dollar return
+  - Eq. 13 averages those standardized rewards equally across contracts
+  - this is the home for:
+    - `E(R)`, `std(R)`, `DD`, `Sharpe`, `Sortino`, `% +ve`, `Ave P/L`
+- **Reporting world**:
+  - `MDD`, `Calmar`
+  - current start point uses sleeve initial capital
+    \[
+    C_{i,0} = p_{i,0}\times \sigma_{tgt}/\sigma_{i,0}
+    \]
+  - then
+    \[
+    w_{i,t}=1+\sum_{s \le t} R_{i,s}/C_{i,0}
+    \]
+  - and portfolio wealth is the equal-weight average of sleeve wealth paths
 
 ---
 
@@ -88,7 +121,8 @@ R_port = (1/N) × Σ R_i    (equal-weight)
 |-----------|-------|--------|
 | Transaction cost (bp) | 0.0020 | Paper Table 1 |
 | EWMA span | 60 | Paper Section 3.2 |
-| σ_tgt (per contract, current frontier) | 0.0600 | Current Table 3 working frontier |
+| σ_tgt (CLI default) | 0.0630 | Current live baseline default |
+| σ_tgt (current reference comparison) | 0.0580 | Current Table 3 reproduction reference |
 | Trading days/year | 252 | Standard |
 | Sign(R) lookback | 252 | Paper Eq 10 |
 | MACD pairs | (8,24),(16,48),(32,96) | Ref [4] |
@@ -105,11 +139,11 @@ R_port = (1/N) × Σ R_i    (equal-weight)
 
 > ZN = 24HR NATL GAS (Natural Gas), not 10-Year T-Note.
 
-### Excluded Contracts (2026-04-15)
+### Excluded Contracts (Current Live Baseline)
 
-**Current**: LB, ZO, CC, FB (4 contracts, 46 total)
-- **JO added back** to Commodity — improves DD from 16.7% → 12.4%
-- Previously excluded: LB/JO/ZO/CC (E(R)≈0 or wrong sign) + FB (FI drag)
+**Current**: `US` only
+- live baseline keeps `US` out for now because of RAD damage / repaired-series uncertainty
+- older exclusion frontiers are now treated as historical search states, not current doctrine
 
 ---
 
@@ -143,68 +177,68 @@ ASC = vendor roll records     REV = NON + cum_adj    (backward, for validation)
 
 ## Current Results (2026-04-16)
 
-> 当前 README 只保留 **最新 Table 3 frontier**。Table 2 仍然故意放在次要位置，等 Table 3 更接近 `40/45` 再重新整理。
+This README now keeps only the **live baseline state** and the current split-world start point. Older failed global reporting attempts are preserved in `PROJECT_MEMORY.md`, not here.
 
-### Table 3 — Long Only (per-contract vol scaling, Eq 4 only)
+### Live Table 3 Reference Run
 
-**Current full-9 score: `≤10%: 27/45`, `≤15%: 34/45`**
+Reference command:
 
-Current working setup:
+```bash
+python baseline_run.py --table 3 --all-metrics --sigma 0.058
+```
 
-- excluded contracts: `LB`, `ZO`, `CC`, `FB`
+Current live setup behind that run:
+
+- exclusions: none
 - aggregation: `variable_n`
-- `sigma_tgt = 0.0600`
-- source overrides: `27` contracts
+- `sigma_tgt = 0.058` for the reference comparison
+- live source overrides: `25`
+- default split:
+  - trade lane for `E(R), std(R), DD, Sharpe, Sortino, % +ve, Ave P/L`
+  - `RISK_PRICE_SIGMA0` reporting lane for `MDD, Calmar`
+- default `Calmar`: additive-wealth `CAGR / MDD`
+
+Current default full-9 score:
+
+- `<=10%: 25/45`
+- `<=15%: 34/45`
 
 | Asset Class | # | E(R) | Paper | Sharpe | Paper | DD | Paper | MDD | Paper | n10 | n15 |
-|-------------|---|------|-------|--------|-------|----|-------|-----|-------|-----|-----|
-| Commodity | 22 | -0.293 | -0.298 | -0.720 | -0.723 | 0.278 | 0.258 | 0.156 | 0.248 | 7 | 7 |
-| Equity Index | 11 | +0.536 | +0.504 | +0.617 | +0.543 | 0.682 | 0.606 | 0.112 | 0.127 | 5 | 8 |
-| Fixed Income | 4 | +0.576 | +0.605 | +0.649 | +0.645 | 0.590 | 0.561 | 0.214 | 0.108 | 7 | 7 |
-| Forex | 9 | -0.173 | -0.198 | -0.395 | -0.420 | 0.282 | 0.285 | 0.250 | 0.219 | 5 | 8 |
-| All | 46 | +0.029 | -0.013 | +0.082 | -0.036 | 0.254 | 0.230 | 0.029 | 0.037 | 3 | 4 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Commodity | 25 | -0.264 | -0.298 | -0.678 | -0.723 | 0.265 | 0.258 | 0.209 | 0.248 | 5 | 7 |
+| Equity Index | 11 | +0.523 | +0.504 | +0.623 | +0.543 | 0.659 | 0.606 | 0.144 | 0.127 | 6 | 8 |
+| Fixed Income | 5 | +0.478 | +0.605 | +0.560 | +0.645 | 0.556 | 0.561 | 0.123 | 0.108 | 4 | 6 |
+| Forex | 9 | -0.177 | -0.198 | -0.419 | -0.420 | 0.273 | 0.285 | 0.220 | 0.219 | 6 | 9 |
+| All | 50 | +0.033 | -0.013 | +0.098 | -0.036 | 0.236 | 0.230 | 0.121 | 0.037 | 4 | 4 |
 
-Notes:
+### Reporting-Lane Options
 
-- `E(R)` is still the main replication target.
-- Commodity is now nearly aligned after source-path fixes.
-- Equity and `All` remain the main blockers.
-- `Calmar` is still not used as a serious optimization target because the paper is internally inconsistent there.
+Useful commands:
 
-For the step-by-step iteration path from the older frontier to the current `34/45`, see:
+```bash
+# current start point
+python baseline_run.py --table 3 --all-metrics --sigma 0.058 --report-source RISK_PRICE_SIGMA0
 
-- [docs/table3_iteration_to_34.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/table3_iteration_to_34.md:1)
+# pure trade-world reference
+python baseline_run.py --table 3 --all-metrics --sigma 0.058 --report-source trade
 
-### Latest Comparison Results
+```
 
-The most useful direct comparison is:
+Current reading:
 
-- old post-`JO` baseline: `aggregation=variable_n`, `sigma_tgt=0.0627`, no contract-level source override frontier yet
-- current frontier: `aggregation=variable_n`, `sigma_tgt=0.0600`, source-aware overrides active
+- `RISK_PRICE_SIGMA0` is the first split-world bridge that improves the full Table 3 total cleanly:
+  - pure trade world: `24/45`, `33/45`
+  - `RISK_PRICE_SIGMA0`: `25/45`, `34/45`
+- it is still a starting point, not a solved endpoint
 
-Full-9 score comparison:
+### Current TODO
 
-| Scenario | ≤10% | ≤15% |
-|---|---:|---:|
-| Old post-`JO` baseline | 24/45 | 29/45 |
-| Current source-aware frontier | 27/45 | 34/45 |
-
-Asset-level comparison:
-
-| Asset Class | Old E(R) | Current E(R) | Paper E(R) | Old Sharpe | Current Sharpe | Paper Sharpe |
-|---|---:|---:|---:|---:|---:|---:|
-| Commodity | -0.268 | -0.293 | -0.298 | -0.631 | -0.720 | -0.723 |
-| Equity Index | +0.578 | +0.536 | +0.504 | +0.637 | +0.617 | +0.543 |
-| Fixed Income | +0.602 | +0.576 | +0.605 | +0.649 | +0.649 | +0.645 |
-| Forex | -0.215 | -0.173 | -0.198 | -0.469 | -0.395 | -0.420 |
-| All | +0.043 | +0.029 | -0.013 | +0.114 | +0.082 | -0.036 |
-
-Interpretation:
-
-- Commodity is where the biggest real gain happened; the source-path fixes moved it from clearly off-target to nearly aligned.
-- Equity improved materially in `E(R)`, but still remains one of the main replication bottlenecks.
-- `All` improved, but it is still hard because the paper target is near zero.
-- Fixed Income stayed strong throughout; it was not the main place to search for gains.
+- `Calmar` is still not convincingly recovered.
+- The new `RISK_PRICE_SIGMA0` bridge materially improves `MDD`, but `Calmar` still looks like a partially unresolved reporting-definition problem rather than a finished solution.
+- So the next search focus should be:
+  - keep the current split between trade metrics and reporting `MDD/Calmar`
+  - continue tuning the trade world from this start point
+  - separately re-audit the `Calmar` numerator/definition instead of treating it as solved
 
 ---
 

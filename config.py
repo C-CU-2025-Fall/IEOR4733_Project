@@ -73,33 +73,31 @@ ASSET_CLASSES = {
     ],
 }
 
-# Working exclusion set used by the current baseline / tuning scripts.
-# From this point on, the universe policy is "do not remove more contracts";
-# contracts can be added back if the metric / scaling understanding improves.
-EXCLUDED_CONTRACTS = ['LB', 'ZO', 'CC', 'FB']
+# Working exclusion set used by the current live baseline.
+# This should reflect only the currently active exclusion policy, not older
+# search frontiers preserved in notes/reports.
+EXCLUDED_CONTRACTS = [] #['FB','US'] TBD
 
 # Active per-contract source overrides for the current Table 3 working frontier.
-# Rationale: vendor RAD appears to overstate E(R) on several included contracts;
-# these overrides use REV or regenerated RAD where the generated comparison
-# reports show better paper alignment without shrinking the universe.
+# This is the adjusted-only v4 map after the MDD-first reopen search. Overrides
+# are kept only where the generated comparisons still justify them under the
+# active bridge world and the no-NON source constraint.
 SOURCE_OVERRIDES = {
     'DA': 'RAD_REGEN',
     'EN': 'REV',
-    'ER': 'REV',
     'ES': 'REV',
     'GI': 'RAD_REGEN',
-    'JN': 'RAD_REGEN',
     'JO': 'REV',
-    'KC': 'REV',
+    'JN': 'REV',
+    'SN': 'REV',
     'KW': 'REV',
-    'MD': 'RAD_REGEN',
+    'LB': 'REV',
+    'CC': 'REV',
     'MP': 'RAD_REGEN',
     'NK': 'RAD_REGEN',
     'SC': 'RAD_REGEN',
     'SP': 'RAD_REGEN',
-    'YM': 'RAD_REGEN',
     'ZA': 'RAD_REGEN',
-    'ZC': 'REV',
     'ZF': 'REV',
     'ZG': 'RAD_REGEN',
     'ZH': 'REV',
@@ -112,14 +110,14 @@ SOURCE_OVERRIDES = {
     'ZW': 'REV',
 }
 
-# Quality summary
+# Quality summary for the current live baseline config
 DATA_QUALITY_SUMMARY = {
     'total_paper_contracts': 50,
-    'usable_contracts': 46,    # 50 - 4 excluded
-    'excluded_contracts': 4,   # LB/ZO/CC/FB
+    'usable_contracts': 50,
+    'excluded_contracts': 0,
     'v2_contracts': ['ZN', 'US', 'ZU', 'GI', 'KC', 'ZH'],  # RAD regenerated via cumulative roll ratio
     'source_overrides': len(SOURCE_OVERRIDES),
-    'check_date': '2026-04-14',
+    'check_date': '2026-04-16',
     'test_period': '2011-01-01 to 2019-12-31',
 }
 
