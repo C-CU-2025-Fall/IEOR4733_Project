@@ -1,6 +1,150 @@
 # PROJECT_MEMORY.md — AI Context Pickup File
-# > Last updated: 2026-04-15 (commit cba0625)
+# > Last updated: 2026-04-16
 # > Read this FIRST when starting a new session on this project
+
+---
+
+## 0. Latest Condensed Update (2026-04-16)
+
+This file had accumulated too many search logs. The repo has been condensed so the core retained changes from the latest MDD / Calmar work are:
+
+1. **`baseline_run.py` now supports a separate reporting lane for `MDD` / `Calmar`, and the current preferred bridge is `RISK_PRICE_SIGMA0`.**
+   Use:
+   - `--report-source RISK_PRICE_SIGMA0` for the current split-world start
+   - `--report-source trade` for the pure trade-return all-9 reference
+   - the baseline CLI is intentionally lean again; older experimental reporting branches are no longer part of the active runtime surface
+
+2. **Current interpretation is now explicit.**
+   - Eq. 4 `R_t` is a standardized additive trading reward, not an equal-dollar return
+   - Eq. 13 averages those standardized rewards equally across contracts
+   - trade world:
+     - `E(R), std(R), DD, Sharpe, Sortino, % +ve, Ave P/L`
+   - reporting world:
+     - `MDD, Calmar`
+
+3. **Current reporting bridge.**
+   For each contract sleeve:
+   - `C_i,0 = p_i,0 × sigma_tgt / sigma_i,0`
+   - `w_i,t = 1 + cumsum(R_i,t / C_i,0)`
+   - portfolio wealth = equal-weight average of sleeve wealth paths
+
+4. **Core reusable helpers retained in code.**
+   - `cagr_from_path` and `max_drawdown_from_path` in `metrics.py`
+   - the active reporting helper now lives directly in `baseline_run.py` as the `RISK_PRICE_SIGMA0` sleeve-capital bridge
+
+5. **Exploratory search scripts and generated markdown reports from this branch were intentionally removed.**
+   The point is to keep the repo centered on the live baseline plus the reusable reporting framework. If a search is needed again, rerun it locally from the core helpers instead of preserving every intermediate artifact.
+
+### Current Live Table 3 Reference
+
+Reference command:
+
+```bash
+python baseline_run.py --table 3 --all-metrics --sigma 0.058
+```
+
+Current live baseline under that reference run:
+
+- exclusions: none
+- source overrides: `25`
+- default report source: `RISK_PRICE_SIGMA0`
+- reference score:
+  - `<=10%: 25/45`
+  - `<=15%: 34/45`
+
+Per-asset summary under the reference run:
+
+| Asset | E(R) | std(R) | DD | Sharpe | Sortino | MDD | Calmar | % +ve | Ave P/L | n10 | n15 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Commodity | -0.264 | 0.389 | 0.265 | -0.678 | -0.993 | 0.209 | -0.228 | 0.489 | 0.937 | 5 | 7 |
+| Equity Index | +0.523 | 0.839 | 0.659 | +0.623 | +0.794 | 0.144 | 0.317 | 0.547 | 0.922 | 6 | 8 |
+| Fixed Income | +0.478 | 0.854 | 0.556 | +0.560 | +0.860 | 0.123 | 0.266 | 0.529 | 0.976 | 4 | 6 |
+| Forex | -0.177 | 0.423 | 0.273 | -0.419 | -0.650 | 0.220 | -0.089 | 0.490 | 0.971 | 6 | 9 |
+| All | +0.033 | 0.336 | 0.236 | +0.098 | +0.139 | 0.121 | -0.037 | 0.521 | 0.933 | 4 | 4 |
+
+### Two-World Reporting Status
+
+Pure trade-world reference:
+
+```bash
+python baseline_run.py --table 3 --all-metrics --sigma 0.058 --report-source trade
+```
+
+Pure trade-world score:
+
+- `<=10%: 24/45`
+- `<=15%: 33/45`
+
+Current split-world start:
+
+```bash
+python baseline_run.py --table 3 --all-metrics --sigma 0.058 \
+  --report-source RISK_PRICE_SIGMA0
+```
+
+Interpretation:
+
+- trade metrics stay in the Eq. 4 / Eq. 13 world:
+  - `E(R), std(R), DD, Sharpe, Sortino, % +ve, Ave P/L`
+- only `MDD` and `Calmar` switch to the sleeve-capital reporting lane
+
+Current result on the **live current contract sets**:
+
+- `<=10%: 25/45`
+- `<=15%: 34/45`
+
+This is now the promoted start point because it is the first split-world bridge that:
+
+- is explainable from price and initial risk scale,
+- improves the full Table 3 score over pure trade world,
+- and does not produce the pathological `MDD/Calmar` explosions seen in the earlier `WINDOW_FWD` global attempt.
+
+What it did establish cleanly:
+
+- the paper still looks like a **split-world** setup
+- `RISK_PRICE_SIGMA0` is a better global reporting bridge than the older `WINDOW_FWD` attempt
+
+### Key Fixed Income Takeaway
+
+When the same FI subset is enforced across both worlds, the strongest row found was:
+
+- subset: `DT,TY,US`
+- trade source: `RAD` or `REV`
+- reporting source: `WINDOW_FWD` or `RAD_REGEN`
+
+That row is approximately:
+
+- `E(R)=0.578`
+- `std(R)=0.877`
+- `DD=0.571`
+- `Sharpe=0.659`
+- `Sortino=1.012`
+- `MDD=0.093`
+- `Calmar=0.460`
+- `% +ve=0.533`
+- `Ave P/L=0.974`
+
+Against paper FI:
+
+- `0.605, 0.939, 0.561, 0.645, 1.081, 0.108, 0.455, 0.515, 1.048`
+
+This is still an important FI-specific result, but it is no longer the main promoted global start point.
+
+### Historical Failure Worth Remembering
+
+The repo briefly used `WINDOW_FWD` as a global reporting default. That attempt was wrong as a start point because:
+
+- it mixed trade-lane source overrides with a separate reporting construction
+- some asset classes produced nonsensical `MDD/Calmar` outputs, including huge Calmar values for Commodity and `All`
+- it improved some local FI intuitions, but failed as a coherent global baseline
+
+Keep this failure in mind when presenting:
+- it was a useful diagnostic
+- it was not a valid final search baseline
+
+### Historical Note
+
+Older sections below are preserved as historical reasoning logs. They may mention frontiers, exclusions, or generated files that are **not** the current live baseline anymore. For the current repo state, trust this Section 0 first.
 
 ---
 
