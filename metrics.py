@@ -35,13 +35,13 @@ METRIC_NAMES = [
 ]
 
 
-def compute_metrics(R_port, _unused=None, w0=1.0):
+def compute_metrics(R_port, N_contracts=None, w0=None):
     """Compute all 9 metrics from portfolio daily returns (additive).
 
     Args:
-        R_port:  1D array of equal-weight portfolio daily returns
-        _unused: ignored (kept for backward compat)
-        w0:      initial wealth for MDD calculation (default 1.0)
+        R_port:      1D array of equal-weight portfolio daily returns
+        N_contracts: number of contracts in portfolio (used for MDD: W₀=N)
+        w0:          override initial wealth for MDD (if set, ignores N_contracts)
 
     Returns:
         list of 9 rounded values [E(R), std, DD, Sharpe, Sortino, MDD, Calmar, %+ve, AveP/L]
@@ -66,8 +66,14 @@ def compute_metrics(R_port, _unused=None, w0=1.0):
     avg_pl = (pos.mean() / abs(neg.mean())) if len(pos) > 0 and len(neg) > 0 else 0.0
 
     # ── MDD: additive wealth path ──
-    # wealth = W₀ + cumsum(R_port); MDD = max((peak - wealth) / peak)
-    wealth = w0 + np.cumsum(R)
+    # Equal-weight: each contract gets W₀=1, portfolio W₀=N
+    if w0 is not None:
+        W0 = w0
+    elif N_contracts is not None:
+        W0 = float(N_contracts)
+    else:
+        W0 = 1.0
+    wealth = W0 + np.cumsum(R)
     peak = np.maximum.accumulate(wealth)
     drawdown = (peak - wealth) / peak
     mdd = float(np.nanmax(drawdown)) if len(drawdown) > 0 else 0.0
