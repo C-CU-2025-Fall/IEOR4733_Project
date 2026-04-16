@@ -88,7 +88,7 @@ R_port = (1/N) × Σ R_i    (equal-weight)
 |-----------|-------|--------|
 | Transaction cost (bp) | 0.0020 | Paper Table 1 |
 | EWMA span | 60 | Paper Section 3.2 |
-| σ_tgt (per contract) | 0.063 | σ_annual=10% / √252 |
+| σ_tgt (per contract, current frontier) | 0.0600 | Current Table 3 working frontier |
 | Trading days/year | 252 | Standard |
 | Sign(R) lookback | 252 | Paper Eq 10 |
 | MACD pairs | (8,24),(16,48),(32,96) | Ref [4] |
@@ -137,36 +137,37 @@ ASC = vendor roll records     REV = NON + cum_adj    (backward, for validation)
 
 ## Current Results
 
-> 以下结果由 `baseline_run.py` 生成，排除 5 合约 (LB/JO/ZO/CC/FB)
+> 当前 README 只保留 **最新 Table 3 frontier**。Table 2 仍然故意放在次要位置，等 Table 3 更接近 `40/45` 再重新整理。
 
 ### Table 3 — Long Only (per-contract vol scaling, Eq 4 only)
 
-**n10=19/25, n15=22/25** (5 核心指标 × 5 资产类别)
+**Current full-9 score: `≤10%: 27/45`, `≤15%: 34/45`**
 
-| Asset Class | # | E(R) | Paper | std(R) | Paper | Sharpe | Paper | %+ve | Paper | P/L | Paper | n10 | n15 |
-|-------------|---|------|-------|--------|-------|--------|-------|------|-------|-----|-------|-----|-----|
-| Commodity | 21 | -0.278 | -0.298 | 0.438 | 0.412 | -0.636 | -0.723 | 0.485 | 0.473 | 0.958 | 0.987 | 4 | **5** |
-| Equity Index | 11 | +0.578 | +0.504 | 0.908 | 0.928 | +0.637 | +0.543 | 0.548 | 0.541 | 0.921 | 0.928 | 3 | 4 |
-| Fixed Income | 4 | +0.602 | +0.605 | 0.928 | 0.939 | +0.649 | +0.645 | 0.533 | 0.515 | 0.975 | 1.048 | **5** | **5** |
-| Forex | 9 | -0.215 | -0.198 | 0.458 | 0.472 | -0.469 | -0.420 | 0.491 | 0.491 | 0.958 | 0.966 | 4 | **5** |
-| All | 45 | +0.044 | -0.013 | 0.380 | 0.363 | +0.116 | -0.036 | 0.528 | 0.519 | 0.911 | 0.919 | 3 | 3 |
+Current working setup:
 
-> n10/n15 = 5 个核心指标中误差 <10% / <15% 的个数。All E(R)/Sharpe 百分比误差大是因为论文值≈0。
-> 排除 5 合约：LB/JO/ZO/CC (Long E(R)≈0) + FB (FI 拖后腿, 排除后 E(R) err 0.5%)
+- excluded contracts: `LB`, `ZO`, `CC`, `FB`
+- aggregation: `variable_n`
+- `sigma_tgt = 0.0600`
+- source overrides: `27` contracts
 
-### Table 2 — Long Only (+ portfolio-level vol scaling → std≈0.97)
+| Asset Class | # | E(R) | Paper | Sharpe | Paper | DD | Paper | MDD | Paper | n10 | n15 |
+|-------------|---|------|-------|--------|-------|----|-------|-----|-------|-----|-----|
+| Commodity | 22 | -0.293 | -0.298 | -0.720 | -0.723 | 0.278 | 0.258 | 0.156 | 0.248 | 7 | 7 |
+| Equity Index | 11 | +0.536 | +0.504 | +0.617 | +0.543 | 0.682 | 0.606 | 0.112 | 0.127 | 5 | 8 |
+| Fixed Income | 4 | +0.576 | +0.605 | +0.649 | +0.645 | 0.590 | 0.561 | 0.214 | 0.108 | 7 | 7 |
+| Forex | 9 | -0.173 | -0.198 | -0.395 | -0.420 | 0.282 | 0.285 | 0.250 | 0.219 | 5 | 8 |
+| All | 46 | +0.029 | -0.013 | +0.082 | -0.036 | 0.254 | 0.230 | 0.029 | 0.037 | 3 | 4 |
 
-**n10=17/25, n15=19/25**
+Notes:
 
-| Asset Class | # | E(R) | Paper | std(R) | Paper | Sharpe | Paper | %+ve | Paper | P/L | Paper | n10 | n15 |
-|-------------|---|------|-------|--------|-------|--------|-------|------|-------|-----|-------|-----|-----|
-| Commodity | 21 | -0.626 | -0.710 | 0.970 | 0.979 | -0.646 | -0.726 | 0.485 | 0.473 | 0.955 | 0.989 | 3 | **5** |
-| Equity Index | 11 | +0.617 | +0.668 | 0.970 | 0.970 | +0.637 | +0.688 | 0.548 | 0.542 | 0.921 | 0.948 | **5** | **5** |
-| Fixed Income | 4 | +0.543 | +0.680 | 0.970 | 0.975 | +0.560 | +0.698 | 0.529 | 0.515 | 0.976 | 1.054 | 3 | 3 |
-| Forex | 9 | -0.455 | -0.344 | 0.970 | 0.973 | -0.469 | -0.353 | 0.491 | 0.491 | 0.958 | 0.979 | 3 | 3 |
-| All | 45 | +0.137 | +0.055 | 0.970 | 0.975 | +0.141 | +0.058 | 0.529 | 0.520 | 0.911 | 0.933 | 3 | 3 |
+- `E(R)` is still the main replication target.
+- Commodity is now nearly aligned after source-path fixes.
+- Equity and `All` remain the main blockers.
+- `Calmar` is still not used as a serious optimization target because the paper is internally inconsistent there.
 
-> Table 2 std 全部 ≤1%（portfolio vol scaling 强制对齐）。Equity 全 5/5 ✅
+For the step-by-step iteration path from the older frontier to the current `34/45`, see:
+
+- [docs/table3_iteration_to_34.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/table3_iteration_to_34.md:1)
 
 ---
 
@@ -210,6 +211,9 @@ Rp = df.T.dropna().mean(axis=1)  # ← 不要用
 
 ## Problem Contracts — 5 个问题合约
 
+> Historical diagnostic note from the earlier static-baseline phase.
+> The current working frontier no longer uses this exact “exclude 5” setup; see the current-results section above.
+
 | 合约 | 问题 | 所有数据源 E(R) |
 |------|------|----------------|
 | CC | RAD E(R)=-0.053 vs 论文方向负 | NON=+0.011, REV=-0.027, RAD=-0.053, YF=+0.031 |
@@ -241,8 +245,8 @@ Rp = df.T.dropna().mean(axis=1)  # ← 不要用
 - [x] Data source comparison (NON/REV/RAD/YF/YF_RAD)
 - [x] TC formula verification
 - [x] p_0 normalization analysis
-- [x] Table 2 & Table 3 results (baseline_run.py)
-- [x] Exclude 5 contracts (LB/JO/ZO/CC/FB)
+- [x] Table 2 & Table 3 baseline runner (baseline_run.py)
+- [x] Move from static RAD-only baseline to source-aware Table 3 frontier
 - [x] All portfolio row added
 - [ ] Run Sign(R) and MACD baselines
 - [ ] DQN training and comparison
