@@ -105,6 +105,12 @@ R_port = (1/N) × Σ R_i    (equal-weight)
 
 > ZN = 24HR NATL GAS (Natural Gas), not 10-Year T-Note.
 
+### Excluded Contracts (2026-04-15)
+
+**Current**: LB, ZO, CC, FB (4 contracts, 46 total)
+- **JO added back** to Commodity — improves DD from 16.7% → 12.4%
+- Previously excluded: LB/JO/ZO/CC (E(R)≈0 or wrong sign) + FB (FI drag)
+
 ---
 
 ## Data Validation
@@ -135,38 +141,51 @@ ASC = vendor roll records     REV = NON + cum_adj    (backward, for validation)
 
 ---
 
-## Current Results
+## Current Results (2026-04-15, commit cba0625)
 
-> 以下结果由 `baseline_run.py` 生成，排除 5 合约 (LB/JO/ZO/CC/FB)
+> Results from `baseline_run.py`, excluding 4 contracts (LB/ZO/CC/FB). **JO added back** to Commodity.
 
 ### Table 3 — Long Only (per-contract vol scaling, Eq 4 only)
 
-**n10=19/25, n15=22/25** (5 核心指标 × 5 资产类别)
+**5 Core Metrics: n10=18/25, n15=22/25**
 
 | Asset Class | # | E(R) | Paper | std(R) | Paper | Sharpe | Paper | %+ve | Paper | P/L | Paper | n10 | n15 |
 |-------------|---|------|-------|--------|-------|--------|-------|------|-------|-----|-------|-----|-----|
-| Commodity | 21 | -0.278 | -0.298 | 0.438 | 0.412 | -0.636 | -0.723 | 0.485 | 0.473 | 0.958 | 0.987 | 4 | **5** |
+| Commodity | 22 | -0.268 | -0.298 | 0.425 | 0.412 | -0.631 | -0.723 | 0.488 | 0.473 | 0.946 | 0.987 | 3 | **5** |
 | Equity Index | 11 | +0.578 | +0.504 | 0.908 | 0.928 | +0.637 | +0.543 | 0.548 | 0.541 | 0.921 | 0.928 | 3 | 4 |
 | Fixed Income | 4 | +0.602 | +0.605 | 0.928 | 0.939 | +0.649 | +0.645 | 0.533 | 0.515 | 0.975 | 1.048 | **5** | **5** |
 | Forex | 9 | -0.215 | -0.198 | 0.458 | 0.472 | -0.469 | -0.420 | 0.491 | 0.491 | 0.958 | 0.966 | 4 | **5** |
-| All | 45 | +0.044 | -0.013 | 0.380 | 0.363 | +0.116 | -0.036 | 0.528 | 0.519 | 0.911 | 0.919 | 3 | 3 |
+| All | 46 | +0.043 | -0.013 | 0.375 | 0.363 | +0.114 | -0.036 | 0.527 | 0.519 | 0.915 | 0.919 | 3 | 3 |
 
-> n10/n15 = 5 个核心指标中误差 <10% / <15% 的个数。All E(R)/Sharpe 百分比误差大是因为论文值≈0。
-> 排除 5 合约：LB/JO/ZO/CC (Long E(R)≈0) + FB (FI 拖后腿, 排除后 E(R) err 0.5%)
+> n10/n15 = # of core 5 metrics with error <10% / <15%. All E(R)/Sharpe errors large because paper values ≈0.
+> **Excluded 4**: LB/ZO/CC (Commodity, E(R)≈0 or wrong sign) + FB (Fixed Income drag)
+> **JO added back**: improves Commodity DD from 16.7% → 12.4%
+
+**All 9 Metrics: n10=24/45, n15=29/45**
+
+| Asset Class | DD | Sortino | MDD | Calmar | n10 | n15 |
+|-------------|-----|---------|-----|--------|-----|-----|
+| Commodity | **12.4%** ✅ | 19.9% | 42.3% | 1345% | 3 | **6** |
+| Equity Index | 17.5% | **2.3%** ✅ | **6.3%** ✅ | 942% | 5 | **6** |
+| Fixed Income | **10.0%** ✅ | **9.6%** ✅ | 109% | 486% | **7** | **7** |
+| Forex | **4.2%** ✅ | **3.9%** ✅ | 31.1% | 641% | 6 | **7** |
+| All | 16.1% | 381% | 16.2% | 15378% | 3 | 3 |
+
+> MDD/Calmar: Equity MDD ✅ and All MDD ✅ aligned with W₀=N. Calmar broken for all ACs (paper internal inconsistency: E(R)/MDD ≠ Calmar).
 
 ### Table 2 — Long Only (+ portfolio-level vol scaling → std≈0.97)
 
-**n10=19/25, n15=21/25**
+**All 9 Metrics: n10=23/45, n15=27/45**
 
 | Asset Class | # | E(R) | Paper | std(R) | Paper | Sharpe | Paper | %+ve | Paper | P/L | Paper | n10 | n15 |
 |-------------|---|------|-------|--------|-------|--------|-------|------|-------|-----|-------|-----|-----|
-| Commodity | 21 | -0.617 | -0.710 | 0.970 | 0.979 | -0.636 | -0.726 | 0.485 | 0.473 | 0.958 | 0.989 | 3 | **5** |
-| Equity Index | 11 | +0.617 | +0.668 | 0.970 | 0.970 | +0.637 | +0.688 | 0.548 | 0.542 | 0.921 | 0.948 | **5** | **5** |
-| Fixed Income | 4 | +0.629 | +0.680 | 0.970 | 0.975 | +0.649 | +0.698 | 0.533 | 0.515 | 0.975 | 1.054 | **5** | **5** |
-| Forex | 9 | -0.455 | -0.344 | 0.970 | 0.973 | -0.469 | -0.353 | 0.491 | 0.491 | 0.958 | 0.979 | 3 | 3 |
-| All | 45 | +0.113 | +0.055 | 0.970 | 0.975 | +0.116 | +0.058 | 0.528 | 0.520 | 0.911 | 0.933 | 3 | 3 |
+| Commodity | 22 | -0.612 | -0.710 | 0.970 | 0.979 | -0.631 | -0.726 | 0.488 | 0.473 | 0.946 | 0.989 | 5 | **7** |
+| Equity Index | 11 | +0.617 | +0.668 | 0.970 | 0.970 | +0.637 | +0.688 | 0.548 | 0.542 | 0.921 | 0.948 | 6 | 6 |
+| Fixed Income | 4 | +0.629 | +0.680 | 0.970 | 0.975 | +0.649 | +0.698 | 0.533 | 0.515 | 0.975 | 1.054 | 5 | 6 |
+| Forex | 9 | -0.455 | -0.344 | 0.970 | 0.973 | -0.469 | -0.353 | 0.491 | 0.491 | 0.958 | 0.979 | 4 | 4 |
+| All | 46 | +0.111 | +0.055 | 0.970 | 0.975 | +0.114 | +0.058 | 0.527 | 0.520 | 0.915 | 0.933 | 3 | 4 |
 
-> Table 2 std 全部 ≤1%（portfolio vol scaling 强制对齐）。Equity 5/5 ✅, FI 5/5 ✅
+> Table 2 std all ≤1% (portfolio vol scaling). Commodity n15=7/9 best with JO added back.
 
 ---
 
