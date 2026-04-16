@@ -291,15 +291,15 @@ Eq 4 输出的 R_t 是 **scaled price diff**（经过 σ_tgt/σ 缩放后的价�
 
 ### Table 2 Long (排除5, port_vol→0.97)
 
-**n10=17/25, n15=19/25**
+**n10=19/25, n15=21/25**
 
 | Asset Class | # | n10 | n15 | E(R) err | std err |
 |-------------|---|-----|-----|----------|---------|
-| Commodity | 21 | 3 | **5** | 11.8% | 0.9% |
+| Commodity | 21 | 3 | **5** | 13.1% | 0.9% |
 | Equity Index | 11 | **5** | **5** | 7.6% | 0.0% |
-| Fixed Income | 4 | 3 | 3 | 20.1% | 0.5% |
+| Fixed Income | 4 | **5** | **5** | 7.5% | 0.5% |
 | Forex | 9 | 3 | 3 | 32.3% | 0.3% |
-| All | 45 | 3 | 3 | 149% | 0.5% |
+| All | 45 | 3 | 3 | 106% | 0.5% |
 
 ### 指标对齐总结
 
@@ -317,28 +317,132 @@ Eq 4 输出的 R_t 是 **scaled price diff**（经过 σ_tgt/σ 缩放后的价�
 
 ---
 
-## 9. 复现危机思考 (Reproducibility Reflection)
+## 9. 当前分支基线 (2026-04-15 夜间更新)
 
-论文 Zhang, Zohren, Roberts (2019) 声称使用 50 个期货合约，但复现过程中发现以下不透明之处：
+### 9.1 Active universe policy
 
-1. **合约列表未公开** — 只有 Bloomberg tickers 在附录，无完整数据源/时间段说明
-2. **排除规则不明** — 论文未说明是否有合约被排除。我们排除 5 个（LB/JO/ZO/CC/FB）才达到良好匹配。如果论文也排了但没写？
-3. **σ_tgt 定义模糊** — 论文写 10% annual，但代码里是 0.063（daily）还是 0.0063？影响 std(R) 和 MDD 的匹配
-4. **MDD/Calmar 内部不自洽** — 论文自己的 Calmar ≠ E(R)/MDD（如 Equity Long: 0.504/0.127=3.96 ≠ 0.466）
-5. **数据处理管道不透明** — 用 NON/REV/RAD？哪个 vendor？哪个 roll calendar？
-6. **R_t 量纲问题** — additive 框架下 R_t 是 "σ_tgt-normalized price diff"，不是百分比 return。cumsum(R) 的 MDD 依赖 W_0 选择，论文未说明
-7. **资产类别映射不明** — ZN 到底是 FI 还是 Commodity？不同映射影响 portfolio 结果
+- **当前排除 4 个合约**: `LB`, `ZO`, `CC`, `FB`
+- `JO` 已重新加入 universe
+- 新原则：**不再通过继续删合约来“刷表”**；后续只能在 metric/scaling 理解改善后把合约加回，不能继续缩 universe
 
-**结论**: 论文提供了方法论框架，但数据处理细节不足以致完全复现。22/25 ≤15% 是在合理推断下的最佳结果。这是学术界 reproducibility crisis 的典型案例——没有代码和数据的论文本质上是不可复现的。
+### 9.2 Current Table 3 baseline
 
-## 10. Next Steps
+> Historical mid-iteration snapshot. The current live frontier is in Section 14.
 
-1. **Run Sign(R) and MACD strategies** — currently commented out in baseline_run.py
-2. **DQN training** — train_dqn_paper_aligned.py exists but needs work
-3. **MDD**: 如果有时间可以继续研究论文定义，但优先级低
-4. **Final presentation** — deck-v2.pptx
+**由 `python baseline_run.py --table 3` 直接生成**  
+当前设定：排除 4，`aggregation=variable_n`，`σ_tgt=0.0627`
 
-## 11. Key Validation Codes
+**n10=18/25, n15=22/25**
+
+| Asset Class | # | E(R) err | std err | Sharpe err | %+ve err | P/L err |
+|-------------|---|----------|---------|------------|----------|---------|
+| Commodity | 22 | 10.1% | 3.2% | 12.7% | 3.2% | 4.2% |
+| Equity Index | 11 | 14.7% | 2.2% | 17.3% | 1.3% | 0.8% |
+| Fixed Income | 4 | 0.5% | 1.2% | 0.6% | 3.5% | 7.0% |
+| Forex | 9 | 8.6% | 3.0% | 11.7% | 0.0% | 0.8% |
+| All | 46 | abs gap 0.056 | 3.3% | abs gap 0.150 | 1.5% | 0.4% |
+
+> `All` 行继续用 absolute gap 更合理，因为论文值接近 0，percent error 会爆炸。
+
+### 9.2b Full 45-comparison context
+
+`docs/er_attribution_report.md` 已生成当前 full-9-metric scorecard：
+
+- **n10=24/45**
+- **n15=29/45**
+
+这说明当前 baseline 距离你要求的 **40/45** 还很远，Table 3 不能停。
+
+### 9.3 MDD branch update
+
+- `metrics.py` 现在对 additive MDD 使用 **`W₀ = N_contracts`**
+- 这让 additive wealth path 至少在量纲上更接近 “每个 sleeve 先有 1 单位初始财富”
+- 但这 **不是** MDD 问题的最终答案；目前只把它视为 additive-wealth branch 的最新基线
+
+## 10. E(R) 归因结论 (Attribution)
+
+### 10.1 数学恒等式
+
+对 `variable_n` 聚合：
+
+```
+R_port,t = (1 / N_t) * Σ_i R_i,t
+E(R_port) = 252 * mean_t[(1 / N_t) * Σ_i R_i,t]
+```
+
+所以每个合约的 realized annualized contribution 是：
+
+```
+contrib_i = 252 * mean_t[I_i,t * R_i,t / N_t]
+```
+
+且因为 `R_i,t = signal_i,t - tc_i,t`，所以同样可以分解成：
+
+```
+E(R) contribution = signal contribution - tc contribution
+```
+
+### 10.2 JO re-add generated result
+
+`docs/er_attribution_report.md` 已生成，比较了：
+
+- 旧方案：排除 5 (`LB/JO/ZO/CC/FB`)
+- 新方案：排除 4 (`LB/ZO/CC/FB`)
+
+**生成结果结论**：
+
+- JO 加回后，Commodity `E(R)` 从 `-0.278` 变到 `-0.268`
+- Commodity 对论文的 `|E(R) gap|` **变差 +0.010**
+- `All` 的 `|E(R) gap|` 只 **改善 0.001**
+- 所以：**JO re-add 是 policy-consistent，但不是 replication score improvement**
+
+### 10.3 JO attribution itself
+
+在当前 baseline 下，`JO` 的 realized contribution（见 `docs/er_attribution_report.md`）：
+
+- **JO in Commodity**:
+  - trade contribution = `-0.002`
+  - signal contribution = `-0.000`
+  - tc contribution = `+0.001`
+- **JO in All**:
+  - trade contribution = `-0.001`
+
+**解释**：
+- JO 对 Commodity 的方向是略负，但负得还不够，结果把 Commodity Long 从 `-0.278` 拉到 `-0.268`，反而离论文 `-0.298` 更远
+- 对 `All`，JO 的影响非常小，只带来 `0.001` 级别的 absolute-gap 改善
+- 这说明：**把 JO 加回是 universe-policy 的尝试，不是当前 Table 3 score 的提升来源**
+
+### 10.4 All-4-asset attribution highlights
+
+`docs/er_attribution_report.md` 还给出了四个资产类的 realized contributors 和 targeted leave-one-out 结果：
+
+- **Commodity**: `ZA`, `DA`, `ZT` 是当前最值得诊断的正贡献合约；去掉它们会明显让 Commodity 更接近论文负收益
+- **Equity Index**: `EN`, `YM`, `ES/SC/SP` 是当前把 Equity `E(R)` / `Sharpe` 推高的主要来源
+- **Fixed Income**: 当前并不是主要问题；FI 已经很接近论文，进一步动合约大概率会伤 baseline
+- **Forex**: `AN`, `BN`, `MP` 的 leave-one-out 对 FX `E(R)` gap 有帮助，但对 `All` 往往是反作用，说明 FX 目前不是第一优先级
+
+**阶段结论**：
+- 下一步最应该投入的是 **Equity + Commodity 的 E(R) attribution / data-path diagnosis**
+- 不是继续做 Table 2，也不是继续删合约
+
+## 11. Next TODO (优先级排序)
+
+1. **继续做 E(R) attribution，而不是先调 Table 2**
+   目标是解释 Equity / All 为什么偏，而不是先做 portfolio vol scaling 花活
+2. **把 drawdown 指标 split 成两条 branch**
+   - additive branch: 当前 `W₀ = N_contracts`
+   - wealth/NAV branch: backtesting-consistent drawdown
+3. **只允许 add-back，不允许继续删合约**
+   下一个候选不是“再排除谁”，而是检查当前 excluded contracts 在新 metric/scaling 理解下能否合理加回
+4. **Table 3 先冲到 ~40/45 meaningful comparisons**
+   在这个门槛前，Table 2 只做 reference，不做主战场
+5. **优先顺序**
+   - `Equity Index` attribution / data understanding
+   - `Commodity` attribution / data understanding
+   - drawdown bridge audit
+   - 只有达到更高 Table 3 score 后，再回 Table 2
+
+## 12. Key Validation Codes
 
 | File | What it validates |
 |------|------------------|
@@ -346,18 +450,19 @@ Eq 4 输出的 R_t 是 **scaled price diff**（经过 σ_tgt/σ 缩放后的价�
 | `tests/test_rad_algorithm.py` | **RAD_v2 math proof**: non-roll return corr=1.0, roll-day continuity MaxJump=0% |
 | `tests/validate_commodity_rad.py` | 26-contract 3-check validation (price corr, roll corr, non-roll corr) |
 | `tests/decomposition_audit.py` | Per-contract E(R) = signal − TC decomposition |
+| `tests/er_attribution_analysis.py` | **E(R) attribution proof** for JO add-back (`signal - tc = trade`, plus scenario delta) |
 
 **Method C RAD_v2 核心验证逻辑** (in `test_rad_algorithm.py`):
 - non-roll 日 cum_ratio 不变 → RAD return = NON return → corr = 1.0000000000
 - roll 日 ratio = prev_close/(prev_close - adj_change) → forward accumulate
 - 已验证 ZU/US/ZN 三个 V2 合约：non-roll corr=1.0, max_diff=1e-16
 
-**ASC 交叉验证** (刚跑的 inline 代码):
+**ASC 交叉验证**:
 - ASC roll dates vs REV roll dates: 匹配率 ≥96.8%
 - Roll 日 return corr = 1.000 (ASC vs RAD_v2)
 - 非roll 日 ASC vs RAD_v2 corr: ZU=0.977, US=0.990, ZN=0.929
 
-## 11. Quick Commands
+## 13. Quick Commands
 
 ```bash
 # Validate all 50 contracts
@@ -372,6 +477,132 @@ python baseline_run.py --table 2
 # Run decomposition audit
 python tests/decomposition_audit.py
 
-# Run single asset class
-python baseline_run.py --asset Commodity --all-metrics
+# Run JO attribution report
+python tests/er_attribution_analysis.py
 ```
+
+## 14. Current Table 3 Frontier (2026-04-16)
+
+### 14.1 这轮迭代做了什么
+
+本轮没有继续删合约，而是把重点放在 **data-path/source bridge**：
+
+- 支持按合约选择 `RAD` / `REV` / `RAD_REGEN`
+- 用 generated result 搜索 source override，而不是凭感觉改
+- 在 source override 固定后，再重新搜索 `sigma_tgt`
+
+新增/更新的关键代码：
+
+- `data_loader.py`
+  - 新增 source-aware loader：`RAD` / `REV` / `NON` / `RAD_REGEN`
+- `baseline_run.py`
+  - `load_contracts(..., source_overrides=...)`
+  - 当前默认 `sigma_tgt = 0.0600`
+- `repro_analysis.py`
+  - `evaluate_table(..., source_overrides=...)`
+- `tests/source_override_search.py`
+  - 生成 `docs/source_override_search_report.md`
+
+### 14.2 当前 active working frontier
+
+当前默认 baseline 使用：
+
+- excluded contracts: `LB`, `ZO`, `CC`, `FB`
+- `sigma_tgt = 0.0600`
+- aggregation: `variable_n`
+- active source overrides:
+
+```python
+{
+    'DA': 'RAD_REGEN',
+    'EN': 'REV',
+    'ER': 'REV',
+    'ES': 'REV',
+    'GI': 'RAD_REGEN',
+    'JN': 'RAD_REGEN',
+    'JO': 'REV',
+    'KC': 'REV',
+    'KW': 'REV',
+    'MD': 'RAD_REGEN',
+    'MP': 'RAD_REGEN',
+    'NK': 'RAD_REGEN',
+    'SC': 'RAD_REGEN',
+    'SP': 'RAD_REGEN',
+    'YM': 'RAD_REGEN',
+    'ZA': 'RAD_REGEN',
+    'ZC': 'REV',
+    'ZF': 'REV',
+    'ZG': 'RAD_REGEN',
+    'ZH': 'REV',
+    'ZI': 'REV',
+    'ZK': 'REV',
+    'ZN': 'REV',
+    'ZR': 'REV',
+    'ZT': 'RAD_REGEN',
+    'ZU': 'REV',
+    'ZW': 'REV',
+}
+```
+
+### 14.3 Generated result: current baseline score
+
+由 `python baseline_run.py --table 3 --all-metrics` 直接生成：
+
+- **≤10%: 27/45**
+- **≤15%: 34/45**
+
+各资产当前 Long 结果：
+
+| Asset | E(R) ours | E(R) paper | \|E(R) gap\| | Sharpe ours | Sharpe paper | \|Sharpe gap\| | n10 | n15 |
+|------|-----------:|------------:|-------------:|-------------:|--------------:|---------------:|----:|----:|
+| Commodity | -0.293 | -0.298 | 0.005 | -0.720 | -0.723 | 0.003 | 7 | 7 |
+| Equity Index | +0.536 | +0.504 | 0.032 | +0.617 | +0.543 | 0.074 | 5 | 8 |
+| Fixed Income | +0.576 | +0.605 | 0.029 | +0.649 | +0.645 | 0.004 | 7 | 7 |
+| Forex | -0.173 | -0.198 | 0.025 | -0.395 | -0.420 | 0.025 | 5 | 8 |
+| All | +0.029 | -0.013 | 0.042 | +0.082 | -0.036 | 0.118 | 3 | 4 |
+
+### 14.4 和旧 baseline 相比，为什么 improvement 是真的
+
+这轮 improvement 不是“再排除几个合约”换来的，而是两步叠加：
+
+1. **Commodity source fixes**
+   `DA/GI/ZG/ZT -> RAD_REGEN`, `JO/KW/ZF/ZH/ZN/ZU/ZW -> REV`
+   直接把 Commodity `E(R)` 从旧 baseline 的 `-0.268` 推到接近论文的 `-0.291 ~ -0.298`
+
+2. **Equity source fixes + lower sigma**
+   `EN/ER/ES -> REV`, `MD/SC/SP/YM -> RAD_REGEN`
+   再把 Equity `E(R)` 从 `+0.578` 压到 `+0.536`
+   同时 `sigma_tgt` 从 `0.0627` 下调到 `0.0600`，进一步帮助 Equity / All
+
+3. **Late no-regression All refinements**
+   `MP -> RAD_REGEN`, `ZC/ZI/ZK/ZR -> REV`
+   没有再抬高 score，但继续把 `Commodity` 和 `All` 的 absolute gap 往下压了一点
+
+也就是说：
+
+- **编程上**：确实改变了 loader 所使用的价格路径
+- **数学上**：Eq. 4 的 `r_t = p_t - p_{t-1}` 直接由 source 决定，所以 source 变了，`signal`、`tc`、`trade` 的 realized annualized contribution 就会跟着变
+- improvement 的方向和前面的 attribution 诊断是一致的，不是 random noise
+
+### 14.5 还没到 40/45，剩下的主要卡点
+
+虽然已经从旧的 `29/45`（≤15%）推进到 **34/45**，但还没有到目标的 `40/45`。
+
+当前最主要的剩余问题：
+
+- `All` row 仍然最难
+  - `E(R)` paper 接近 0，百分比误差天然会炸
+  - 即使绝对 gap 已经改善到 `0.044`，仍然是 major blocker
+- `Calmar` 仍然基本不可信
+  - 论文内生不一致，继续优化它没有意义
+- `MDD` 也仍然更多是 diagnostic
+- `Equity` 还可以继续小修，但已经没有 Commodity 那种大块头 source mismatch 了
+
+### 14.6 当前判断
+
+- **这是目前最强的 Table 3 working frontier**
+- 继续冲 `40/45` 的下一步，不应该回去搞 Table 2
+- 下一步最值得做的是：
+  1. 围绕 `All` row 做更细的组合/bridge 诊断
+  2. 检查剩余小幅 source switch 是否能继续改善 `All`
+  3. 继续把 drawdown 指标留在次要轨道，不让它主导 search

@@ -2,46 +2,105 @@
 data_loader.py — CLC data loading utilities
 """
 import os
+from functools import lru_cache
+
 import numpy as np
 import pandas as pd
 
 
-def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01'):
-    """
-    Load CLC ratio-adjusted data from start_date onwards.
-    Default 2009-01-01 gives ~504 trading days warmup before 2011 test,
-    enough for MACD std_window=252 + longest EMA span=96.
+CSV_COLUMNS = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'OI']
+V2_CONTRACTS = ['ZH', 'ZU', 'US', 'ZN']
 
-    CSV format (no header): Date,Open,High,Low,Close,Volume,OpenInterest
-    Date format: MM/DD/YYYY
-    
-    Note: For 4 damaged contracts, uses RAD_v2 (ratio-adjusted, generated from NON+REV).
-    These contracts have vendor RAD that is all-zero, all-NaN, or incomplete:
-      ZH: vendor RAD all-zero
-      ZU: vendor RAD all-zero  
-      US: vendor RAD 99% NaN
-      ZN: vendor RAD only quarterly adjustments
-    RAD_v2 algorithm: detect rolls from REV-NON adj changes, compute per-roll ratios,
-    forward-accumulate, apply to NON. Proven: non-roll returns match NON exactly (corr=1.0).
-    """
-    V2_CONTRACTS = ['ZH', 'ZU', 'US', 'ZN']
-    if ticker in V2_CONTRACTS:
-        fpath = os.path.join(data_dir, f'{ticker}_RAD_v2.CSV')
-    else:
-        fpath = os.path.join(data_dir, f'{ticker}_RAD.CSV')
-    
-    if not os.path.exists(fpath):
+
+@lru_cache(maxsize=None)
+def _read_clc_csv(path):
+    if not os.path.exists(path):
         return None
-    df = pd.read_csv(fpath, header=None,
-                     names=['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'OI'])
+    df = pd.read_csv(path, header=None, names=CSV_COLUMNS)
     df['Date'] = pd.to_datetime(df['Date'], format='%m/%d/%Y')
-    df = df[df['Close'].notna() & (df['Close'] > 0)].sort_values('Date').reset_index(drop=True)
-    # Only keep data from start_date
-    if start_date:
-        df = df[df['Date'] >= start_date].reset_index(drop=True)
-    if len(df) < 500:
+    return df.sort_values('Date').reset_index(drop=True)
+
+
+def _clean_price_frame(df, start_date='2009-01-01'):
+    if df is None:
         return None
-    return df
+    out = df[df['Close'].notna() & np.isfinite(df['Close']) & (df['Close'] > 0)].copy()
+    if start_date:
+        out = out[out['Date'] >= start_date]
+    out = out.sort_values('Date').reset_index(drop=True)
+    if len(out) < 500:
+        return None
+    return out
+
+
+@lru_cache(maxsize=None)
+def _generate_rad_regen(ticker, data_dir='data/CLC'):
+    """Regenerate ratio-adjusted close series from NON + REV adjustment shifts."""
+    non = _read_clc_csv(os.path.join(data_dir, f'{ticker}_NON.CSV'))
+    rev = _read_clc_csv(os.path.join(data_dir, f'{ticker}_REV.CSV'))
+    if non is None or rev is None:
+        return None
+
+    merged = non[['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'OI']].merge(
+        rev[['Date', 'Close']],
+        on='Date',
+        how='inner',
+        suffixes=('', '_rev'),
+    )
+    merged = merged.sort_values('Date').reset_index(drop=True)
+    p_non = pd.to_numeric(merged['Close'], errors='coerce').values
+    p_rev = pd.to_numeric(merged['Close_rev'], errors='coerce').values
+    valid = np.isfinite(p_non) & np.isfinite(p_rev) & (p_non > 0)
+    merged = merged[valid].reset_index(drop=True)
+    p_non = p_non[valid]
+    p_rev = p_rev[valid]
+
+    adj = p_rev - p_non
+    adj_diff = np.diff(adj)
+    roll_idx = np.where(np.abs(adj_diff) > 1e-6)[0]
+    cum_ratio = np.ones(len(p_non))
+    for idx in roll_idx:
+        new_price = p_non[idx + 1]
+        if abs(new_price) > 1e-12:
+            ratio = p_non[idx] / new_price
+            cum_ratio[idx + 1:] *= ratio
+
+    out = merged[['Date', 'Open', 'High', 'Low', 'Volume', 'OI']].copy()
+    out['Close'] = p_non * cum_ratio
+    out = out[['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'OI']]
+    return out
+
+
+@lru_cache(maxsize=None)
+def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01', source='RAD'):
+    """
+    Load CLC price data from start_date onwards.
+
+    Supported sources:
+      - RAD: current repo baseline, with RAD_v2 fallback for known damaged files
+      - REV: vendor back-adjusted continuous series
+      - NON: vendor non-adjusted continuous series
+      - RAD_REGEN: regenerate ratio-adjusted series from NON + REV adjustment shifts
+
+    Default 2009-01-01 gives enough warmup before the 2011 test window.
+    """
+    source = source.upper()
+    if source == 'RAD':
+        if ticker in V2_CONTRACTS:
+            path = os.path.join(data_dir, f'{ticker}_RAD_v2.CSV')
+        else:
+            path = os.path.join(data_dir, f'{ticker}_RAD.CSV')
+        df = _read_clc_csv(path)
+    elif source == 'REV':
+        df = _read_clc_csv(os.path.join(data_dir, f'{ticker}_REV.CSV'))
+    elif source == 'NON':
+        df = _read_clc_csv(os.path.join(data_dir, f'{ticker}_NON.CSV'))
+    elif source == 'RAD_REGEN':
+        df = _generate_rad_regen(ticker, data_dir=data_dir)
+    else:
+        raise ValueError(f'Unknown source: {source}')
+
+    return _clean_price_frame(df, start_date=start_date)
 
 
 def get_price_diffs(prices):
