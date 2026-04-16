@@ -35,7 +35,7 @@ METRIC_NAMES = [
 ]
 
 
-def compute_metrics(R_port, n_contracts=None, w0=None):
+def compute_metrics(R_port, n_contracts=None, w0=None, N_contracts=None):
     """Compute all 9 metrics from portfolio daily returns (additive).
 
     Args:
@@ -50,6 +50,8 @@ def compute_metrics(R_port, n_contracts=None, w0=None):
     R = np.asarray(R_port, dtype=float)
     R = R[np.isfinite(R)]
     T = TRADING_DAYS
+    if n_contracts is None and N_contracts is not None:
+        n_contracts = N_contracts
     if w0 is None:
         w0 = float(n_contracts) if n_contracts is not None else 1.0
 
