@@ -40,7 +40,6 @@ EWMA_SPAN = 60              # EWMA span for σ_t [Paper Section 3.2]
 T = TRADING_DAYS            # 252
 W0 = 1.0                    # Initial wealth per contract
 DEFAULT_REPORT_SOURCE = 'RISK_PRICE_SIGMA0'  # current split-world start: 7 trade metrics + risk/price t0 bridge for MDD/Calmar
-TRADE_CALMAR_MODE = 'wealth_cagr'
 
 
 
@@ -49,7 +48,7 @@ TRADE_CALMAR_MODE = 'wealth_cagr'
 
 @lru_cache(maxsize=None)
 def _prepare_contract_cached(ticker, test_start, test_end, source):
-    df = load_clc_full(ticker, source=source)
+    df = load_clc_full(ticker, source=source, anchor_date=test_start)
     if df is None:
         return None
     prices = df['Close'].values.astype(float)
@@ -67,7 +66,8 @@ def _prepare_contract_cached(ticker, test_start, test_end, source):
     t0 = mask_s.idxmax()
     t1 = len(df) - 1 - mask_e[::-1].values.argmax()
     start = max(t0, SIGN_LOOKBACK)
-    dates = df['Date'].iloc[start:t1].values
+    # `t1` is the last in-range index, so include it explicitly.
+    dates = df['Date'].iloc[start:t1 + 1].values
     return {
         'tk': ticker,
         'rt': rt,
@@ -100,6 +100,74 @@ def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31',
     return raw
 
 
+def parse_exclusion_arg(exclude_arg):
+    """Parse a comma-separated exclusion override from the CLI."""
+    if not exclude_arg:
+        return list(EXCLUDED_CONTRACTS)
+    tokens = [tk.strip().upper() for tk in exclude_arg.split(',')]
+    tokens = [tk for tk in tokens if tk]
+    return sorted(set(tokens))
+
+
+def build_reporting_portfolio_risk_price_sigma0(raw_data, sigma_tgt, strat='Long'):
+    """Build the fixed reporting-world sleeve-capital wealth path.
+
+    Each contract sleeve starts with capital:
+        C_i,0 = p_i,0 * sigma_tgt / sigma_i,0
+
+    Sleeve wealth then accumulates normalized Eq. 4 rewards:
+        w_i,t = 1 + cumsum(R_i,t / C_i,0)
+
+    The reporting portfolio is the equal-weight average of sleeve wealth paths.
+    """
+    sleeve_paths = []
+    for rd in raw_data:
+        detail = compute_contract_returns(rd, strat, sigma_tgt, detail=True)
+        start, t1 = rd['start'], rd['t1']
+        Rt = detail['Rt'][start:t1 + 1]
+        prices = detail['prices'][start:t1 + 1]
+        sigma = detail['sigma'][start:t1 + 1]
+        if len(Rt) == 0 or len(prices) == 0 or len(sigma) == 0:
+            continue
+        p0 = float(prices[0])
+        sigma0 = float(sigma[0])
+        if not np.isfinite(p0) or not np.isfinite(sigma0) or sigma0 <= 0:
+            continue
+        capital0 = p0 * sigma_tgt / sigma0
+        if not np.isfinite(capital0) or capital0 <= 0:
+            continue
+        sleeve_paths.append(1.0 + np.cumsum(Rt / capital0))
+
+    if not sleeve_paths:
+        return None
+
+    min_len = min(len(path) for path in sleeve_paths)
+    if min_len == 0:
+        return None
+
+    sleeves = np.column_stack([path[:min_len] for path in sleeve_paths])
+    portfolio = sleeves.mean(axis=1)
+
+    sleeve_simple = np.full_like(sleeves, np.nan, dtype=float)
+    if min_len > 1:
+        sleeve_simple[1:, :] = sleeves[1:, :] / sleeves[:-1, :] - 1.0
+
+    portfolio_simple = np.full(min_len, np.nan, dtype=float)
+    portfolio_log = np.full(min_len, np.nan, dtype=float)
+    if min_len > 1:
+        portfolio_simple[1:] = portfolio[1:] / portfolio[:-1] - 1.0
+        portfolio_log[1:] = np.log(portfolio[1:] / portfolio[:-1])
+
+    return {
+        'portfolio_path': portfolio,
+        'portfolio_simple_returns': portfolio_simple,
+        'portfolio_log_returns': portfolio_log,
+        'sleeve_paths': sleeves,
+        'sleeve_simple_returns': sleeve_simple,
+        'length': min_len,
+    }
+
+
 def compute_reporting_mdd_calmar_risk_price_sigma0(raw_data, sigma_tgt, strat='Long'):
     """
     Reporting-world bridge:
@@ -113,33 +181,18 @@ def compute_reporting_mdd_calmar_risk_price_sigma0(raw_data, sigma_tgt, strat='L
     This keeps the trade lane untouched while giving MDD/Calmar a portfolio
     wealth object that uses both initial price and initial risk scale.
     """
-    sleeve_paths = []
-    for rd in raw_data:
-        detail = compute_contract_returns(rd, strat, sigma_tgt, detail=True)
-        start, t1 = rd['start'], rd['t1']
-        Rt = detail['Rt'][start:t1]
-        prices = detail['prices'][start:t1]
-        sigma = detail['sigma'][start:t1]
-        if len(Rt) == 0 or len(prices) == 0 or len(sigma) == 0:
-            continue
-        p0 = float(prices[0])
-        sigma0 = float(sigma[0])
-        if not np.isfinite(p0) or not np.isfinite(sigma0) or sigma0 <= 0:
-            continue
-        capital0 = p0 * sigma_tgt / sigma0
-        if not np.isfinite(capital0) or capital0 <= 0:
-            continue
-        sleeve_paths.append(1.0 + np.cumsum(Rt / capital0))
-    if not sleeve_paths:
+    reporting = build_reporting_portfolio_risk_price_sigma0(
+        raw_data,
+        sigma_tgt=sigma_tgt,
+        strat=strat,
+    )
+    if reporting is None:
         return None
-    min_len = min(len(path) for path in sleeve_paths)
-    if min_len == 0:
-        return None
-    port = np.column_stack([path[:min_len] for path in sleeve_paths]).mean(axis=1)
+    port = reporting['portfolio_path']
     mdd = max_drawdown_from_path(port)
     cagr = cagr_from_path(port)
     calmar = cagr / mdd if mdd > 0 else 0.0
-    return round(mdd, 3), round(calmar, 3), min_len
+    return round(mdd, 3), round(calmar, 3), reporting['length']
 
 
 # ─── Eq 4: Trade Return ──────────────────────────────────────────
@@ -196,7 +249,7 @@ def compute_portfolio_returns(raw_data, strat, sigma_tgt,
     for rd in raw_data:
         Rt = compute_contract_returns(rd, strat, sigma_tgt)
         start, t1, dates = rd['start'], rd['t1'], rd['dates']
-        slc = Rt[start:t1]
+        slc = Rt[start:t1 + 1]
         series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
     df_all = pd.DataFrame(series)
     if aggregation_mode == 'dropna':
@@ -257,7 +310,7 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
                                       aggregation_mode=aggregation_mode)
         if port_vol_target is not None:
             R = apply_portfolio_vol_scaling(R, port_vol_target)
-        m_all = compute_metrics(R, n_contracts=N, calmar_mode=TRADE_CALMAR_MODE)
+        m_all = compute_metrics(R, n_contracts=N)
         if report_source != 'trade':
             reporting = compute_reporting_mdd_calmar_risk_price_sigma0(
                 raw_data,
@@ -299,7 +352,7 @@ def run_diagnostics(raw_data, ac_name, sigma_tgt, test_start='2011-01-01', test_
         tk = rd['tk']
         det = compute_contract_returns(rd, 'Long', sigma_tgt, detail=True)
         start, t1, dates = rd['start'], rd['t1'], rd['dates']
-        slc = slice(start, t1)
+        slc = slice(start, t1 + 1)
         df = pd.DataFrame({
             f'{tk}_price': det['prices'][slc],
             f'{tk}_rt': det['rt'][slc],
@@ -308,7 +361,7 @@ def run_diagnostics(raw_data, ac_name, sigma_tgt, test_start='2011-01-01', test_
             f'{tk}_gross_pnl': det['gross_pnl'][slc],
             f'{tk}_tc': det['tc_cost'][slc],
             f'{tk}_Rt': det['Rt'][slc],
-        }, index=dates[:t1 - start])
+        }, index=dates[:t1 - start + 1])
         all_details[tk] = df
 
     # Merge all contracts on date index
@@ -371,7 +424,11 @@ def main():
                         choices=['trade', 'RISK_PRICE_SIGMA0'],
                         default=DEFAULT_REPORT_SOURCE,
                         help='Reporting source / bridge for MDD and Calmar only')
+    parser.add_argument('--exclude-contracts', default=None,
+                        help='Comma-separated exclusion override, e.g. FB,ZA,ZO')
     args = parser.parse_args()
+
+    excluded_contracts = parse_exclusion_arg(args.exclude_contracts)
 
     asset_classes = [args.asset] if args.asset else [
         'Commodity', 'Equity Index', 'Fixed Income', 'Forex', 'All'
@@ -398,9 +455,19 @@ def main():
                 # All = combine all asset classes (excluding EXCLUDED_CONTRACTS)
                 raw = []
                 for a in ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']:
-                    raw.extend(load_contracts(a, args.test_start, args.test_end))
+                    raw.extend(load_contracts(
+                        a,
+                        args.test_start,
+                        args.test_end,
+                        excluded_contracts=excluded_contracts,
+                    ))
             else:
-                raw = load_contracts(ac, args.test_start, args.test_end)
+                raw = load_contracts(
+                    ac,
+                    args.test_start,
+                    args.test_end,
+                    excluded_contracts=excluded_contracts,
+                )
             n10, n15, tot = run_table(raw, ac, args.sigma, paper_table,
                                       table_label, port_vol,
                                       metric_names=metric_names,

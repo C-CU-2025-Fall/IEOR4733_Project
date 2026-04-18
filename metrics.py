@@ -1,5 +1,5 @@
 """
-metrics.py — Portfolio metrics with reproduction-aligned Calmar by default
+metrics.py — Portfolio metrics for the active trade-world baseline
 
 Paper: Zhang, Zohren, Roberts (2019) Section 4.4
 Reference: [27] Lim et al. (Deep Momentum Networks)
@@ -17,15 +17,9 @@ Metrics:
   4. Sharpe   — E(R) / std(R)
   5. Sortino  — E(R) / DD
   6. MDD      — max drawdown from additive wealth = W₀ + cumsum(R_port)
-  7. Calmar   — default: wealth CAGR / MDD on the same additive wealth path
-                 optional literal mode: E(R) / MDD
+  7. Calmar   — additive-wealth CAGR / MDD on the same additive wealth path
   8. % +ve    — fraction of positive R_port days
   9. Ave P/L  — mean(R>0) / |mean(R<0)|
-
-NOTE: The paper's reported Calmar values are internally inconsistent with
-standard E(R)/MDD. For reproduction, the default here is the better-aligned
-additive-wealth CAGR numerator; the old literal formula remains available via
-calmar_mode='literal'.
 """
 import numpy as np
 
@@ -81,8 +75,7 @@ def max_drawdown_from_path(path):
     drawdown = (peak - arr) / peak
     return float(np.nanmax(drawdown))
 
-def compute_metrics(R_port, n_contracts=None, w0=None, N_contracts=None,
-                    calmar_mode='wealth_cagr'):
+def compute_metrics(R_port, n_contracts=None, w0=None, N_contracts=None):
     """Compute all 9 metrics from portfolio daily returns (additive).
 
     Args:
@@ -90,9 +83,6 @@ def compute_metrics(R_port, n_contracts=None, w0=None, N_contracts=None,
         n_contracts: number of sleeves/contracts in the portfolio
         w0:      initial wealth for MDD calculation. If omitted, use
                  n_contracts so additive wealth starts at one unit per sleeve.
-
-    Returns:
-        calmar_mode: 'wealth_cagr' (default) or 'literal'
 
     Returns:
         list of 9 rounded values [E(R), std, DD, Sharpe, Sortino, MDD, Calmar, %+ve, AveP/L]
@@ -127,13 +117,7 @@ def compute_metrics(R_port, n_contracts=None, w0=None, N_contracts=None,
     wealth = additive_wealth_path(R, w0=w0)
     mdd = max_drawdown_from_path(wealth)
 
-    if calmar_mode == 'wealth_cagr':
-        annual_return = _wealth_cagr_from_additive_path(wealth, w0)
-    elif calmar_mode == 'literal':
-        annual_return = er
-    else:
-        raise ValueError(f"Unknown calmar_mode: {calmar_mode}")
-
+    annual_return = _wealth_cagr_from_additive_path(wealth, w0)
     calmar = annual_return / mdd if mdd > 0 else 0.0
 
     return [round(v, 3) for v in

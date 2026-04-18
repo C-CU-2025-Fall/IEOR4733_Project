@@ -48,7 +48,8 @@ TEST_END   = '2019-12-31'
 # =============================================================================
 # CLC Contracts — Full 50 contracts from Zhang et al. 2020 paper
 # All 50 contracts validated via REV cross-validation (2026-04-14):
-#   - 50/50 have valid RAD data (vendor RAD + RAD_v2 for ZN,US,ZU,GI,KC,ZH)
+#   - 50/50 have valid RAD data
+#   - live loader uses RAD_v2 fallback only for ZH / ZU / US / ZN
 #   - 50/50 have rollovers detected during 2011-2019 test period
 # =============================================================================
 ASSET_CLASSES = {
@@ -78,21 +79,33 @@ ASSET_CLASSES = {
 # search frontiers preserved in notes/reports.
 EXCLUDED_CONTRACTS = [] #['FB','US'] TBD
 
+# Negative-price source policy:
+# Any source that produces non-positive prices in the live 2011-2019 window is
+# banned from active search/runtime use, because Eq. 4 uses raw p_{t-1} in the
+# transaction-cost term. With negative prices, the cost term changes sign and
+# the trade object is no longer economically meaningful under the current formula.
+#
+# Current contracts affected on REV:
+#   CC, LB, ZH, JO, ZO
+# These contracts are therefore restricted to RAD_REGEN in active searches.
+REGEN_ONLY_CONTRACTS = ['CC', 'JO', 'LB', 'ZH', 'ZO']
+
 # Active per-contract source overrides for the current Table 3 working frontier.
-# This is the adjusted-only v4 map after the MDD-first reopen search. Overrides
-# are kept only where the generated comparisons still justify them under the
-# active bridge world and the no-NON source constraint.
+# Search/runtime doctrine:
+#   - RAD is the default
+#   - REGEN_ONLY_CONTRACTS are forced onto RAD_REGEN
+#   - other overrides remain where the current local search still justifies them
 SOURCE_OVERRIDES = {
     'DA': 'RAD_REGEN',
-    'EN': 'REV',
-    'ES': 'REV',
+    'EN': 'RAD_REGEN',
+    'ES': 'RAD_REGEN',
     'GI': 'RAD_REGEN',
-    'JO': 'REV',
+    'JO': 'RAD_REGEN',
     'JN': 'REV',
     'SN': 'REV',
     'KW': 'REV',
-    'LB': 'REV',
-    'CC': 'REV',
+    'LB': 'RAD_REGEN',
+    'CC': 'RAD_REGEN',
     'MP': 'RAD_REGEN',
     'NK': 'RAD_REGEN',
     'SC': 'RAD_REGEN',
@@ -100,12 +113,13 @@ SOURCE_OVERRIDES = {
     'ZA': 'RAD_REGEN',
     'ZF': 'REV',
     'ZG': 'RAD_REGEN',
-    'ZH': 'REV',
+    'ZH': 'RAD_REGEN',
     'ZI': 'REV',
     'ZK': 'REV',
     'ZN': 'REV',
     'ZR': 'REV',
     'ZT': 'RAD_REGEN',
+    'ZO': 'RAD_REGEN',
     'ZU': 'REV',
     'ZW': 'REV',
 }
@@ -115,7 +129,7 @@ DATA_QUALITY_SUMMARY = {
     'total_paper_contracts': 50,
     'usable_contracts': 50,
     'excluded_contracts': 0,
-    'v2_contracts': ['ZN', 'US', 'ZU', 'GI', 'KC', 'ZH'],  # RAD regenerated via cumulative roll ratio
+    'v2_contracts': ['ZH', 'ZU', 'US', 'ZN'],  # live loader uses *_RAD_v2.CSV for these 4 only
     'source_overrides': len(SOURCE_OVERRIDES),
     'check_date': '2026-04-16',
     'test_period': '2011-01-01 to 2019-12-31',
