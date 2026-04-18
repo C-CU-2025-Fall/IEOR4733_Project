@@ -27,6 +27,9 @@ python tests/calmar_alignment_iteration.py
 # Enumerate clean same-rule vs 40+ experimental frontiers
 python tests/frontier_40plus_enumeration.py
 
+# One-line reproduction of the retained 41/45 experimental upper bound
+python tests/run_legacy_41.py
+
 # Probe whether Yahoo-based ES/EN paths help when putting Equity back
 python tests/equity_yf_rad_regen_probe.py
 ```
@@ -74,7 +77,7 @@ Interpretation:
 This is the retained **score-first adjusted version** that currently reaches `41/45`:
 
 ```bash
-python tests/frontier_40plus_enumeration.py
+python tests/run_legacy_41.py
 ```
 
 Representative `41/45` case:
