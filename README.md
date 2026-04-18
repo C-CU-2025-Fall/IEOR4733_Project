@@ -1,432 +1,298 @@
 # IEOR4733_Project — Deep Reinforcement Learning for Trading
 
-Reproduction of **"Deep Reinforcement Learning for Trading"** by Zhang, Zohren, and Roberts (Oxford, 2019)
+Reproduction of Zhang, Zohren, Roberts (2019), with the repo condensed to the current core:
 
-📄 Paper: https://arxiv.org/pdf/1911.10107
+- one **live baseline** that keeps all Equity / Forex contracts
+- one **experimental adjusted upper bound** that reaches `41/45`
+- one **reporting-world audit line** explaining why clean same-rule still stalls below `40+/45`
 
----
+Paper: [arXiv PDF](https://arxiv.org/pdf/1911.10107)
+
+> Read [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md) first if you are resuming work.
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-pip install numpy pandas
+pip install numpy pandas yfinance
 
-# Run Table 3 (per-contract vol scaling only)
-python baseline_run.py
+# Live baseline: all 50 contracts included
+python baseline_run.py --table 3 --all-metrics --sigma 0.058
 
-# Run Table 2 (+ portfolio-level vol scaling)
-python baseline_run.py --table 2
+# Historical baseline rebuild under the cleaned source doctrine
+python tests/historical_36x_rebuild_search.py
 
-# Run both tables
-python baseline_run.py --table both
+# Self-iterating reporting / Calmar alignment audit
+python tests/calmar_alignment_iteration.py
 
-# Single asset class
-python baseline_run.py --asset "Equity Index"
+# Enumerate clean same-rule vs 40+ experimental frontiers
+python tests/frontier_40plus_enumeration.py
 
-# Custom σ_tgt
-python baseline_run.py --sigma 0.058
+# One-line reproduction of the retained 41/45 experimental upper bound
+python tests/run_legacy_41.py
 
-# Custom test period
-python baseline_run.py --test-start 2015-01-01 --test-end 2019-12-31
-
-# Run tests
-python test_baseline.py
+# Probe whether Yahoo-based ES/EN paths help when putting Equity back
+python tests/equity_yf_rad_regen_probe.py
 ```
 
----
+## Preserved Versions
 
-## Methodology
+### Version Table
 
-### Paper Equations (as implemented)
+| Version | One-line Command | `<=10 /45` | `<=15 /45` | Equity / Forex fully kept? | Same-rule? | Notes |
+| --- | --- | ---: | ---: | --- | --- | --- |
+| Live baseline | `python baseline_run.py --table 3 --all-metrics --sigma 0.058` | 25 | 31 | Yes | Yes | current default runtime |
+| Clean same-rule max | `python tests/frontier_40plus_enumeration.py` | 29 | 34 | Yes | Yes | best clean interpretation under current doctrine |
+| Cleaner experimental fallback | `python tests/run_legacy_41.py` + `JO -> RAD` probe | 35 | 40 | No | No | keeps the legacy upper-bound shape but removes `JO_REV` |
+| Experimental upper bound | `python tests/run_legacy_41.py` | 36 | 41 | No | No | excludes `EN, ES, FB, ZA, ZO`; Equity-only `risk_price_non` |
 
-**Eq 4 — Trade return per contract:**
-```
-R_t = A_{t-1} × (σ_tgt / σ_{t-1}) × r_t − bp × p_{t-1} × |Δscaled_pos|
-```
-- `r_t = p_t − p_{t-1}` (additive profits, p0-normalized) [Paper Section 3.2]
-- `σ_{t-1}` = EWMA(60) std of r_t [Paper Section 3.2]
-- `A_{t-1}` = position signal at t-1 (no look-ahead)
-- `bp = 0.0020` [Paper Table 1]
-- `σ_tgt` = volatility target (free parameter)
+### Paper Target (Table 3 Long)
 
-**Eq 10 — Sign(R) signal:**
-```
-A_t = sign(r_{t-252:t}) = sign(p_t − p_{t-252})
-```
+| Asset | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Commodity | -0.298 | 0.412 | 0.258 | -0.723 | -1.152 | 0.248 | -0.130 | 0.473 | 0.987 |
+| Equity Index | 0.504 | 0.928 | 0.606 | 0.543 | 0.831 | 0.127 | 0.466 | 0.541 | 0.928 |
+| Fixed Income | 0.605 | 0.939 | 0.561 | 0.645 | 1.081 | 0.108 | 0.455 | 0.515 | 1.048 |
+| Forex | -0.198 | 0.472 | 0.285 | -0.420 | -0.696 | 0.219 | -0.101 | 0.491 | 0.966 |
+| All | -0.013 | 0.363 | 0.230 | -0.036 | -0.057 | 0.037 | -0.009 | 0.519 | 0.919 |
 
-**Eq 3,11,12 — MACD signal:**
-```
-MACD_t = q_t / std(q_{t-252:t})
-q_t = (m(S) − m(L)) / std(p_{t-63:t})
-A_t = φ(MACD_t) where φ(x) = x·exp(−x²/4)/0.89
-```
-Time-scale pairs: (8,24), (16,48), (32,96) [Paper reference [4] Baz et al.]
+### 9-Metric Alignment Tables
 
-**Eq 13 — Portfolio:**
-```
-R_port = (1/N) × Σ R_i    (equal-weight average)
-```
+Below are the current retained Table 3 Long alignment tables against the paper targets.
 
-### Table 2 vs Table 3
+#### Live Baseline
 
-- **Table 3**: Per-contract vol scaling (Eq 4) only. Each contract scaled to σ_tgt, then averaged.
-- **Table 2**: Table 3 + additional portfolio-level vol scaling → target std ≈ 0.97
+| Asset | `<=15 /9` | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Commodity | 6/9 | -0.232 | 0.374 | 0.256 | -0.621 | -0.907 | 0.626 | -0.121 | 0.491 | 0.938 |
+| Equity Index | 6/9 | 0.526 | 0.839 | 0.660 | 0.627 | 0.798 | 0.149 | 0.344 | 0.548 | 0.919 |
+| Fixed Income | 6/9 | 0.471 | 0.854 | 0.556 | 0.552 | 0.847 | 0.123 | 0.267 | 0.529 | 0.975 |
+| Forex | 9/9 | -0.173 | 0.423 | 0.273 | -0.409 | -0.635 | 0.220 | -0.090 | 0.490 | 0.972 |
+| All | 4/9 | 0.037 | 0.331 | 0.232 | 0.111 | 0.157 | 0.259 | -0.056 | 0.522 | 0.933 |
 
-### Metrics (9 per strategy per asset class)
+Main misses at `<=15%`:
+- Commodity: `E(R)`, `Sortino`, `MDD`
+- Equity Index: `Sharpe`, `MDD`, `Calmar`
+- Fixed Income: `E(R)`, `Sortino`, `Calmar`
+- Forex: none
+- All: `E(R)`, `Sharpe`, `Sortino`, `MDD`, `Calmar`
 
-1. E(R) = mean(R) × 252
-2. std(R) = std(R) × √252
-3. DD = √(mean(min(0,R)²)) × √252
-4. Sharpe = E(R) / std(R)
-5. Sortino = E(R) / DD
-6. MDD = max((peak − wealth) / peak)  [running max method]
-7. Calmar = realised_annual_return / MDD
-8. %+ve = fraction of positive days
-9. Ave P/L = mean(R>0) / |mean(R<0)|
+#### Clean Same-Rule Max
 
-Wealth = N × W₀ + cumsum(R_port) (additive accumulation, not multiplicative)
+| Asset | `<=15 /9` | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Commodity | 4/9 | -0.198 | 0.377 | 0.258 | -0.525 | -0.768 | 0.431 | -0.097 | 0.494 | 0.940 |
+| Equity Index | 7/9 | 0.523 | 0.839 | 0.659 | 0.624 | 0.794 | 0.146 | 0.324 | 0.547 | 0.920 |
+| Fixed Income | 9/9 | 0.555 | 0.859 | 0.570 | 0.647 | 0.975 | 0.111 | 0.414 | 0.534 | 0.969 |
+| Forex | 9/9 | -0.173 | 0.423 | 0.273 | -0.409 | -0.635 | 0.220 | -0.090 | 0.490 | 0.972 |
+| All | 5/9 | 0.075 | 0.342 | 0.244 | 0.219 | 0.306 | 0.196 | -0.004 | 0.528 | 0.926 |
 
----
+Main misses at `<=15%`:
+- Commodity: `E(R)`, `Sharpe`, `Sortino`, `MDD`, `Calmar`
+- Equity Index: `Calmar`
+- Fixed Income: none
+- Forex: none
+- All: `E(R)`, `Sharpe`, `Sortino`, `MDD`
 
-## Project Structure
+#### Experimental Upper Bound (`41/45`)
 
-```
-IEOR4733_Project/
-├── baseline_run.py          # Main entry point (Table 2 & 3)
-├── test_baseline.py         # Tests
-├── config.py                # Parameters + paper target values
-├── data_loader.py           # CLC data loading
-├── strategies.py            # Long / Sign(R) / MACD signals
-├── metrics.py               # 9 portfolio metrics
-├── vol_scaling.py           # Volatility scaling utilities
-├── indicators.py            # Technical indicators (MACD, RSI, etc.)
-├── train_dqn_paper_aligned.py  # DQN training (future work)
-│
-├── data/
-│   ├── CLC/                 # 96 futures contracts (*_RAD.CSV)
-│   ├── index_data.csv       # VIX index
-│   └── risk_free_rate.csv   # Risk-free rate (DTB3)
-│
-├── references/              # Paper PDF
-├── deck.md                  # Proposal deck
-├── deck-v1.1.pptx           # Presentation v1.1
-├── deck-v2.pptx             # Presentation v2
-├── DRL_Trading_Midterm_draft.pptx
-└── archive/                 # Old scripts (13 files)
-```
+| Asset | `<=15 /9` | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Commodity | 8/9 | -0.298 | 0.380 | 0.259 | -0.784 | -1.150 | 0.220 | 0.180 | 0.479 | 0.958 |
+| Equity Index | 8/9 | 0.470 | 0.833 | 0.645 | 0.564 | 0.728 | 0.126 | 0.331 | 0.546 | 0.915 |
+| Fixed Income | 9/9 | 0.555 | 0.859 | 0.570 | 0.647 | 0.975 | 0.111 | 0.414 | 0.534 | 0.969 |
+| Forex | 9/9 | -0.173 | 0.423 | 0.273 | -0.409 | -0.635 | 0.220 | -0.109 | 0.490 | 0.972 |
+| All | 7/9 | -0.013 | 0.327 | 0.228 | -0.038 | -0.055 | 0.125 | 0.300 | 0.515 | 0.934 |
 
----
+Main misses at `<=15%`:
+- Commodity: `Calmar`
+- Equity Index: `Calmar`
+- Fixed Income: none
+- Forex: none
+- All: `MDD`, `Calmar`
 
-## Key Parameters
+#### Cleaner Experimental Fallback (`40/45`)
 
-| Parameter | Value | Source |
-|-----------|-------|--------|
-| Transaction cost (bp) | 0.0020 | Paper Table 1 |
-| EWMA span | 60 | Paper Section 3.2 |
-| σ_tgt (per contract) | 0.064 | Derived from Long std match |
-| Trading days/year | 252 | Standard |
-| Sign(R) lookback | 252 | Paper Eq 10 |
-| MACD pairs | (8,24),(16,48),(32,96) | Paper Eq 12, ref [4] |
-| MACD vol window | 63 | Paper Eq 3, ref [4] |
-| MACD std window | 252 | Paper Eq 3, ref [4] |
-| Portfolio vol target | 0.97 | Paper Table 2 |
-| Test period | 2011-2019 (9 years) | Paper Section 4.1 |
-| Discount factor (γ) | 0.3 | Paper Table 1 (RL only) |
-| Retrain interval | 5 years | Paper Section 4.1 (RL only) |
+This is the closest retained fallback if you want to reduce one dirty `REV` dependency while staying at `40+`:
+- start from the `41/45` upper bound
+- change only:
+  - `JO: REV -> RAD`
 
-### Asset Classes & Contracts (50 contracts total)
+| Asset | `<=15 /9` | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Commodity | 8/9 | -0.294 | 0.378 | 0.258 | -0.778 | -1.141 | 0.231 | 0.133 | 0.476 | 0.969 |
+| Equity Index | 8/9 | 0.470 | 0.833 | 0.645 | 0.564 | 0.728 | 0.126 | 0.331 | 0.546 | 0.915 |
+| Fixed Income | 9/9 | 0.555 | 0.859 | 0.570 | 0.647 | 0.975 | 0.111 | 0.414 | 0.534 | 0.969 |
+| Forex | 9/9 | -0.173 | 0.423 | 0.273 | -0.409 | -0.635 | 0.220 | -0.109 | 0.490 | 0.972 |
+| All | 6/9 | -0.011 | 0.327 | 0.228 | -0.034 | -0.049 | 0.130 | 0.254 | 0.515 | 0.938 |
 
-| Asset Class | # | Tickers |
-|-------------|---|---------|
-| Commodity | 25 | CC,DA,GI,JO,KC,KW,LB,NR,SB,ZA,ZC,ZF,ZG,ZH,ZI,ZK,ZL,ZO,ZP,ZR,ZT,ZU,ZW,ZZ,**ZN** |
-| Equity Index | 11 | CA,EN,ER,ES,LX,MD,SC,SP,XU,XX,YM |
-| Fixed Income | 5 | DT,FB,TY,UB,US |
-| Forex | 9 | AN,BN,CN,DX,FN,JN,MP,NK,SN |
+Main misses at `<=15%`:
+- Commodity: `Calmar`
+- Equity Index: `Calmar`
+- Fixed Income: none
+- Forex: none
+- All: `E(R)`, `MDD`, `Calmar`
 
-**Note**: ZN in CLC data = 24HR NATL GAS (Natural Gas), not 10-Year T-Note. Moved to Commodity.
+### 1. Live Baseline
 
-### RAD Data Status (deterministic cross-validation, 2026-04-13)
+This is the baseline version that **keeps all Equity / Forex contracts** and remains the default runtime:
 
-**Method**: REV adj 是分段常数 → `adj_change ≠ 0` = 确定性 roll 检测（无阈值）
-
-**Vendor RAD 可用**: 46/50
-**Vendor RAD 损坏**: 4/50 → 使用 RAD_v2
-
-| 损坏合约 | 问题 | Roll Rule | CME 验证 |
-|---------|------|-----------|---------|
-| ZH | 全零 | H<M>UZ | ✅ |
-| ZU | 全零 | 12个月 | ✅ |
-| US | 99% NaN | H<M>UZ | ✅ |
-| ZN | 只有季度调整(缺月度) | ALL<K> (12月/年) | ✅ |
-
-**`data_loader.py`**: ZH, ZU, US, ZN → 使用 `*_RAD_v2.CSV`
-
-### 交叉验证结果 (`tests/roll_validation_final.py`)
-
-| 状态 | # | 说明 |
-|------|---|------|
-| ✅ VERIFIED | 27 | 有 ASC，ASC vs REV price error <0.25% (mean 0.01%) |
-| ✅ CROSS_VALIDATED | 21 | 无 ASC，REV adj 非roll日噪声 = 精确 0 |
-| ❌ INCOMPLETE | 1 (ZN) | vendor RAD 只有季度调整 |
-| ❌ CORRUPT | 1 (US) | vendor RAD 99% NaN |
-
-- REV adj 非roll日噪声 = 精确 0: **50/50**
-- ASC vs REV price error: mean=0.01%, max=0.23%
-- CLC roll rules vs CME 官方: **全部一致**
-
----
-
-## 📊 CLC 数据关系
-
-```
-NON = 纯原始价格（无 roll 信息）
-ASC = NON + vendor roll_date + prev_close + new_close（版本1）
-  → NON[roll_date] = prev_close（旧合约收盘价）
-  → 次日 RAD ratio 跳变, REV adj 跳变
-RAD = NON × cumulative_ratio (forward adjustment, 论文用这个)
-REV = NON + cumulative_adj (backward adjustment, 独立验证源)
-
-任意两源可精确推导 roll_date + prev_close + new_close
-REV adj 是分段常数 → adj_change ≠ 0 就是确定性 roll 检测
+```bash
+python baseline_run.py --table 3 --all-metrics --sigma 0.058
 ```
 
----
+Current score:
+- `<=10: 25/45`
+- `<=15: 31/45`
 
-## Current Results
+Properties:
+- exclusions: none
+- reporting bridge: `RISK_PRICE_SIGMA0`
+- default reporting numerator in the live CLI is still `wealth_cagr`
+- this is the safest “all contracts retained” reference point
 
-### Full Baseline Alignment (Table 3, σ_tgt = 0.064, 2011-2019)
+### 2. Clean Same-Rule Search Ceiling
 
-**Long Only 4×9 (Tier A metrics): ≤10%: 18/36 (50%) | ≤15%: 22/36 (61%)**
+This is the best retained **clean interpretation** line:
 
-*Note: ZN moved from Fixed Income to Commodity (ZN in CLC data is Natural Gas). Fixed Income: 5 contracts, Commodity: 25 contracts.*
-
-**Key Changes (2026-04-13)**:
-- `fillna(0)` for holidays: On exchange holidays, missing contracts contribute R_t=0 to portfolio average, keeping denominator = N contracts every day.
-- TC formula: `bp × p_{t-1} × |Δsp|` uses raw prices (paper Eq 4 literal implementation).
-- p0 normalization removed: It's a no-op for ratio metrics (Sharpe, etc.).
-
-**DD Fix (2026-04-12)**: DD calculation updated per Paper Section 4.4 definition (std of negative returns only).
-Improved DD ≤15%: 6/12 → 7/12.
-
----
-
-### Commodity (25 contracts)
-
-**Note**: ZN added (moved from Fixed Income — ZN in CLC data is Natural Gas, RAD regenerated using RAD_v2 method).
-
-| Metric | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L |
-|--------|------|-----|----|--------|---------|-----|--------|------|--------|
-| **Long** | -0.237 | 0.412 | **0.258** | -0.574 | -0.886 | 0.102 | -0.088 | 0.497 | 0.930 |
-| Paper | -0.298 | 0.412 | **0.258** | -0.723 | -1.152 | 0.248 | -0.130 | 0.473 | 0.987 |
-| **%Err** | 20.6% | **0.0%** | **0.0%** | 20.6% | 23.1% | 58.9% | 32.3% | **5.1%** | **5.8%** |
-
----
-
-### Equity Index (11 contracts) ✅
-
-| Metric | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L |
-|--------|------|-----|----|--------|---------|-----|--------|------|--------|
-| **Long** | +0.555 | 0.917 | 0.695 | +0.605 | +0.799 | 0.113 | +0.412 | 0.547 | 0.910 |
-| Paper | +0.504 | 0.928 | 0.606 | +0.543 | +0.831 | 0.127 | +0.466 | 0.541 | 0.928 |
-| **%Err** | **10.1%** | **1.2%** | 14.7% | **11.4%** | 3.8% | 11.0% | 11.6% | **1.1%** | **1.9%** |
-
----
-
-### Fixed Income (5 contracts)
-
-**Note**: ZN moved to Commodity category (ZN in CLC data is Natural Gas, not 10-Year T-Note).
-
-| Metric | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L |
-|--------|------|-----|----|--------|---------|-----|--------|------|--------|
-| **Long** | +0.458 | **0.925** | 0.629 | +0.495 | +0.730 | 0.285 | +0.219 | 0.524 | 0.956 |
-| Paper | +0.605 | **0.939** | 0.561 | +0.645 | +1.081 | 0.108 | +0.455 | 0.515 | 1.048 |
-| **%Err** | 24.3% | **1.5%** | 12.1% | 23.3% | 32.5% | 163.9% | 51.9% | **1.7%** | **8.8%** |
-
----
-
-### Forex (9 contracts)
-
-| Metric | E(R) | std | DD | Sharpe | Sortino | MDD | Calmar | %+ve | AveP/L |
-|--------|------|-----|----|--------|---------|-----|--------|------|--------|
-| **Long** | -0.213 | 0.458 | **0.299** | -0.465 | -0.713 | 0.321 | -0.086 | 0.490 | 0.953 |
-| Paper | -0.198 | 0.472 | **0.285** | -0.420 | -0.696 | 0.219 | -0.101 | 0.491 | 0.966 |
-| **%Err** | **7.7%** | **3.0%** | **4.9%** | 10.7% | 2.4% | 46.6% | 14.9% | **0.2%** | **1.3%** |
-
----
-
-### Key Findings
-
-**✅ Long Only 4×9 Summary**:
-- **≤10%: 18/36 (50%) | ≤15%: 22/36 (61%)**
-- Equity: 5/9 ≤10% (E(R) 10%, std 1%), Forex: 4/9 ≤10% (E(R) 8%, std 3%)
-- Commodity: 4/9 ≤10% (std 0%), Fixed Income: 3/9 ≤10% (std 1.5%)
-
-**✅ Volatility Scaling Verified**:
-- **All asset classes std(R) error <3%** → **Equation 4 implementation correct**
-
-**✅ Holiday Handling **(fillna(0))
-- On exchange holidays, missing contracts contribute R_t=0 to portfolio average
-- Keeps denominator = N contracts every day
-- std, %+ve, P/L fully aligned; E(R) bias is data-level, not methodology
-
-**⚠️ E(R) Bias **(Commodity 21%, Fixed Income 23%)
-- **Fixed Income**: TC drag = -0.243 (6× Commodity), due to low σ → high position changes
-- **Conclusion**: Bias is data-level (CLC RAD generation, vendor differences), not code logic
-
-**📊 Data Quality** (from 50-contract cross-validation):
-- **48/50 contracts VERIFIED or CROSS_VALIDATED**
-- **4 RAD_v2 generated** for damaged contracts (ZH, ZU, US, ZN)
-
----
-
-
-
----
-
-## 📊 CLC 数据文件概念图
-
-### 核心关系：Roll Date 是唯一真相
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              Roll Date (唯一)                                │
-│   换月发生的真实日期 - 这是所有验证的核心                                     │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-          ┌─────────────────────────┼─────────────────────────┐
-          │                         │                         │
-          ▼                         ▼                         ▼
-   ┌─────────────┐          ┌─────────────┐          ┌─────────────┐
-   │    ASC      │          │    NON      │          │  理论规则   │
-   │  (黄金标准)  │          │  (原始价格)  │          │  (MPDM_N)  │
-   │             │          │             │          │             │
-   │ 记录:       │          │ 用于:       │          │ 用于:       │
-   │ - roll_date │          │ - 检测价格跳 │          │ - 推测日期  │
-   │ - prev_close│          │ - 推导 ratio │          │ - 无 ASC 时  │
-   │ - new_close │          │ - 推导 adj   │          │   做 backup │
-   └─────────────┘          └─────────────┘          └─────────────┘
-          │                         │
-          └─────────────┬───────────┘
-                        │
-                        ▼
-        ┌───────────────────────────────────┐
-        │        推导调整参数 (唯一)          │
-        │                                   │
-        │  ratio = prev_close / new_close   │
-        │  adjustment = new_close - prev_close │
-        └───────────────────────────────────┘
-                        │
-          ┌─────────────┴─────────────┐
-          │                           │
-          ▼                           ▼
-   ┌─────────────┐            ┌─────────────┐
-   │    RAD      │            │    REV      │
-   │  (乘法调整)  │            │  (加法调整)  │
-   │             │            │             │
-   │ RAD = NON   │            │ REV = NON   │
-   │     × ratio │            │     + adj   │
-   │             │            │             │
-   │ 用于回测     │            │ 用于回测     │
-   └─────────────┘            └─────────────┘
+```bash
+python tests/frontier_40plus_enumeration.py
 ```
 
-### 关键理解
+Current clean same-rule max:
+- `<=10: 29/45`
+- `<=15: 34/45`
 
-1. **Roll Date 只有一个** - ASC 记录的是真相，NON 价格跳变可以检测，理论规则可以推测
-2. **REV 和 RAD 是独立的** - 它们用不同方法调整，不是等价的，不需要互相验证
-3. **ASC + NON → 推导调整参数** - ratio 和 adjustment 都从 ASC 的价格记录推导
-4. **理论规则是 backup** - 当没有 ASC 时，用 MPDM 规则 + NON 价格跳变来推测 roll date
-5. **数据完整 = 4 类齐全** - ASC + NON + REV + RAD 同时存在才能完整验证
+Interpretation:
+- one global reporting rule
+- one global numerator
+- no asset-specific reporting override
+- no negative-price-sensitive `REV` comeback
 
-### 交叉验证矩阵 (修正版)
+### 3. Experimental Adjusted Upper Bound
 
-| 验证目标 | 数据源 A | 数据源 B | 验证方法 | 期望 |
-|---------|---------|---------|---------|------|
-| **Roll Date 真相** | ASC | NON (跳变) | ASC 日期 vs 检测跳变日 | 100% 匹配 |
-| **Roll Price 真相** | ASC | NON | prev_close/new_close 对比 | <0.1% 差异 |
-| **理论规则可靠性** | 理论规则 | ASC | 理论日期 vs ASC 日期 | ≤1 天差异 |
-| **RAD 推导正确** | ASC+NON | RAD | 推导 ratio vs 实际 ratio | 完全匹配 |
-| **REV 推导正确** | ASC+NON | REV | 推导 adj vs 实际 adj | 完全匹配 |
-| **数据完整性** | 4 类文件 | - | ASC/NON/REV/RAD 都存在 | A 类完整 |
+This is the retained **score-first adjusted version** that currently reaches `41/45`:
 
-### 50 合约数据状态 (修正版)
+```bash
+python tests/run_legacy_41.py
+```
 
-| 类别 | 合约数 | 文件齐全 | Roll Date 来源 | 验证状态 |
-|------|--------|---------|---------------|----------|
-| **A 类 (完整)** | ~20 | ASC+NON+REV+RAD | ASC (黄金标准) | ✅ 可完整验证 |
-| **B 类 (部分)** | ~15 | NON+RAD(+REV?) | NON 跳变 + 理论规则 | ⚠️ 部分验证 |
-| **C 类 (仅 NON)** | ~11 | NON only | 理论规则 (backup) | ❌ 无法验证 |
-| **损坏修复** | 4 | NON+RAD_v2 | 理论规则 + 交易日 | ✅ RAD_v2 生成 |
+Representative `41/45` case:
+- family: `legacy experimental upper bound`
+- exclusions: `FB, ZA, ZO, EN, ES`
+- Equity-only reporting: `risk_price_non`
+- reporting extraction:
+  - `annual_mean_sleeve`, or
+  - `wealth_cagr`
+- aggregation: `contract_equal_path`
 
-**损坏合约修复 (RAD_v2)**:
-- ZH: MPDM_11, H,M,U,Z → 生成成功 (vendor RAD 全零)
-- ZN: MPDM_24, H,M,U,Z → 生成成功 (vendor RAD 21.9x 异常)
-- ZU: MPDM_11, 12 个月份 → 生成成功 (vendor RAD 全零)
-- US: MPDM_24, H,M,U,Z → 生成成功 (vendor RAD 全 NaN)
-- ZI: ✅ vendor RAD 正常 (ratio=1.32±0.06，不需要 RAD_v2)
+Current score:
+- `<=10: 36/45`
+- `<=15: 41/45`
 
----
+This version is intentionally preserved as:
+- **experimental upper bound**
+- not the promoted main interpretation
 
-## 🔍 交叉验证设计
+## Core Data Problems
 
-### 阶段 1: Roll Date 验证 (核心)
-**目标**: 确认 Roll Date 的唯一真相
+These are the current repo-level conclusions after all retained sessions.
 
-| 合约类型 | 验证方法 | 期望 |
-|---------|---------|------|
-| **A 类 (有 ASC)** | ASC.roll_date vs NON 跳变检测 | 100% 匹配 |
-| **A 类 (有 ASC)** | ASC.roll_date vs 理论规则 | ≤1 天差异 |
-| **B/C 类 (无 ASC)** | 理论规则 vs NON 跳变检测 | ≤1 天差异 |
+### 1. Negative-price `REV` cannot be treated as an active source in Eq. 4
 
-**意义**: 验证理论规则作为 backup 的可靠性
+Eq. 4 uses raw price level in the transaction-cost term:
 
-### 阶段 2: Roll Price 验证 (核心)
-**目标**: 确认 ASC 记录的价格与 NON 一致
+\[
+R_t = A_{t-1}\frac{\sigma_{tgt}}{\sigma_{t-1}}r_t - bp \cdot p_{t-1}\cdot |\Delta scaled\_pos|
+\]
 
-| 验证项 | 对比 | 期望 |
-|-------|------|------|
-| prev_close | ASC.prev_close vs NON[roll_date-1] | <0.1% 差异 |
-| new_close | ASC.new_close vs NON[roll_date] | <0.1% 差异 |
-| 隐含 ratio | ASC.prev_close / ASC.new_close | 用于验证 RAD |
+So if `p_{t-1} < 0`:
+- transaction cost becomes economically invalid
+- reporting capital anchor also becomes invalid
 
-**意义**: 如果价格对不上，ASC 的可信度降低
+This is why the repo now treats these contracts cautiously:
+- `CC`
+- `LB`
+- `JO`
+- `ZH`
+- `ZO`
 
-### 阶段 3: 调整参数验证
-**目标**: 验证 RAD/REV 使用的调整参数正确
+### 2. Yahoo Finance behaves like `NON`, not like adjusted continuous prices
 
-| 验证项 | 公式 | 期望 |
-|-------|------|------|
-| RAD ratio | RAD/NON vs ASC.prev/ASC.new | 完全匹配 |
-| REV adj | REV-NON vs ASC.new-ASC.prev | 完全匹配 |
+The retained local Yahoo probes show:
+- Yahoo ≈ `CLC NON`
+- Yahoo is **not** a replacement for `RAD`
+- Yahoo is **not** a replacement for negative-price `REV`
 
-### 阶段 4: 数据完整性评分
-**目标**: 对 50 合约进行数据质量分级
+For `ES/EN`, local Yahoo mapping is:
+- `ES ↔ ES=F`
+- `EN ↔ NQ=F`
 
-| 等级 | 标准 |
-|------|------|
-| **A** | ASC+NON+RAD+REV 齐全，Roll Date/Price 验证通过 |
-| **B** | NON+RAD，Roll Date 理论+NON 跳变一致 |
-| **C** | 仅 NON，依赖理论规则 |
-| **D** | 数据异常 (如 ZN 的 10000x) |
-| **F** | 数据缺失或损坏 |
+And even after building Yahoo-based `YF_RAD_REGEN` paths, putting `EN/ES` back still does **not** recover `40+/45`.
 
-### 输出
-1. `roll_date_truth.csv` - Roll Date 验证结果 (ASC vs NON vs 理论)
-2. `roll_price_truth.csv` - Roll Price 验证结果 (ASC vs NON)
-3. `adjustment_validation.csv` - RAD/REV 调整参数验证
-4. `data_quality_scores.csv` - 50 合约质量评分
+Reference:
+- [docs/equity_yf_rad_regen_probe.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/equity_yf_rad_regen_probe.md)
 
----
+### 3. Clean same-rule still stalls below `40+/45`
 
-## TODO
+After the retained reporting-world iteration:
+- the strongest clean same-rule line is still below `40+/45`
+- the current clean ceiling is `34/45`
+- the current live baseline is `31/45`
 
-- [x] Deterministic 50-contract RAD cross-validation (2026-04-13) — 48/50 VERIFIED/CROSS_VALIDATED
-- [x] ZN moved to Commodity (ZN = Natural Gas in CLC data)
-- [x] 4 damaged contracts: ZH, ZU, US (corrupt), ZN (incomplete)
-- [x] CLC roll rules verified against CME official
-- [x] 4 合约 RAD_v2 已用交叉验证方法论生成 (REV→roll date→ratio→cumulative×NON)
-- [x] Roll rules vs REV 检测验证: ZH(12/年), ZU(12/年), ZN(12/年), US(4/年) 全部一致
-- [ ] Run Table 2 & Table 3 backtesting with all 50 contracts
-- [ ] DQN training and comparison with baselines
-- [ ] Final presentation
+So at the moment:
+- **there is no clean same-rule 40+ frontier in this repo**
+- the only reproducible `40+` cases are experimental upper-bound families
+
+### 4. Reporting diagnosis: `MDD aligned, numerator wrong`
+
+The retained Calmar alignment loop concluded:
+- `MDD` is relatively close after Commodity cleanup
+- the main remaining mismatch is the **reporting annual return numerator**
+- the best same-path winner in the retained audit is:
+  - `annual_mean_simple`
+
+Reference:
+- [docs/calmar_alignment_iteration.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/calmar_alignment_iteration.md)
+
+## Retained Core Files
+
+The repo was condensed. The key retained exploration files are:
+
+- [tests/historical_36x_rebuild_search.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/historical_36x_rebuild_search.py)
+- [tests/calmar_alignment_iteration.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/calmar_alignment_iteration.py)
+- [tests/frontier_40plus_enumeration.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/frontier_40plus_enumeration.py)
+- [tests/equity_yf_rad_regen_probe.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/equity_yf_rad_regen_probe.py)
+
+And their retained reports:
+
+- [docs/historical_36x_rebuild_search.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/historical_36x_rebuild_search.md)
+- [docs/calmar_alignment_iteration.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/calmar_alignment_iteration.md)
+- [docs/frontier_40plus_enumeration.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/frontier_40plus_enumeration.md)
+- [docs/equity_yf_rad_regen_probe.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/equity_yf_rad_regen_probe.md)
+
+Older one-off search artifacts were removed after their conclusions were merged into [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md).
+
+## Minimal Working Interpretation
+
+- **Trade world** owns:
+  - `E(R), std(R), DD, Sharpe, Sortino, % +ve, Ave P/L`
+- **Reporting world** owns:
+  - `MDD, Calmar`
+- current reporting bridge:
+  - `RISK_PRICE_SIGMA0`
+- current clean reporting takeaway:
+  - `MDD` is usable
+  - `Calmar` is still definition-sensitive
+  - `annual_mean_simple` is the best retained same-path numerator candidate
+
+## Current Recommendation
+
+Use the repo in this order:
+
+1. live baseline for “all contracts retained” reference
+2. clean same-rule frontier for interpretable search ceiling
+3. experimental `41/45` frontier only as upper bound
+
+If you need to continue research later, start from:
+- [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md)
+- then [docs/frontier_40plus_enumeration.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/frontier_40plus_enumeration.md)
