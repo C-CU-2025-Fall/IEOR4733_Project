@@ -34,6 +34,58 @@ def _clean_price_frame(df, start_date='2009-01-01'):
 
 
 @lru_cache(maxsize=None)
+def _generate_non_fwd_anchored(ticker, data_dir='data/CLC', anchor_date='2011-01-01'):
+    """Generate an additive forward-adjusted NON path anchored at the test start.
+
+    Construction:
+      NON_FWD_ANCHORED[t] = NON[t] + (REV[t] - NON[t]) - (REV[t0] - NON[t0])
+                          = REV[t] - adj[t0]
+
+    where t0 is the first date >= anchor_date in the merged NON∩REV window.
+
+    Properties:
+      - at the anchor date, the series equals NON exactly
+      - additive day-to-day moves match REV day-to-day moves
+      - adjustment changes propagate forward, not backward
+      - prices stay on a more realistic level near the test start than raw REV
+    """
+    non = _read_clc_csv(os.path.join(data_dir, f'{ticker}_NON.CSV'))
+    rev = _read_clc_csv(os.path.join(data_dir, f'{ticker}_REV.CSV'))
+    if non is None or rev is None:
+        return None
+
+    merged = non[['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'OI']].merge(
+        rev[['Date', 'Close']],
+        on='Date',
+        how='inner',
+        suffixes=('', '_rev'),
+    )
+    merged = merged.sort_values('Date').reset_index(drop=True)
+
+    p_non = pd.to_numeric(merged['Close'], errors='coerce').values
+    p_rev = pd.to_numeric(merged['Close_rev'], errors='coerce').values
+
+    valid = np.isfinite(p_non) & np.isfinite(p_rev) & (p_non > 0)
+    merged = merged[valid].reset_index(drop=True)
+    p_non = p_non[valid]
+    p_rev = p_rev[valid]
+    if len(merged) == 0:
+        return None
+
+    anchor_mask = merged['Date'] >= pd.Timestamp(anchor_date)
+    if not anchor_mask.any():
+        return None
+    anchor_idx = int(anchor_mask.idxmax())
+
+    adj = p_rev - p_non
+    anchor_adj = adj[anchor_idx]
+    out = merged[['Date', 'Open', 'High', 'Low', 'Volume', 'OI']].copy()
+    out['Close'] = p_non + adj - anchor_adj
+    out = out[['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'OI']]
+    return out
+
+
+@lru_cache(maxsize=None)
 def _generate_rad_regen(ticker, data_dir='data/CLC'):
     """Regenerate ratio-adjusted close series from NON + REV adjustment shifts."""
     non = _read_clc_csv(os.path.join(data_dir, f'{ticker}_NON.CSV'))
@@ -72,7 +124,7 @@ def _generate_rad_regen(ticker, data_dir='data/CLC'):
 
 
 @lru_cache(maxsize=None)
-def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01', source='RAD'):
+def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01', source='RAD', anchor_date='2011-01-01'):
     """
     Load CLC price data from start_date onwards.
 
@@ -81,6 +133,7 @@ def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01', source='
       - REV: vendor back-adjusted continuous series
       - NON: vendor non-adjusted continuous series
       - RAD_REGEN: regenerate ratio-adjusted series from NON + REV adjustment shifts
+      - NON_FWD_ANCHORED: additive forward-adjusted NON anchored to NON at anchor_date
 
     Default 2009-01-01 gives enough warmup before the 2011 test window.
     """
@@ -97,6 +150,8 @@ def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01', source='
         df = _read_clc_csv(os.path.join(data_dir, f'{ticker}_NON.CSV'))
     elif source == 'RAD_REGEN':
         df = _generate_rad_regen(ticker, data_dir=data_dir)
+    elif source == 'NON_FWD_ANCHORED':
+        df = _generate_non_fwd_anchored(ticker, data_dir=data_dir, anchor_date=anchor_date)
     else:
         raise ValueError(f'Unknown source: {source}')
 
