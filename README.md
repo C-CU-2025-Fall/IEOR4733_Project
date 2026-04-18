@@ -36,6 +36,102 @@ python tests/equity_yf_rad_regen_probe.py
 
 ## Preserved Versions
 
+### Version Table
+
+| Version | One-line Command | `<=10 /45` | `<=15 /45` | Equity / Forex fully kept? | Same-rule? | Notes |
+| --- | --- | ---: | ---: | --- | --- | --- |
+| Live baseline | `python baseline_run.py --table 3 --all-metrics --sigma 0.058` | 25 | 31 | Yes | Yes | current default runtime |
+| Clean same-rule max | `python tests/frontier_40plus_enumeration.py` | 29 | 34 | Yes | Yes | best clean interpretation under current doctrine |
+| Cleaner experimental fallback | `python tests/run_legacy_41.py` + `JO -> RAD` probe | 35 | 40 | No | No | keeps the legacy upper-bound shape but removes `JO_REV` |
+| Experimental upper bound | `python tests/run_legacy_41.py` | 36 | 41 | No | No | excludes `EN, ES, FB, ZA, ZO`; Equity-only `risk_price_non` |
+
+### Paper Target (Table 3 Long)
+
+| Asset | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Commodity | -0.298 | 0.412 | 0.258 | -0.723 | -1.152 | 0.248 | -0.130 | 0.473 | 0.987 |
+| Equity Index | 0.504 | 0.928 | 0.606 | 0.543 | 0.831 | 0.127 | 0.466 | 0.541 | 0.928 |
+| Fixed Income | 0.605 | 0.939 | 0.561 | 0.645 | 1.081 | 0.108 | 0.455 | 0.515 | 1.048 |
+| Forex | -0.198 | 0.472 | 0.285 | -0.420 | -0.696 | 0.219 | -0.101 | 0.491 | 0.966 |
+| All | -0.013 | 0.363 | 0.230 | -0.036 | -0.057 | 0.037 | -0.009 | 0.519 | 0.919 |
+
+### 9-Metric Alignment Tables
+
+Below are the current retained Table 3 Long alignment tables against the paper targets.
+
+#### Live Baseline
+
+| Asset | `<=15 /9` | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Commodity | 6/9 | -0.232 | 0.374 | 0.256 | -0.621 | -0.907 | 0.626 | -0.121 | 0.491 | 0.938 |
+| Equity Index | 6/9 | 0.526 | 0.839 | 0.660 | 0.627 | 0.798 | 0.149 | 0.344 | 0.548 | 0.919 |
+| Fixed Income | 6/9 | 0.471 | 0.854 | 0.556 | 0.552 | 0.847 | 0.123 | 0.267 | 0.529 | 0.975 |
+| Forex | 9/9 | -0.173 | 0.423 | 0.273 | -0.409 | -0.635 | 0.220 | -0.090 | 0.490 | 0.972 |
+| All | 4/9 | 0.037 | 0.331 | 0.232 | 0.111 | 0.157 | 0.259 | -0.056 | 0.522 | 0.933 |
+
+Main misses at `<=15%`:
+- Commodity: `E(R)`, `Sortino`, `MDD`
+- Equity Index: `Sharpe`, `MDD`, `Calmar`
+- Fixed Income: `E(R)`, `Sortino`, `Calmar`
+- Forex: none
+- All: `E(R)`, `Sharpe`, `Sortino`, `MDD`, `Calmar`
+
+#### Clean Same-Rule Max
+
+| Asset | `<=15 /9` | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Commodity | 4/9 | -0.198 | 0.377 | 0.258 | -0.525 | -0.768 | 0.431 | -0.097 | 0.494 | 0.940 |
+| Equity Index | 7/9 | 0.523 | 0.839 | 0.659 | 0.624 | 0.794 | 0.146 | 0.324 | 0.547 | 0.920 |
+| Fixed Income | 9/9 | 0.555 | 0.859 | 0.570 | 0.647 | 0.975 | 0.111 | 0.414 | 0.534 | 0.969 |
+| Forex | 9/9 | -0.173 | 0.423 | 0.273 | -0.409 | -0.635 | 0.220 | -0.090 | 0.490 | 0.972 |
+| All | 5/9 | 0.075 | 0.342 | 0.244 | 0.219 | 0.306 | 0.196 | -0.004 | 0.528 | 0.926 |
+
+Main misses at `<=15%`:
+- Commodity: `E(R)`, `Sharpe`, `Sortino`, `MDD`, `Calmar`
+- Equity Index: `Calmar`
+- Fixed Income: none
+- Forex: none
+- All: `E(R)`, `Sharpe`, `Sortino`, `MDD`
+
+#### Experimental Upper Bound (`41/45`)
+
+| Asset | `<=15 /9` | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Commodity | 8/9 | -0.298 | 0.380 | 0.259 | -0.784 | -1.150 | 0.220 | 0.180 | 0.479 | 0.958 |
+| Equity Index | 8/9 | 0.470 | 0.833 | 0.645 | 0.564 | 0.728 | 0.126 | 0.331 | 0.546 | 0.915 |
+| Fixed Income | 9/9 | 0.555 | 0.859 | 0.570 | 0.647 | 0.975 | 0.111 | 0.414 | 0.534 | 0.969 |
+| Forex | 9/9 | -0.173 | 0.423 | 0.273 | -0.409 | -0.635 | 0.220 | -0.109 | 0.490 | 0.972 |
+| All | 7/9 | -0.013 | 0.327 | 0.228 | -0.038 | -0.055 | 0.125 | 0.300 | 0.515 | 0.934 |
+
+Main misses at `<=15%`:
+- Commodity: `Calmar`
+- Equity Index: `Calmar`
+- Fixed Income: none
+- Forex: none
+- All: `MDD`, `Calmar`
+
+#### Cleaner Experimental Fallback (`40/45`)
+
+This is the closest retained fallback if you want to reduce one dirty `REV` dependency while staying at `40+`:
+- start from the `41/45` upper bound
+- change only:
+  - `JO: REV -> RAD`
+
+| Asset | `<=15 /9` | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Commodity | 8/9 | -0.294 | 0.378 | 0.258 | -0.778 | -1.141 | 0.231 | 0.133 | 0.476 | 0.969 |
+| Equity Index | 8/9 | 0.470 | 0.833 | 0.645 | 0.564 | 0.728 | 0.126 | 0.331 | 0.546 | 0.915 |
+| Fixed Income | 9/9 | 0.555 | 0.859 | 0.570 | 0.647 | 0.975 | 0.111 | 0.414 | 0.534 | 0.969 |
+| Forex | 9/9 | -0.173 | 0.423 | 0.273 | -0.409 | -0.635 | 0.220 | -0.109 | 0.490 | 0.972 |
+| All | 6/9 | -0.011 | 0.327 | 0.228 | -0.034 | -0.049 | 0.130 | 0.254 | 0.515 | 0.938 |
+
+Main misses at `<=15%`:
+- Commodity: `Calmar`
+- Equity Index: `Calmar`
+- Fixed Income: none
+- Forex: none
+- All: `E(R)`, `MDD`, `Calmar`
+
 ### 1. Live Baseline
 
 This is the baseline version that **keeps all Equity / Forex contracts** and remains the default runtime:
