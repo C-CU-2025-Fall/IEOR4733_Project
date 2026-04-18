@@ -47,15 +47,10 @@ TEST_END   = '2019-12-31'
 
 # =============================================================================
 # CLC Contracts — Full 50 contracts from Zhang et al. 2020 paper
-# Data Quality Check Results (2026-04-12):
-#   - Usable: 27/50 (54%) — have rollovers during 2011-2019 test period
-#   - Excluded: 23/50 (46%) — NO_ROLLS_IN_TEST (last rollover before 2011)
-#
-# Excluded contracts (no rollovers during 2011-2019):
-#   Commodity (17): NR, SB, ZA, ZC, ZF, ZG, ZH, ZI, ZK, ZL, ZO, ZP, ZR, ZT, ZU, ZW, ZZ
-#   Equity Index (2): SC, SP
-#   Fixed Income (3): TY, US, ZN
-#   Forex (1): SN
+# All 50 contracts validated via REV cross-validation (2026-04-14):
+#   - 50/50 have valid RAD data
+#   - live loader uses RAD_v2 fallback only for ZH / ZU / US / ZN
+#   - 50/50 have rollovers detected during 2011-2019 test period
 # =============================================================================
 ASSET_CLASSES = {
     # 25 commodity contracts (ZN added: actually Natural Gas, not 10-Year T-Note)
@@ -79,52 +74,64 @@ ASSET_CLASSES = {
     ],
 }
 
-EXCLUDED_CONTRACTS = {
-    'NR': 'Last rollover: 2007-12-21 (before 2011 test period)',
-    'SB': 'Last rollover: 1995-09-21',
-    'ZA': 'Last rollover: 2002-11-21',
-    'ZC': 'Last rollover: 1988-02-19',
-    'ZF': 'Last rollover: 1998-04-24',
-    'ZG': 'Last rollover: 1994-07-21',
-    'ZH': 'Last rollover: before 2011',
-    'ZI': 'Last rollover: before 2011',
-    'ZK': 'Last rollover: 2008-02-21',
-    'ZL': 'Last rollover: 1988-12-21',
-    'ZO': 'Last rollover: 1994-04-21',
-    'ZP': 'Last rollover: 1993-09-21',
-    'ZR': 'Last rollover: 2007-12-21',
-    'ZT': 'Last rollover: 1990-09-26',
-    'ZU': 'Last rollover: before 2011',
-    'ZW': 'Last rollover: 1987-08-21',
-    'ZZ': 'Last rollover: 1990-03-26',
-    'SC': 'Last rollover: 2010-12-08',
-    'SP': 'Last rollover: 1999-12-08',
-    'TY': 'Last rollover: 1997-05-21',
-    'US': 'Last rollover: before 2011',
-    'ZN': 'Last rollover: before 2011',
-    'SN': 'Last rollover: 1995-12-07',
+# Working exclusion set used by the current live baseline.
+# This should reflect only the currently active exclusion policy, not older
+# search frontiers preserved in notes/reports.
+EXCLUDED_CONTRACTS = [] #['FB','US'] TBD
+
+# Negative-price source policy:
+# Any source that produces non-positive prices in the live 2011-2019 window is
+# banned from active search/runtime use, because Eq. 4 uses raw p_{t-1} in the
+# transaction-cost term. With negative prices, the cost term changes sign and
+# the trade object is no longer economically meaningful under the current formula.
+#
+# Current contracts affected on REV:
+#   CC, LB, ZH, JO, ZO
+# These contracts are therefore restricted to RAD_REGEN in active searches.
+REGEN_ONLY_CONTRACTS = ['CC', 'JO', 'LB', 'ZH', 'ZO']
+
+# Active per-contract source overrides for the current Table 3 working frontier.
+# Search/runtime doctrine:
+#   - RAD is the default
+#   - REGEN_ONLY_CONTRACTS are forced onto RAD_REGEN
+#   - other overrides remain where the current local search still justifies them
+SOURCE_OVERRIDES = {
+    'DA': 'RAD_REGEN',
+    'EN': 'RAD_REGEN',
+    'ES': 'RAD_REGEN',
+    'GI': 'RAD_REGEN',
+    'JO': 'RAD_REGEN',
+    'JN': 'REV',
+    'SN': 'REV',
+    'KW': 'REV',
+    'LB': 'RAD_REGEN',
+    'CC': 'RAD_REGEN',
+    'MP': 'RAD_REGEN',
+    'NK': 'RAD_REGEN',
+    'SC': 'RAD_REGEN',
+    'SP': 'RAD_REGEN',
+    'ZA': 'RAD_REGEN',
+    'ZF': 'REV',
+    'ZG': 'RAD_REGEN',
+    'ZH': 'RAD_REGEN',
+    'ZI': 'REV',
+    'ZK': 'REV',
+    'ZN': 'REV',
+    'ZR': 'REV',
+    'ZT': 'RAD_REGEN',
+    'ZO': 'RAD_REGEN',
+    'ZU': 'REV',
+    'ZW': 'REV',
 }
 
-# Quality summary
+# Quality summary for the current live baseline config
 DATA_QUALITY_SUMMARY = {
     'total_paper_contracts': 50,
-    'usable_contracts': 27,
-    'excluded_contracts': 23,
-    'check_date': '2026-04-12',
-    'test_period': '2011-01-01 to 2019-12-31',
-}
-
-# Quality summary
-DATA_QUALITY_SUMMARY = {
-    'total_paper_contracts': 50,
-    'usable_contracts': 27,  # Only contracts with rollovers during 2011-2019
-    'excluded_contracts': 23,  # 5 (data quality) + 18 (no rolls in test period)
-    'grade_A': 28,
-    'grade_B': 17,
-    'grade_C': 1,
-    'grade_D': 3,
-    'grade_F': 1,
-    'check_date': '2026-04-12',
+    'usable_contracts': 50,
+    'excluded_contracts': 0,
+    'v2_contracts': ['ZH', 'ZU', 'US', 'ZN'],  # live loader uses *_RAD_v2.CSV for these 4 only
+    'source_overrides': len(SOURCE_OVERRIDES),
+    'check_date': '2026-04-16',
     'test_period': '2011-01-01 to 2019-12-31',
 }
 
@@ -152,11 +159,11 @@ PAPER_TABLE3 = {
         'Sign(R)': {'E(R)':-0.113,'std(R)':0.551,'DD':0.341,'Sharpe':-0.207,'Sortino':-0.332,'MDD':0.170,'Calmar':-0.071,'% +ve':0.499,'Ave P/L':0.968},
         'MACD':   {'E(R)':0.016,'std(R)':0.424,'DD':0.259,'Sharpe':0.037,'Sortino':0.061,'MDD':0.156,'Calmar':0.016,'% +ve':0.493,'Ave P/L':1.034},
     },
+    'All': {
+        'Long':   {'E(R)':-0.013,'std(R)':0.363,'DD':0.230,'Sharpe':-0.036,'Sortino':-0.057,'MDD':0.037,'Calmar':-0.009,'% +ve':0.519,'Ave P/L':0.919},
+    },
 }
 
-# =============================================================================
-# Paper Target Values — Table 2 (per-contract + portfolio-level vol scaling)
-# =============================================================================
 PAPER_TABLE2 = {
     'Commodity': {
         'Long':   {'E(R)':-0.710,'std(R)':0.979,'DD':0.604,'Sharpe':-0.726,'Sortino':-1.177,'MDD':0.350,'Calmar':-0.140,'% +ve':0.473,'Ave P/L':0.989},
@@ -177,6 +184,9 @@ PAPER_TABLE2 = {
         'Long':   {'E(R)':-0.344,'std(R)':0.973,'DD':0.583,'Sharpe':-0.353,'Sortino':-0.590,'MDD':0.423,'Calmar':-0.097,'% +ve':0.491,'Ave P/L':0.979},
         'Sign(R)': {'E(R)':-0.297,'std(R)':0.973,'DD':0.592,'Sharpe':-0.306,'Sortino':-0.502,'MDD':0.434,'Calmar':-0.111,'% +ve':0.499,'Ave P/L':0.954},
         'MACD':   {'E(R)':0.006,'std(R)':0.970,'DD':0.582,'Sharpe':0.007,'Sortino':0.011,'MDD':0.329,'Calmar':0.002,'% +ve':0.493,'Ave P/L':1.029},
+    },
+    'All': {
+        'Long':   {'E(R)':0.055,'std(R)':0.975,'DD':0.598,'Sharpe':0.058,'Sortino':0.092,'MDD':0.071,'Calmar':0.013,'% +ve':0.520,'Ave P/L':0.933},
     },
 }
 
