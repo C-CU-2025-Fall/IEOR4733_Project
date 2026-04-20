@@ -161,6 +161,14 @@ PAPER_TABLE2 = {
         'Sign(R)': {'E(R)':-0.297,'std(R)':0.973,'DD':0.592,'Sharpe':-0.306,'Sortino':-0.502,'MDD':0.434,'Calmar':-0.111,'% +ve':0.499,'Ave P/L':0.954},
         'MACD':   {'E(R)':0.006,'std(R)':0.970,'DD':0.582,'Sharpe':0.007,'Sortino':0.011,'MDD':0.329,'Calmar':0.002,'% +ve':0.493,'Ave P/L':1.029},
     },
+<<<<<<< Updated upstream
+=======
+    'All': {
+        'Long':   {'E(R)':0.055,'std(R)':0.975,'DD':0.598,'Sharpe':0.058,'Sortino':0.092,'MDD':0.071,'Calmar':0.013,'% +ve':0.520,'Ave P/L':0.933},
+        'Sign(R)': {'E(R)':0.429,'std(R)':0.972,'DD':0.582,'Sharpe':0.441,'Sortino':0.737,'MDD':0.038,'Calmar':0.201,'% +ve':0.510,'Ave P/L':1.031},
+        'MACD':   {'E(R)':0.089,'std(R)':0.978,'DD':0.582,'Sharpe':0.091,'Sortino':0.153,'MDD':0.008,'Calmar':0.035,'% +ve':0.493,'Ave P/L':1.043},
+    },
+>>>>>>> Stashed changes
 }
 
 METRIC_NAMES = ['E(R)','std(R)','DD','Sharpe','Sortino','MDD','Calmar','% +ve','Ave P/L']
