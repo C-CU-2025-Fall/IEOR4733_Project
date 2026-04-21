@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 from data_loader import load_clc_full
 from strategies import strategy_sign_r, strategy_macd
+from vol_scaling import get_portfolio_bridge, get_portfolio_bridge_multipliers
 from metrics import (
     cagr_from_path,
     compute_metrics,
@@ -39,7 +40,8 @@ DEFAULT_SIGMA_TGT = 0.0630   # Working frontier after adjusted-only MDD-first v4
 EWMA_SPAN = 60              # EWMA span for σ_t [Paper Section 3.2]
 T = TRADING_DAYS            # 252
 W0 = 1.0                    # Initial wealth per contract
-DEFAULT_REPORT_SOURCE = 'RISK_PRICE_SIGMA0'  # current split-world start: 7 trade metrics + risk/price t0 bridge for MDD/Calmar
+DEFAULT_REPORT_SOURCE = 'auto'  # Table 3 -> trade, Table 2 -> RISK_PRICE_SIGMA0 unless explicitly overridden
+DEFAULT_REPORT_BRIDGE_MODE = 'same_as_port_contract'
 
 
 
@@ -109,7 +111,8 @@ def parse_exclusion_arg(exclude_arg):
     return sorted(set(tokens))
 
 
-def build_reporting_portfolio_risk_price_sigma0(raw_data, sigma_tgt, strat='Long'):
+def build_reporting_portfolio_risk_price_sigma0(raw_data, sigma_tgt, strat='Long',
+                                               bridge_multiplier_series=None):
     """Build the fixed reporting-world sleeve-capital wealth path.
 
     Each contract sleeve starts with capital:
@@ -129,6 +132,10 @@ def build_reporting_portfolio_risk_price_sigma0(raw_data, sigma_tgt, strat='Long
         sigma = detail['sigma'][start:t1 + 1]
         if len(Rt) == 0 or len(prices) == 0 or len(sigma) == 0:
             continue
+        if bridge_multiplier_series is not None:
+            dates = pd.Index(rd['dates'][:len(Rt)])
+            k = bridge_multiplier_series.reindex(dates).fillna(1.0).to_numpy(dtype=float)
+            Rt = Rt * k
         p0 = float(prices[0])
         sigma0 = float(sigma[0])
         if not np.isfinite(p0) or not np.isfinite(sigma0) or sigma0 <= 0:
@@ -168,7 +175,134 @@ def build_reporting_portfolio_risk_price_sigma0(raw_data, sigma_tgt, strat='Long
     }
 
 
-def compute_reporting_mdd_calmar_risk_price_sigma0(raw_data, sigma_tgt, strat='Long'):
+def compute_portfolio_return_series(raw_data, strat, sigma_tgt, aggregation_mode='variable_n'):
+    """Eq 13 portfolio returns as a dated Series."""
+    series = []
+    for rd in raw_data:
+        Rt = compute_contract_returns(rd, strat, sigma_tgt)
+        start, t1, dates = rd['start'], rd['t1'], rd['dates']
+        slc = Rt[start:t1 + 1]
+        series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
+    df_all = pd.DataFrame(series)
+    if aggregation_mode == 'dropna':
+        return df_all.T.dropna().mean(axis=1)
+    if aggregation_mode == 'variable_n':
+        return df_all.T.mean(axis=1)
+    raise ValueError(f'Unknown aggregation_mode: {aggregation_mode}')
+
+
+def apply_portfolio_vol_scaling(R_eq, target_std):
+    """Backward-compatible constant post-hoc Table 2 bridge."""
+    return get_portfolio_bridge('constant_posthoc', target_std)(np.asarray(R_eq, dtype=float))
+
+
+def apply_portfolio_bridge_to_reporting(reporting, port_bridge=None, port_vol_target=None):
+    """Apply the same Table 2 bridge to the reporting-world path.
+
+    The current reporting world is constructed from normalized additive sleeve PnL
+    paths. To keep MDD/Calmar in the same world as the Table 2 bridge, we derive
+    additive reporting increments from the portfolio path, apply the same bridge,
+    and rebuild the reporting wealth path from the bridged increments.
+    """
+    if reporting is None or port_bridge is None or port_vol_target is None:
+        return reporting
+
+    path = np.asarray(reporting['portfolio_path'], dtype=float)
+    simple = np.asarray(reporting.get('portfolio_simple_returns'), dtype=float)
+    if len(path) == 0 or len(simple) == 0:
+        return reporting
+
+    # Apply the Table 2 bridge to reporting simple returns, then rebuild the
+    # reporting path multiplicatively from the same starting wealth.
+    bridged_simple = np.array(simple, copy=True)
+    if len(simple) > 1:
+        valid_simple = np.nan_to_num(simple[1:], nan=0.0, posinf=0.0, neginf=0.0)
+        bridged_simple[1:] = get_portfolio_bridge(port_bridge, port_vol_target)(valid_simple)
+
+    bridged_path = np.empty_like(path)
+    bridged_path[0] = path[0]
+    for t in range(1, len(bridged_path)):
+        prev = bridged_path[t - 1]
+        step = bridged_simple[t]
+        next_val = prev * (1.0 + step)
+        # Keep the reporting path strictly positive for drawdown / CAGR logic.
+        bridged_path[t] = next_val if np.isfinite(next_val) and next_val > 1e-12 else 1e-12
+
+    portfolio_log = np.full(len(bridged_path), np.nan, dtype=float)
+    if len(bridged_path) > 1:
+        with np.errstate(divide='ignore', invalid='ignore'):
+            portfolio_log[1:] = np.log(bridged_path[1:] / bridged_path[:-1])
+
+    out = dict(reporting)
+    out['portfolio_path'] = bridged_path
+    out['portfolio_simple_returns'] = bridged_simple
+    out['portfolio_log_returns'] = portfolio_log
+    out['portfolio_additive_returns'] = np.full(len(bridged_path), np.nan, dtype=float)
+    return out
+
+
+def apply_bridge_to_reporting_sleeves_simple(reporting, bridge_multiplier_series=None):
+    """Apply bridge multipliers to sleeve simple returns, then rebuild paths.
+
+    This preserves per-sleeve / position information while keeping the reporting
+    lane in a multiplicative wealth world. It avoids directly scaling additive
+    sleeve PnL into negative-NAV paths.
+    """
+    if reporting is None or bridge_multiplier_series is None:
+        return reporting
+
+    sleeves = np.asarray(reporting.get('sleeve_paths'), dtype=float)
+    sleeve_simple = np.asarray(reporting.get('sleeve_simple_returns'), dtype=float)
+    if sleeves.ndim != 2 or sleeve_simple.ndim != 2 or sleeves.shape != sleeve_simple.shape:
+        return reporting
+
+    min_len, n_sleeves = sleeves.shape
+    if min_len == 0 or n_sleeves == 0:
+        return reporting
+
+    k = np.asarray(bridge_multiplier_series, dtype=float)
+    if len(k) < min_len:
+        padded = np.ones(min_len, dtype=float)
+        padded[:len(k)] = k
+        k = padded
+    else:
+        k = k[:min_len]
+
+    bridged_simple = np.array(sleeve_simple, copy=True)
+    if min_len > 1:
+        valid = np.nan_to_num(bridged_simple[1:, :], nan=0.0, posinf=0.0, neginf=0.0)
+        bridged_simple[1:, :] = valid * k[1:, None]
+
+    bridged_sleeves = np.empty_like(sleeves)
+    bridged_sleeves[0, :] = sleeves[0, :]
+    for j in range(n_sleeves):
+        for t in range(1, min_len):
+            prev = bridged_sleeves[t - 1, j]
+            step = bridged_simple[t, j]
+            next_val = prev * (1.0 + step)
+            bridged_sleeves[t, j] = next_val if np.isfinite(next_val) and next_val > 1e-12 else 1e-12
+
+    portfolio = bridged_sleeves.mean(axis=1)
+    portfolio_simple = np.full(min_len, np.nan, dtype=float)
+    portfolio_log = np.full(min_len, np.nan, dtype=float)
+    if min_len > 1:
+        with np.errstate(divide='ignore', invalid='ignore'):
+            portfolio_simple[1:] = portfolio[1:] / portfolio[:-1] - 1.0
+            portfolio_log[1:] = np.log(portfolio[1:] / portfolio[:-1])
+
+    out = dict(reporting)
+    out['sleeve_paths'] = bridged_sleeves
+    out['sleeve_simple_returns'] = bridged_simple
+    out['portfolio_path'] = portfolio
+    out['portfolio_simple_returns'] = portfolio_simple
+    out['portfolio_log_returns'] = portfolio_log
+    return out
+
+
+def compute_reporting_mdd_calmar_risk_price_sigma0(raw_data, sigma_tgt, strat='Long',
+                                                   port_bridge=None, port_vol_target=None,
+                                                   report_bridge_mode='split_world',
+                                                   round_output=True):
     """
     Reporting-world bridge:
 
@@ -181,18 +315,40 @@ def compute_reporting_mdd_calmar_risk_price_sigma0(raw_data, sigma_tgt, strat='L
     This keeps the trade lane untouched while giving MDD/Calmar a portfolio
     wealth object that uses both initial price and initial risk scale.
     """
+    bridge_multiplier_series = None
+    if report_bridge_mode == 'same_as_port_additive' and port_bridge is not None and port_vol_target is not None:
+        port_series = compute_portfolio_return_series(raw_data, strat, sigma_tgt, aggregation_mode='variable_n')
+        k = get_portfolio_bridge_multipliers(port_bridge, port_series.values, port_vol_target)
+        bridge_multiplier_series = pd.Series(k, index=port_series.index)
+
     reporting = build_reporting_portfolio_risk_price_sigma0(
         raw_data,
         sigma_tgt=sigma_tgt,
         strat=strat,
+        bridge_multiplier_series=bridge_multiplier_series,
     )
+    if report_bridge_mode == 'same_as_port_simple':
+        reporting = apply_portfolio_bridge_to_reporting(
+            reporting,
+            port_bridge=port_bridge,
+            port_vol_target=port_vol_target,
+        )
+    if report_bridge_mode == 'same_as_port_contract' and port_bridge is not None and port_vol_target is not None:
+        port_series = compute_portfolio_return_series(raw_data, strat, sigma_tgt, aggregation_mode='variable_n')
+        k = get_portfolio_bridge_multipliers(port_bridge, port_series.values, port_vol_target)
+        reporting = apply_bridge_to_reporting_sleeves_simple(
+            reporting,
+            bridge_multiplier_series=k,
+        )
     if reporting is None:
         return None
     port = reporting['portfolio_path']
     mdd = max_drawdown_from_path(port)
     cagr = cagr_from_path(port)
     calmar = cagr / mdd if mdd > 0 else 0.0
-    return round(mdd, 3), round(calmar, 3), reporting['length']
+    if round_output:
+        return round(mdd, 3), round(calmar, 3), reporting['length']
+    return float(mdd), float(calmar), reporting['length']
 
 
 # ─── Eq 4: Trade Return ──────────────────────────────────────────
@@ -262,24 +418,23 @@ def compute_portfolio_returns(raw_data, strat, sigma_tgt,
         raise ValueError(f'Unknown aggregation_mode: {aggregation_mode}')
     return port.values
 
-# ─── Table 2: Portfolio-level vol scaling ─────────────────────────
-def apply_portfolio_vol_scaling(R_eq, target_std):
-    """Scale R_eq so annualized std = target_std."""
-    current_std = np.std(R_eq) * np.sqrt(T)
-    if current_std > 0:
-        return R_eq * (target_std / current_std)
-    return R_eq
-
-
 # ─── Output ───────────────────────────────────────────────────────
 def fmt(vals):
     return "  ".join(f"{v:>+7.3f}" for v in vals)
 
 
+def pct_err_raw(ours, paper):
+    if paper == 0:
+        return 0.0
+    return abs((ours - paper) / abs(paper)) * 100.0
+
+
 def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
               port_vol_target=None, metric_names=None,
               aggregation_mode='variable_n',
+              port_bridge='constant_posthoc',
               report_source=DEFAULT_REPORT_SOURCE,
+              report_bridge_mode=DEFAULT_REPORT_BRIDGE_MODE,
               test_start='2011-01-01',
               test_end='2019-12-31'):
     """Run one table (Table 2 or 3) for one asset class."""
@@ -296,8 +451,18 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
     metric_idx = [all_names.index(n) for n in metric_names]
     n_metrics = len(metric_names)
 
-    port_str = f" | port_vol→{port_vol_target}" if port_vol_target else ""
-    report_str = f" | report={report_source}" if report_source != 'trade' else ""
+    effective_report_source = report_source
+    if report_source == 'auto':
+        effective_report_source = 'RISK_PRICE_SIGMA0' if port_vol_target is not None else 'trade'
+
+    effective_report_bridge_mode = report_bridge_mode if port_vol_target is not None else 'split_world'
+    port_str = f" | port_vol→{port_vol_target} | bridge={port_bridge}" if port_vol_target else ""
+    report_mode_str = (
+        f" | report_bridge={effective_report_bridge_mode}"
+        if effective_report_source != 'trade' and port_vol_target is not None
+        else ""
+    )
+    report_str = f" | report={effective_report_source}{report_mode_str}" if effective_report_source != 'trade' else ""
     print(f"\n{'=' * 90}")
     print(f"  {table_label} — {ac_name} ({N} contracts)")
     print(f"  σ_tgt={sigma_tgt} | EWMA({EWMA_SPAN}) | bp={BP}{port_str}{report_str}")
@@ -309,23 +474,28 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
         R = compute_portfolio_returns(raw_data, strat, sigma_tgt,
                                       aggregation_mode=aggregation_mode)
         if port_vol_target is not None:
-            R = apply_portfolio_vol_scaling(R, port_vol_target)
-        m_all = compute_metrics(R, n_contracts=N)
-        if report_source != 'trade':
+            R = get_portfolio_bridge(port_bridge, port_vol_target)(R)
+        m_all_raw = compute_metrics(R, n_contracts=N, round_output=False)
+        if effective_report_source != 'trade':
             reporting = compute_reporting_mdd_calmar_risk_price_sigma0(
                 raw_data,
                 sigma_tgt=sigma_tgt,
                 strat=strat,
+                port_bridge=port_bridge if port_vol_target is not None else None,
+                port_vol_target=port_vol_target,
+                report_bridge_mode=effective_report_bridge_mode,
+                round_output=False,
             )
             if reporting is not None:
                 mdd_rep, calmar_rep, _ = reporting
-                m_all[all_names.index('MDD')] = mdd_rep
-                m_all[all_names.index('Calmar')] = calmar_rep
+                m_all_raw[all_names.index('MDD')] = mdd_rep
+                m_all_raw[all_names.index('Calmar')] = calmar_rep
         # Extract only the metrics we care about
-        m = [m_all[i] for i in metric_idx]
+        m_raw = [m_all_raw[i] for i in metric_idx]
+        m = [round(v, 3) for v in m_raw]
         pv_dict = paper_table[ac_name][strat]
         pv = [pv_dict[k] for k in metric_names]
-        errs = [abs((m[i] - pv[i]) / abs(pv[i])) * 100 if pv[i] != 0 else 0
+        errs = [pct_err_raw(m_raw[i], pv[i])
                 for i in range(n_metrics)]
         n10 = sum(1 for e in errs if e < 10)
         n15 = sum(1 for e in errs if e < 15)
@@ -413,6 +583,10 @@ def main():
     parser.add_argument('--test-end', default='2019-12-31')
     parser.add_argument('--port-vol-target', type=float, default=0.97,
                         help='Portfolio vol target for Table 2 (default: 0.97)')
+    parser.add_argument('--port-bridge',
+                        choices=['constant_posthoc', 'ewma60_lagged', 'rolling252_lagged'],
+                        default='constant_posthoc',
+                        help='Portfolio-level Table 2 bridge (default: constant_posthoc)')
     parser.add_argument('--all-metrics', action='store_true',
                         help='Show all 9 metrics (default: 5 core metrics)')
     parser.add_argument('--diagnostic', action='store_true',
@@ -421,9 +595,13 @@ def main():
                         default='variable_n',
                         help='Portfolio aggregation mode (default: variable_n)')
     parser.add_argument('--report-source',
-                        choices=['trade', 'RISK_PRICE_SIGMA0'],
+                        choices=['auto', 'trade', 'RISK_PRICE_SIGMA0'],
                         default=DEFAULT_REPORT_SOURCE,
-                        help='Reporting source / bridge for MDD and Calmar only')
+                        help='Reporting source / bridge for MDD and Calmar only (default: auto = Table 3 trade, Table 2 RISK_PRICE_SIGMA0)')
+    parser.add_argument('--report-bridge-mode',
+                        choices=['split_world', 'same_as_port_simple', 'same_as_port_contract', 'same_as_port_additive'],
+                        default=DEFAULT_REPORT_BRIDGE_MODE,
+                        help='How Table 2 portfolio bridge enters reporting MDD/Calmar (default: same_as_port_contract)')
     parser.add_argument('--exclude-contracts', default=None,
                         help='Comma-separated exclusion override, e.g. FB,ZA,ZO')
     args = parser.parse_args()
@@ -472,7 +650,9 @@ def main():
                                       table_label, port_vol,
                                       metric_names=metric_names,
                                       aggregation_mode=args.aggregation,
+                                      port_bridge=args.port_bridge,
                                       report_source=args.report_source,
+                                      report_bridge_mode=args.report_bridge_mode,
                                       test_start=args.test_start,
                                       test_end=args.test_end)
             if args.diagnostic and port_vol is None:  # only Table 3

@@ -16,19 +16,29 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from baseline_run import compute_contract_returns, compute_portfolio_returns, load_contracts  # noqa: E402
 from config import ASSET_CLASSES, METRIC_NAMES, PAPER_TABLE3, SOURCE_OVERRIDES  # noqa: E402
 from data_loader import load_clc_full  # noqa: E402
+from frontier_presets import (  # noqa: E402
+    BASE_CLEAN_EXCLUDED,
+    BASE_CLEAN_OVERRIDES,
+    HYBRID_STRUCTURAL_EXCLUDED,
+    HYBRID_STRUCTURAL_OVERRIDES,
+    LEGACY_41_EXCLUDED,
+    LEGACY_41_OVERRIDES,
+    STRUCTURAL_38_EXCLUDED,
+    STRUCTURAL_38_OVERRIDES,
+)
 from metrics import compute_metrics, max_drawdown_from_path  # noqa: E402
 
 
 SIGMA = 0.058
 ASSETS4 = ["Commodity", "Equity Index", "Fixed Income", "Forex"]
-DOC_PATH = ROOT / "docs" / "frontier_40plus_enumeration.md"
+DOC_PATH = ROOT / "archive" / "docs" / "frontier_40plus_enumeration.md"
 
 NUMERATOR_MODES = ["wealth_cagr", "annual_mean_simple", "annual_mean_log", "annual_mean_sleeve"]
 ASSET_PATH_MODES = ["contract_equal_path", "sleeve_first_simple_path"]
@@ -428,50 +438,10 @@ def scenario(label, family, overrides, excluded, default_capital_mode="risk_pric
     )
 
 
-BASE_CLEAN_OVERRIDES = dict(SOURCE_OVERRIDES)
-BASE_CLEAN_OVERRIDES.update(
-    {
-        "EN": "REV",
-        "DT": "REV",
-        "CC": "RAD_REGEN",
-        "LB": "RAD",
-        "JO": "RAD_REGEN",
-        "ZH": "RAD_REGEN",
-        "NR": "NON",
-        "ZC": "NON",
-    }
-)
-BASE_CLEAN_OVERRIDES.pop("ZO", None)
-BASE_CLEAN_EXCLUDED = {"FB", "ZA", "ZO", "SB", "KC", "ZL"}
-
-STRUCTURAL_HISTORY_OVERRIDES = dict(SOURCE_OVERRIDES)
-STRUCTURAL_HISTORY_OVERRIDES.update(
-    {
-        "DT": "REV",
-        "CC": "RAD_REGEN",
-        "LB": "RAD",
-        "JO": "RAD_REGEN",
-        "ZH": "RAD_REGEN",
-    }
-)
-STRUCTURAL_HISTORY_EXCLUDED = {"FB", "ZA", "ZO", "EN", "ES"}
-
-HYBRID_STRUCTURAL_OVERRIDES = dict(BASE_CLEAN_OVERRIDES)
-HYBRID_STRUCTURAL_EXCLUDED = set(BASE_CLEAN_EXCLUDED) | {"EN", "ES"}
-
-LEGACY_EXPERIMENTAL_OVERRIDES = dict(SOURCE_OVERRIDES)
-LEGACY_EXPERIMENTAL_OVERRIDES.update(
-    {
-        "EN": "REV",
-        "DT": "REV",
-        "CC": "RAD_REGEN",
-        "LB": "REV",
-        "JO": "REV",
-        "ZH": "REV",
-    }
-)
-LEGACY_EXPERIMENTAL_OVERRIDES.pop("ZO", None)
-LEGACY_EXPERIMENTAL_EXCLUDED = {"FB", "ZA", "ZO", "EN", "ES"}
+STRUCTURAL_HISTORY_OVERRIDES = STRUCTURAL_38_OVERRIDES
+STRUCTURAL_HISTORY_EXCLUDED = STRUCTURAL_38_EXCLUDED
+LEGACY_EXPERIMENTAL_OVERRIDES = LEGACY_41_OVERRIDES
+LEGACY_EXPERIMENTAL_EXCLUDED = LEGACY_41_EXCLUDED
 
 
 def search_clean_same_rule():

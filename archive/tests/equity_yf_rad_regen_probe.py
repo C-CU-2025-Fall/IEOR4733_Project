@@ -24,10 +24,10 @@ import sys
 import numpy as np
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-TESTS_DIR = ROOT / "tests"
+TESTS_DIR = ROOT / "archive" / "tests"
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
@@ -269,7 +269,7 @@ def main():
         )
 
     text = "\n".join(lines) + "\n"
-    out = ROOT / "docs" / "equity_yf_rad_regen_probe.md"
+    out = ROOT / "archive" / "docs" / "equity_yf_rad_regen_probe.md"
     out.write_text(text)
     print(text)
 

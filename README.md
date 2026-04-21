@@ -1,298 +1,165 @@
-# IEOR4733_Project — Deep Reinforcement Learning for Trading
+# IEOR4733_Project — Current Active Line
 
-Reproduction of Zhang, Zohren, Roberts (2019), with the repo condensed to the current core:
+Reproduction workspace for Zhang, Zohren, Roberts (2019), now reduced to the
+current active line:
 
-- one **live baseline** that keeps all Equity / Forex contracts
-- one **experimental adjusted upper bound** that reaches `41/45`
-- one **reporting-world audit line** explaining why clean same-rule still stalls below `40+/45`
+- one current runtime baseline
+- one trade-world structural reference
+- one retained experimental `41/45` upper-bound reproducer
+- one data-issues note
+- one suspicious-paper-cells note
 
-Paper: [arXiv PDF](https://arxiv.org/pdf/1911.10107)
+Historical search waves and abandoned exploration branches are intentionally no
+longer narrated here. They remain in:
+- [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md)
 
-> Read [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md) first if you are resuming work.
+Paper:
+- [arXiv PDF](https://arxiv.org/pdf/1911.10107)
 
-## Quick Start
+## Main Commands
 
 ```bash
 pip install numpy pandas yfinance
 
-# Live baseline: all 50 contracts included
+# Current runtime baseline
 python baseline_run.py --table 3 --all-metrics --sigma 0.058
 
-# Historical baseline rebuild under the cleaned source doctrine
-python tests/historical_36x_rebuild_search.py
+# Current trade-world structural reference
+python tests/run_structural_38.py --table 3
+python tests/run_structural_38.py --table both
 
-# Self-iterating reporting / Calmar alignment audit
-python tests/calmar_alignment_iteration.py
-
-# Enumerate clean same-rule vs 40+ experimental frontiers
-python tests/frontier_40plus_enumeration.py
-
-# One-line reproduction of the retained 41/45 experimental upper bound
-python tests/run_legacy_41.py
-
-# Probe whether Yahoo-based ES/EN paths help when putting Equity back
-python tests/equity_yf_rad_regen_probe.py
-```
-
-## Preserved Versions
-
-### Version Table
-
-| Version | One-line Command | `<=10 /45` | `<=15 /45` | Equity / Forex fully kept? | Same-rule? | Notes |
-| --- | --- | ---: | ---: | --- | --- | --- |
-| Live baseline | `python baseline_run.py --table 3 --all-metrics --sigma 0.058` | 25 | 31 | Yes | Yes | current default runtime |
-| Clean same-rule max | `python tests/frontier_40plus_enumeration.py` | 29 | 34 | Yes | Yes | best clean interpretation under current doctrine |
-| Cleaner experimental fallback | `python tests/run_legacy_41.py` + `JO -> RAD` probe | 35 | 40 | No | No | keeps the legacy upper-bound shape but removes `JO_REV` |
-| Experimental upper bound | `python tests/run_legacy_41.py` | 36 | 41 | No | No | excludes `EN, ES, FB, ZA, ZO`; Equity-only `risk_price_non` |
-
-### Paper Target (Table 3 Long)
-
-| Asset | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Commodity | -0.298 | 0.412 | 0.258 | -0.723 | -1.152 | 0.248 | -0.130 | 0.473 | 0.987 |
-| Equity Index | 0.504 | 0.928 | 0.606 | 0.543 | 0.831 | 0.127 | 0.466 | 0.541 | 0.928 |
-| Fixed Income | 0.605 | 0.939 | 0.561 | 0.645 | 1.081 | 0.108 | 0.455 | 0.515 | 1.048 |
-| Forex | -0.198 | 0.472 | 0.285 | -0.420 | -0.696 | 0.219 | -0.101 | 0.491 | 0.966 |
-| All | -0.013 | 0.363 | 0.230 | -0.036 | -0.057 | 0.037 | -0.009 | 0.519 | 0.919 |
-
-### 9-Metric Alignment Tables
-
-Below are the current retained Table 3 Long alignment tables against the paper targets.
-
-#### Live Baseline
-
-| Asset | `<=15 /9` | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Commodity | 6/9 | -0.232 | 0.374 | 0.256 | -0.621 | -0.907 | 0.626 | -0.121 | 0.491 | 0.938 |
-| Equity Index | 6/9 | 0.526 | 0.839 | 0.660 | 0.627 | 0.798 | 0.149 | 0.344 | 0.548 | 0.919 |
-| Fixed Income | 6/9 | 0.471 | 0.854 | 0.556 | 0.552 | 0.847 | 0.123 | 0.267 | 0.529 | 0.975 |
-| Forex | 9/9 | -0.173 | 0.423 | 0.273 | -0.409 | -0.635 | 0.220 | -0.090 | 0.490 | 0.972 |
-| All | 4/9 | 0.037 | 0.331 | 0.232 | 0.111 | 0.157 | 0.259 | -0.056 | 0.522 | 0.933 |
-
-Main misses at `<=15%`:
-- Commodity: `E(R)`, `Sortino`, `MDD`
-- Equity Index: `Sharpe`, `MDD`, `Calmar`
-- Fixed Income: `E(R)`, `Sortino`, `Calmar`
-- Forex: none
-- All: `E(R)`, `Sharpe`, `Sortino`, `MDD`, `Calmar`
-
-#### Clean Same-Rule Max
-
-| Asset | `<=15 /9` | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Commodity | 4/9 | -0.198 | 0.377 | 0.258 | -0.525 | -0.768 | 0.431 | -0.097 | 0.494 | 0.940 |
-| Equity Index | 7/9 | 0.523 | 0.839 | 0.659 | 0.624 | 0.794 | 0.146 | 0.324 | 0.547 | 0.920 |
-| Fixed Income | 9/9 | 0.555 | 0.859 | 0.570 | 0.647 | 0.975 | 0.111 | 0.414 | 0.534 | 0.969 |
-| Forex | 9/9 | -0.173 | 0.423 | 0.273 | -0.409 | -0.635 | 0.220 | -0.090 | 0.490 | 0.972 |
-| All | 5/9 | 0.075 | 0.342 | 0.244 | 0.219 | 0.306 | 0.196 | -0.004 | 0.528 | 0.926 |
-
-Main misses at `<=15%`:
-- Commodity: `E(R)`, `Sharpe`, `Sortino`, `MDD`, `Calmar`
-- Equity Index: `Calmar`
-- Fixed Income: none
-- Forex: none
-- All: `E(R)`, `Sharpe`, `Sortino`, `MDD`
-
-#### Experimental Upper Bound (`41/45`)
-
-| Asset | `<=15 /9` | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Commodity | 8/9 | -0.298 | 0.380 | 0.259 | -0.784 | -1.150 | 0.220 | 0.180 | 0.479 | 0.958 |
-| Equity Index | 8/9 | 0.470 | 0.833 | 0.645 | 0.564 | 0.728 | 0.126 | 0.331 | 0.546 | 0.915 |
-| Fixed Income | 9/9 | 0.555 | 0.859 | 0.570 | 0.647 | 0.975 | 0.111 | 0.414 | 0.534 | 0.969 |
-| Forex | 9/9 | -0.173 | 0.423 | 0.273 | -0.409 | -0.635 | 0.220 | -0.109 | 0.490 | 0.972 |
-| All | 7/9 | -0.013 | 0.327 | 0.228 | -0.038 | -0.055 | 0.125 | 0.300 | 0.515 | 0.934 |
-
-Main misses at `<=15%`:
-- Commodity: `Calmar`
-- Equity Index: `Calmar`
-- Fixed Income: none
-- Forex: none
-- All: `MDD`, `Calmar`
-
-#### Cleaner Experimental Fallback (`40/45`)
-
-This is the closest retained fallback if you want to reduce one dirty `REV` dependency while staying at `40+`:
-- start from the `41/45` upper bound
-- change only:
-  - `JO: REV -> RAD`
-
-| Asset | `<=15 /9` | `E(R)` | `std(R)` | `DD` | `Sharpe` | `Sortino` | `MDD` | `Calmar` | `% +ve` | `Ave P/L` |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Commodity | 8/9 | -0.294 | 0.378 | 0.258 | -0.778 | -1.141 | 0.231 | 0.133 | 0.476 | 0.969 |
-| Equity Index | 8/9 | 0.470 | 0.833 | 0.645 | 0.564 | 0.728 | 0.126 | 0.331 | 0.546 | 0.915 |
-| Fixed Income | 9/9 | 0.555 | 0.859 | 0.570 | 0.647 | 0.975 | 0.111 | 0.414 | 0.534 | 0.969 |
-| Forex | 9/9 | -0.173 | 0.423 | 0.273 | -0.409 | -0.635 | 0.220 | -0.109 | 0.490 | 0.972 |
-| All | 6/9 | -0.011 | 0.327 | 0.228 | -0.034 | -0.049 | 0.130 | 0.254 | 0.515 | 0.938 |
-
-Main misses at `<=15%`:
-- Commodity: `Calmar`
-- Equity Index: `Calmar`
-- Fixed Income: none
-- Forex: none
-- All: `E(R)`, `MDD`, `Calmar`
-
-### 1. Live Baseline
-
-This is the baseline version that **keeps all Equity / Forex contracts** and remains the default runtime:
-
-```bash
-python baseline_run.py --table 3 --all-metrics --sigma 0.058
-```
-
-Current score:
-- `<=10: 25/45`
-- `<=15: 31/45`
-
-Properties:
-- exclusions: none
-- reporting bridge: `RISK_PRICE_SIGMA0`
-- default reporting numerator in the live CLI is still `wealth_cagr`
-- this is the safest “all contracts retained” reference point
-
-### 2. Clean Same-Rule Search Ceiling
-
-This is the best retained **clean interpretation** line:
-
-```bash
-python tests/frontier_40plus_enumeration.py
-```
-
-Current clean same-rule max:
-- `<=10: 29/45`
-- `<=15: 34/45`
-
-Interpretation:
-- one global reporting rule
-- one global numerator
-- no asset-specific reporting override
-- no negative-price-sensitive `REV` comeback
-
-### 3. Experimental Adjusted Upper Bound
-
-This is the retained **score-first adjusted version** that currently reaches `41/45`:
-
-```bash
+# Retained experimental upper-bound reproducer
 python tests/run_legacy_41.py
 ```
 
-Representative `41/45` case:
-- family: `legacy experimental upper bound`
-- exclusions: `FB, ZA, ZO, EN, ES`
-- Equity-only reporting: `risk_price_non`
-- reporting extraction:
-  - `annual_mean_sleeve`, or
-  - `wealth_cagr`
-- aggregation: `contract_equal_path`
+## Current References
 
-Current score:
-- `<=10: 36/45`
-- `<=15: 41/45`
+### Data Issues
+- [docs/data_issues.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/data_issues.md)
 
-This version is intentionally preserved as:
-- **experimental upper bound**
-- not the promoted main interpretation
+This is the main current note for:
+- problematic contract batches
+- the modified structural-38 working variant
+- trade-world-only alignment for the four asset classes
 
-## Core Data Problems
+### Suspicious Paper Cells
+- [docs/paper_table_suspicious_cells.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/paper_table_suspicious_cells.md)
 
-These are the current repo-level conclusions after all retained sessions.
+Current highest-priority suspicious paper cells / transitions:
+- `Equity Index / Long / DD: 0.606 -> 0.606`
+- `Fixed Income / Long / MDD: 0.108 -> 0.061`
+- `All / Long` risk-adjusted metrics flipping sign
 
-### 1. Negative-price `REV` cannot be treated as an active source in Eq. 4
+### Printable Structural-38 Summary
+- [docs/structural38_trade_tables_paper_style_a4.png](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/structural38_trade_tables_paper_style_a4.png)
 
-Eq. 4 uses raw price level in the transaction-cost term:
+This A4 asset shows:
+- Table 3 and Table 2
+- four asset classes only
+- trade-world metrics only
+- no `MDD`
+- no `Calmar`
 
-\[
-R_t = A_{t-1}\frac{\sigma_{tgt}}{\sigma_{t-1}}r_t - bp \cdot p_{t-1}\cdot |\Delta scaled\_pos|
-\]
+Preview:
 
-So if `p_{t-1} < 0`:
-- transaction cost becomes economically invalid
-- reporting capital anchor also becomes invalid
+![Structural-38 trade-world paper-style A4](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/structural38_trade_tables_paper_style_a4.png)
 
-This is why the repo now treats these contracts cautiously:
-- `CC`
-- `LB`
-- `JO`
-- `ZH`
-- `ZO`
+## Latest Alignment Snapshot
 
-### 2. Yahoo Finance behaves like `NON`, not like adjusted continuous prices
+Current retained trade-world snapshot:
 
-The retained local Yahoo probes show:
-- Yahoo ≈ `CLC NON`
-- Yahoo is **not** a replacement for `RAD`
-- Yahoo is **not** a replacement for negative-price `REV`
+- source overrides:
+  - `CC: RAD_REGEN`
+  - `DT: RAD`
+  - `JO: RAD_REGEN`
+  - `LB: RAD`
+  - `ZH: RAD_REGEN`
+- excluded:
+  - `FB`
+  - `ZA`
 
-For `ES/EN`, local Yahoo mapping is:
-- `ES ↔ ES=F`
-- `EN ↔ NQ=F`
+Trade-world metrics only:
+- `E(R), std(R), DD, Sharpe, Sortino, % +ve, Ave P/L`
+- no `MDD`
+- no `Calmar`
+- no `All`
 
-And even after building Yahoo-based `YF_RAD_REGEN` paths, putting `EN/ES` back still does **not** recover `40+/45`.
+**Table 3**
 
-Reference:
-- [docs/equity_yf_rad_regen_probe.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/equity_yf_rad_regen_probe.md)
+| Asset | Contracts | `<=10 / 7` | `<=15 / 7` |
+| --- | ---: | ---: | ---: |
+| Commodity | 24 | 5 | 7 |
+| Equity Index | 11 | 5 | 7 |
+| Fixed Income | 4 | 6 | 7 |
+| Forex | 9 | 7 | 7 |
 
-### 3. Clean same-rule still stalls below `40+/45`
+- Total:
+  - `<=10: 23/28`
+  - `<=15: 28/28`
 
-After the retained reporting-world iteration:
-- the strongest clean same-rule line is still below `40+/45`
-- the current clean ceiling is `34/45`
-- the current live baseline is `31/45`
+**Table 2**  
+`port_vol_target=0.97`, `bridge=rolling252_lagged`
 
-So at the moment:
-- **there is no clean same-rule 40+ frontier in this repo**
-- the only reproducible `40+` cases are experimental upper-bound families
+| Asset | Contracts | `<=10 / 7` | `<=15 / 7` |
+| --- | ---: | ---: | ---: |
+| Commodity | 24 | 7 | 7 |
+| Equity Index | 11 | 5 | 5 |
+| Fixed Income | 4 | 5 | 6 |
+| Forex | 9 | 7 | 7 |
 
-### 4. Reporting diagnosis: `MDD aligned, numerator wrong`
+- Total:
+  - `<=10: 24/28`
+  - `<=15: 25/28`
 
-The retained Calmar alignment loop concluded:
-- `MDD` is relatively close after Commodity cleanup
-- the main remaining mismatch is the **reporting annual return numerator**
-- the best same-path winner in the retained audit is:
-  - `annual_mean_simple`
+Most suspicious remaining paper-side cells in this snapshot:
+- `Equity Index / Table 2 / DD: 0.606`
+- `Equity Index / Table 2 / Sortino: 1.102`
+- `Fixed Income / Table 2 / Sortino: 1.180`
 
-Reference:
-- [docs/calmar_alignment_iteration.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/calmar_alignment_iteration.md)
+## Structural-38 Trade-World Reference
 
-## Retained Core Files
+`tests/run_structural_38.py` is the preferred current trade-world reference.
 
-The repo was condensed. The key retained exploration files are:
+It intentionally prints only:
+- `E(R)`
+- `std(R)`
+- `DD`
+- `Sharpe`
+- `Sortino`
+- `% +ve`
+- `Ave P/L`
 
-- [tests/historical_36x_rebuild_search.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/historical_36x_rebuild_search.py)
-- [tests/calmar_alignment_iteration.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/calmar_alignment_iteration.py)
-- [tests/frontier_40plus_enumeration.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/frontier_40plus_enumeration.py)
-- [tests/equity_yf_rad_regen_probe.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/equity_yf_rad_regen_probe.py)
+It intentionally does **not** print:
+- `MDD`
+- `Calmar`
 
-And their retained reports:
+This keeps the structural reference focused on the current trade-world
+comparison, without mixing in the unresolved reporting-world disputes.
 
-- [docs/historical_36x_rebuild_search.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/historical_36x_rebuild_search.md)
-- [docs/calmar_alignment_iteration.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/calmar_alignment_iteration.md)
-- [docs/frontier_40plus_enumeration.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/frontier_40plus_enumeration.md)
-- [docs/equity_yf_rad_regen_probe.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/equity_yf_rad_regen_probe.md)
+## 41/45 Retained Status
 
-Older one-off search artifacts were removed after their conclusions were merged into [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md).
+`41/45` is retained only as an **experimental upper-bound reproducer**.
 
-## Minimal Working Interpretation
+Keep/use:
+- [tests/run_legacy_41.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/run_legacy_41.py)
+- [frontier_presets.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/frontier_presets.py)
 
-- **Trade world** owns:
-  - `E(R), std(R), DD, Sharpe, Sortino, % +ve, Ave P/L`
-- **Reporting world** owns:
-  - `MDD, Calmar`
-- current reporting bridge:
-  - `RISK_PRICE_SIGMA0`
-- current clean reporting takeaway:
-  - `MDD` is usable
-  - `Calmar` is still definition-sensitive
-  - `annual_mean_simple` is the best retained same-path numerator candidate
+Do not read it as the current promoted mainline interpretation.
 
-## Current Recommendation
+## Attribution
 
-Use the repo in this order:
+The 50-contract attribution base is intentionally preserved in compressed form:
 
-1. live baseline for “all contracts retained” reference
-2. clean same-rule frontier for interpretable search ceiling
-3. experimental `41/45` frontier only as upper bound
+- runner:
+  - [tests/er_attribution_analysis.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/er_attribution_analysis.py)
+- machine-readable base:
+  - [docs/contract_version_matrix_master.csv](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/contract_version_matrix_master.csv)
 
-If you need to continue research later, start from:
-- [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md)
-- then [docs/frontier_40plus_enumeration.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/frontier_40plus_enumeration.md)
+Older attribution markdown outputs remain in the repo as archive-level material,
+but are no longer part of the main README narrative.
+
+## Notes
+
+- `README` is now minimal operational documentation.
+- Historical search logic, abandoned directions, and legacy score narratives live
+  only in [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md).

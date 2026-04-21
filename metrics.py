@@ -75,7 +75,7 @@ def max_drawdown_from_path(path):
     drawdown = (peak - arr) / peak
     return float(np.nanmax(drawdown))
 
-def compute_metrics(R_port, n_contracts=None, w0=None, N_contracts=None):
+def compute_metrics(R_port, n_contracts=None, w0=None, N_contracts=None, round_output=True):
     """Compute all 9 metrics from portfolio daily returns (additive).
 
     Args:
@@ -85,7 +85,7 @@ def compute_metrics(R_port, n_contracts=None, w0=None, N_contracts=None):
                  n_contracts so additive wealth starts at one unit per sleeve.
 
     Returns:
-        list of 9 rounded values [E(R), std, DD, Sharpe, Sortino, MDD, Calmar, %+ve, AveP/L]
+        list of 9 metric values [E(R), std, DD, Sharpe, Sortino, MDD, Calmar, %+ve, AveP/L]
     """
     R = np.asarray(R_port, dtype=float)
     R = R[np.isfinite(R)]
@@ -120,5 +120,7 @@ def compute_metrics(R_port, n_contracts=None, w0=None, N_contracts=None):
     annual_return = _wealth_cagr_from_additive_path(wealth, w0)
     calmar = annual_return / mdd if mdd > 0 else 0.0
 
-    return [round(v, 3) for v in
-            [er, vol, dd, sharpe, sortino, mdd, calmar, pct_pos, avg_pl]]
+    values = [er, vol, dd, sharpe, sortino, mdd, calmar, pct_pos, avg_pl]
+    if round_output:
+        return [round(v, 3) for v in values]
+    return values

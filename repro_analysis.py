@@ -10,10 +10,15 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from vol_scaling import (
+    PORTFOLIO_BRIDGES,
+    constant_posthoc_scaler,
+    ewma_portfolio_scaler,
+    rolling_portfolio_scaler,
+)
 
 from baseline_run import (
     DEFAULT_SIGMA_TGT,
-    apply_portfolio_vol_scaling,
     compute_contract_returns,
     load_contracts,
 )
@@ -114,7 +119,7 @@ def load_asset_contracts(asset: str, test_start='2011-01-01', test_end='2019-12-
 def contract_additive_series(rd, strat='Long', sigma_tgt=DEFAULT_SIGMA_TGT):
     rt = compute_contract_returns(rd, strat, sigma_tgt)
     start, t1, dates = rd['start'], rd['t1'], rd['dates']
-    slc = rt[start:t1]
+    slc = rt[start:t1 + 1]
     return pd.Series(slc[:len(dates)], index=dates[:len(slc)])
 
 
@@ -142,11 +147,11 @@ def contract_additive_components(rd, strat='Long', sigma_tgt=DEFAULT_SIGMA_TGT):
             trade[t] = signal[t] - tc[t]
 
     start, t1, dates = rd['start'], rd['t1'], rd['dates']
-    idx = dates[:len(trade[start:t1])]
+    idx = dates[:len(trade[start:t1 + 1])]
     return {
-        'trade': pd.Series(trade[start:t1][:len(idx)], index=idx),
-        'signal': pd.Series(signal[start:t1][:len(idx)], index=idx),
-        'tc': pd.Series(tc[start:t1][:len(idx)], index=idx),
+        'trade': pd.Series(trade[start:t1 + 1][:len(idx)], index=idx),
+        'signal': pd.Series(signal[start:t1 + 1][:len(idx)], index=idx),
+        'tc': pd.Series(tc[start:t1 + 1][:len(idx)], index=idx),
     }
 
 
@@ -157,7 +162,7 @@ def contract_nav_return_series(rd, strat='Long', sigma_tgt=DEFAULT_SIGMA_TGT):
     valid = prices[:-1] > 0
     r_nav[1:][valid] = rt_add[1:][valid] / prices[:-1][valid]
     start, t1, dates = rd['start'], rd['t1'], rd['dates']
-    slc = r_nav[start:t1]
+    slc = r_nav[start:t1 + 1]
     return pd.Series(slc[:len(dates)], index=dates[:len(slc)])
 
 
@@ -362,48 +367,7 @@ def table3_sort_key(score):
     )
 
 
-def constant_posthoc_scaler(target_std=PORT_TGT_STD):
-    def scale(values):
-        return apply_portfolio_vol_scaling(values, target_std)
-    return scale
-
-
-def ewma_portfolio_scaler(target_std=PORT_TGT_STD, span=60):
-    target_daily = target_std / math.sqrt(TRADING_DAYS)
-
-    def scale(values):
-        ser = pd.Series(values)
-        vol = ser.ewm(span=span, adjust=False).std().shift(1)
-        first_valid = vol[vol > 0].iloc[0] if (vol > 0).any() else target_daily
-        vol = vol.fillna(first_valid)
-        vol = vol.replace(0, first_valid)
-        k = target_daily / vol
-        return (ser * k).values
-    return scale
-
-
-def rolling_portfolio_scaler(target_std=PORT_TGT_STD, window=252):
-    target_daily = target_std / math.sqrt(TRADING_DAYS)
-
-    def scale(values):
-        ser = pd.Series(values)
-        vol = ser.rolling(window=window, min_periods=20).std().shift(1)
-        if (vol > 0).any():
-            first_valid = vol[vol > 0].iloc[0]
-        else:
-            first_valid = target_daily
-        vol = vol.fillna(first_valid)
-        vol = vol.replace(0, first_valid)
-        k = target_daily / vol
-        return (ser * k).values
-    return scale
-
-
-TABLE2_BRIDGES = {
-    'constant_posthoc': constant_posthoc_scaler(),
-    'ewma60_lagged': ewma_portfolio_scaler(span=60),
-    'rolling252_lagged': rolling_portfolio_scaler(window=252),
-}
+TABLE2_BRIDGES = dict(PORTFOLIO_BRIDGES)
 
 
 def yearly_summary(series):

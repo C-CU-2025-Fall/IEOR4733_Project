@@ -9,19 +9,20 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-TESTS = ROOT / "tests"
-if str(TESTS) not in sys.path:
-    sys.path.insert(0, str(TESTS))
+ARCHIVE_TESTS = ROOT / "archive" / "tests"
+if str(ARCHIVE_TESTS) not in sys.path:
+    sys.path.insert(0, str(ARCHIVE_TESTS))
 
 import frontier_40plus_enumeration as fe  # noqa: E402
+from frontier_presets import LEGACY_41_EXCLUDED, LEGACY_41_OVERRIDES  # noqa: E402
 
 
 def main():
     row = fe.scenario(
         label="legacy_experimental / Equity:risk_price_non / annual_mean_sleeve / contract_equal_path",
         family="legacy_experimental",
-        overrides=fe.LEGACY_EXPERIMENTAL_OVERRIDES,
-        excluded=fe.LEGACY_EXPERIMENTAL_EXCLUDED,
+        overrides=LEGACY_41_OVERRIDES,
+        excluded=LEGACY_41_EXCLUDED,
         asset_capital_overrides={"Equity Index": "risk_price_non"},
         numerator_mode="annual_mean_sleeve",
         asset_path_mode="contract_equal_path",
@@ -38,11 +39,11 @@ def main():
     print(f"<=15: {s['score15']}/45")
     print()
     print("source overrides:")
-    for tk, src in sorted(fe.LEGACY_EXPERIMENTAL_OVERRIDES.items()):
+    for tk, src in sorted(LEGACY_41_OVERRIDES.items()):
         print(f"  {tk}: {src}")
     print()
     print("excluded:")
-    print("  " + ", ".join(sorted(fe.LEGACY_EXPERIMENTAL_EXCLUDED)))
+    print("  " + ", ".join(sorted(LEGACY_41_EXCLUDED)))
     print()
     print("reporting:")
     print("  Equity Index capital anchor: risk_price_non")
