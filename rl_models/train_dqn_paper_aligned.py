@@ -15,7 +15,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from indicators import FeatureEngineer, compute_volatility
+from ..indicators import FeatureEngineer, compute_volatility
 from datetime import datetime
 import pickle
 import time
@@ -49,58 +49,63 @@ CONTRACTS_BY_CLASS = {
 
 class Env:
     def __init__(self, prices, returns):
-        self.prices, self.returns = prices, returns
-        self.fe = FeatureEngineer(60)
-        self.vol = compute_volatility(returns, 60)
-        self.idx = 60
-        self.last_a = 0.0
+        self.prices = prices
+        self.returns = returns
+        self.n = len(returns)
+        self.t = 0
+        self.position = 0
+        self.wealth = 1.0
+        self.history = []
+        self.feature_eng = FeatureEngineer()
         
     def reset(self):
-        self.idx, self.last_a = 60, 0.0
-        return self.fe.build_features(self.prices, self.returns, self.idx)
+        self.t = max(100, len(self.returns) // 10)
+        self.position = 0
+        self.wealth = 1.0
+        self.history = []
+        return self._get_state()
+    
+    def _get_state(self):
+        if self.t < 100:
+            return np.zeros(8, dtype=np.float32)
+        ret_window = self.returns[self.t-100:self.t]
+        features = self.feature_eng.compute_features(ret_window)
+        return features[:8]
     
     def step(self, action):
-        action = np.clip(action, -1, 1)
-        vol_scale = np.clip(0.10 / (self.vol[self.idx] + 1e-10), 0.5, 2.0)
-        cost = BP * abs(action - self.last_a) * vol_scale * self.prices[self.idx]
+        # action: -1 (short), 0 (hold), +1 (long)
+        if self.t >= self.n - 1:
+            return self._get_state(), 0, True
         
-        if self.idx + 1 >= len(self.returns):
-            return self.fe.build_features(self.prices, self.returns, self.idx), 0.0, True
+        pnl = self.position * self.returns[self.t+1] - BP * abs(action - self.position)
+        self.wealth *= (1 + pnl)
+        self.position = action
+        self.t += 1
+        reward = pnl
         
-        reward = (action * vol_scale) * self.returns[self.idx + 1] - cost
-        self.idx += 1
-        self.last_a = action
-        return self.fe.build_features(self.prices, self.returns, self.idx), reward, False
+        done = self.t >= self.n - 1
+        return self._get_state(), reward, done
 
 # =============================================================================
-# LSTM 网络 (论文：LSTM [64, 32] + Leaky-ReLU)
+# LSTM 网络
 # =============================================================================
 
 class LSTM(nn.Module):
-    def __init__(self, input_dim=8, hidden_sizes=[64, 32], output_dim=3):
+    def __init__(self, input_size, hidden_sizes, output_size):
         super().__init__()
-        self.lstm1 = nn.LSTM(input_dim, hidden_sizes[0], batch_first=True)
-        self.lstm2 = nn.LSTM(hidden_sizes[0], hidden_sizes[1], batch_first=True)
-        self.fc = nn.Linear(hidden_sizes[1], output_dim)
+        self.lstm = nn.LSTM(input_size, hidden_sizes[0], batch_first=True)
         
-        # 权重初始化 (正交初始化，适合 LSTM)
-        self._init_weights()
+        layers = []
+        for i in range(len(hidden_sizes) - 1):
+            layers.append(nn.Linear(hidden_sizes[i], hidden_sizes[i+1]))
+            layers.append(nn.LeakyReLU(0.01))
+        layers.append(nn.Linear(hidden_sizes[-1], output_size))
         
-    def _init_weights(self):
-        for name, param in self.named_parameters():
-            if 'weight_ih' in name or 'weight_hh' in name:
-                nn.init.orthogonal_(param, gain=nn.init.calculate_gain('tanh'))
-            elif 'weight' in name:
-                nn.init.orthogonal_(param, gain=0.1)
-            elif 'bias' in name:
-                nn.init.constant_(param, 0.0)
-        
+        self.mlp = nn.Sequential(*layers)
+    
     def forward(self, x):
-        o1, _ = self.lstm1(x)
-        o1 = F.leaky_relu(o1, 0.01)  # 论文：Leaky-ReLU
-        o2, _ = self.lstm2(o1)
-        o2 = F.leaky_relu(o2, 0.01)
-        return self.fc(o2[:, -1, :])
+        lstm_out, _ = self.lstm(x)
+        return self.mlp(lstm_out[:, -1, :])
 
 # =============================================================================
 # 经验回放
@@ -213,18 +218,25 @@ def load_data(tickers):
     prices, returns = [], []
     for t in tickers:
         try:
-            f = f'data/futures_processed/{t}.csv'
+            # 尝试从 config/TEMP 加载数据
+            f = f'config/TEMP/{t}_CLC.ASC'
             if not os.path.exists(f):
-                f = f'data/futures_processed/{t.replace("=", "")}.csv'
-            df = pd.read_csv(f)
-            df['Returns'] = df['Returns'].fillna(0)
+                f = f'data/CLC/{t}_CLC.csv'
+            df = pd.read_csv(f) if f.endswith('.csv') else pd.read_csv(f, sep='\t')
+            
+            if 'Close' not in df.columns:
+                df.columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
+            
             train = df[(df['Date'] >= '2011-01-01') & (df['Date'] <= '2015-12-31')]
             if len(train) > 500:
                 prices.append(train['Close'].values)
-                returns.append(train['Returns'].values)
+                returns.append(np.diff(np.log(train['Close'].values)))
         except:
             continue
-    return np.concatenate(prices), np.concatenate(returns) if prices else (None, None)
+    
+    if not prices:
+        return None, None
+    return np.concatenate(prices), np.concatenate(returns)
 
 # =============================================================================
 # 训练函数
@@ -302,5 +314,5 @@ def main():
     print(f"💾 模型：models_dqn_paper_{ts}.pkl")
     print("="*80)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
