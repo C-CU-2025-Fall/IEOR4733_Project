@@ -45,7 +45,46 @@ python generate_table3_markdown.py #生成markdown文件
 
 # Probe whether Yahoo-based ES/EN paths help when putting Equity back
 python tests/equity_yf_rad_regen_probe.py
+
+# ============================================================================
+# 深度强化学习模型 (DQN, PG, A2C) 新增功能
+# ============================================================================
+
+# 训练所有 RL 模型 (DQN + PG + A2C)
+python rl_models/train_all_rl_models.py
+
+# 训练单个模型
+python rl_models/train_all_rl_models.py dqn    # DQN: Fixed Q-targets + Double DQN
+python rl_models/train_all_rl_models.py pg     # PG:  Policy Gradient (Monte Carlo)
+python rl_models/train_all_rl_models.py a2c    # A2C: Advantage Actor-Critic
+
+# 回测已训练的 RL 模型
+python rl_models/evaluate_rl_models.py
+
+# 详细文档（包含算法解释、超参数、性能指标等）
+# 参考 rl_models/RL_MODELS_GUIDE.md
 ```
+
+## 深度强化学习模型 (新增)
+
+已实现论文《Deep Reinforcement Learning for Trading》中的三个核心 RL 算法：
+
+### DQN (Deep Q-Network)
+- **特点**: 价值函数方法，使用 Fixed Q-targets + Double DQN 增强稳定性
+- **超参数**: lr=0.0001, γ=0.3, batch_size=64, memory=5000, τ=1000
+- **网络**: LSTM [64, 32] 层，Leaky-ReLU 激活
+
+### PG (Policy Gradient)
+- **特点**: 直接学习策略，基于 Monte Carlo 轨迹采样
+- **超参数**: lr_actor=0.0001, γ=0.3
+- **网络**: LSTM [64, 32] 层，Softmax 输出动作概率
+
+### A2C (Advantage Actor-Critic)
+- **特点**: 混合方法，结合 Actor（策略）和 Critic（价值）网络，实时更新
+- **超参数**: lr_critic=0.001, lr_actor=0.0001, γ=0.3, batch_size=128
+- **网络**: 双 LSTM [64, 32] 架构，分离 Actor 和 Critic
+
+**详细说明请参考** [RL_MODELS_GUIDE.md](rl_models/RL_MODELS_GUIDE.md)
 
 ## Preserved Versions
 
