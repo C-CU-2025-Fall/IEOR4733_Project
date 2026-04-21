@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 
 
-<<<<<<< Updated upstream
 CSV_COLUMNS = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'OI']
 V2_CONTRACTS = ['ZH', 'ZU', 'US', 'ZN']
 
@@ -16,28 +15,6 @@ V2_CONTRACTS = ['ZH', 'ZU', 'US', 'ZN']
 @lru_cache(maxsize=None)
 def _read_clc_csv(path):
     if not os.path.exists(path):
-=======
-def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01', dataset='RAD'):
-    """
-    Load CLC ratio-adjusted data from start_date onwards.
-    Default 2009-01-01 gives ~504 trading days warmup before 2011 test,
-    enough for MACD std_window=252 + longest EMA span=96.
-
-    dataset:
-      - 'RAD': ratio-adjusted continuous contracts
-      - 'NON': non-adjusted continuous contracts
-      - 'REV': reverse-adjusted continuous contracts
-
-    CSV format (no header): Date,Open,High,Low,Close,Volume,OpenInterest
-    Date format: MM/DD/YYYY
-    """
-    dataset = dataset.upper()
-    if dataset not in {'RAD', 'NON', 'REV'}:
-        raise ValueError(f"Unsupported dataset '{dataset}'. Use one of: RAD, NON, REV.")
-
-    fpath = os.path.join(data_dir, f'{ticker}_{dataset}.CSV')
-    if not os.path.exists(fpath):
->>>>>>> Stashed changes
         return None
     df = pd.read_csv(path, header=None, names=CSV_COLUMNS)
     df['Date'] = pd.to_datetime(df['Date'], format='%m/%d/%Y')

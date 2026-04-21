@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Legacy 41 data-selection run with Table 3 style output for Long only."""
+"""One-command reproduction of the current legacy experimental 41/45 frontier."""
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -10,10 +9,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from baseline_strategy_report import run_single_strategy_report  # noqa: E402
+TESTS = ROOT / "tests"
+if str(TESTS) not in sys.path:
+    sys.path.insert(0, str(TESTS))
+
+import frontier_40plus_enumeration as fe  # noqa: E402
 
 
-<<<<<<< Updated upstream
 def _fmt(vals):
     return "  ".join(f"{v:>+7.3f}" for v in vals)
 
@@ -50,42 +52,23 @@ def _print_table_style(s: dict) -> None:
     print(f"{'=' * 60}")
 
 
-=======
-# Same legacy scenario used in previous frontier scripts
-LEGACY_EXPERIMENTAL_OVERRIDES = {
-    "EN": "REV",
-    "DT": "REV",
-    "CC": "RAD",
-    "LB": "REV",
-    "JO": "REV",
-    "ZH": "REV",
-}
-LEGACY_EXPERIMENTAL_EXCLUDED = {"FB", "ZA", "ZO", "EN", "ES"}
->>>>>>> Stashed changes
 def main():
-    parser = argparse.ArgumentParser(description="Legacy 41 Table 3-style report")
-    parser.add_argument("--sigma", type=float, default=0.064, help="sigma target (default: 0.064)")
-    parser.add_argument("--test-start", default="2011-01-01")
-    parser.add_argument("--test-end", default="2019-12-31")
-    parser.add_argument("--dataset", choices=["RAD", "NON", "REV"], default="RAD")
-    args = parser.parse_args()
-
-    run_single_strategy_report(
-        strategy="Long",
-        sigma_tgt=args.sigma,
-        test_start=args.test_start,
-        test_end=args.test_end,
-        default_dataset=args.dataset,
-        source_overrides=LEGACY_EXPERIMENTAL_OVERRIDES,
-        excluded=LEGACY_EXPERIMENTAL_EXCLUDED,
-        include_all=True,
-        table_label="Table 3",
+    row = fe.scenario(
+        label="legacy_experimental / Equity:risk_price_non / annual_mean_sleeve / contract_equal_path",
+        family="legacy_experimental",
+        overrides=fe.LEGACY_EXPERIMENTAL_OVERRIDES,
+        excluded=fe.LEGACY_EXPERIMENTAL_EXCLUDED,
+        asset_capital_overrides={"Equity Index": "risk_price_non"},
+        numerator_mode="annual_mean_sleeve",
+        asset_path_mode="contract_equal_path",
+        all_mode="contract_equal_path",
+        same_rule=False,
+        asset_specific=True,
+        structural_heavy=True,
+        experimental=True,
     )
-<<<<<<< Updated upstream
     s = row["summary"]
     _print_table_style(s)
-=======
->>>>>>> Stashed changes
 
 
 if __name__ == "__main__":
