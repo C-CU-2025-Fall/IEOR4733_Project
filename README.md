@@ -39,6 +39,10 @@ python tests_MACD/run_legacy_41_macd.py
 # Sign(R)
 python tests_Signr/run_legacy_41_signr.py
 
+# 生成以上三种策略的table3格式的表格：
+python generate_table3_comparison.py #快速查看版本，输出到控制台
+python generate_table3_markdown.py #生成markdown文件
+
 # Probe whether Yahoo-based ES/EN paths help when putting Equity back
 python tests/equity_yf_rad_regen_probe.py
 ```
