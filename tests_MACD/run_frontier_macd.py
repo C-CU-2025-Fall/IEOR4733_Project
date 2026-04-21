@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
-<<<<<<< Updated upstream
 """
-Sign(R) 策略数据源前沿搜索主程序。
+MACD 策略数据源前沿搜索主程序。
 
 遍历四个搜索族（clean_same_rule / coherent_override / structural_heavy /
-legacy_experimental），对比 PAPER_TABLE3 Sign(R) 目标，找到最优数据选择组合。
+legacy_experimental），对比 PAPER_TABLE3 MACD 目标，找到最优数据选择组合。
 
 用法：
-    python tests_Sign(r)/run_frontier_signr.py            # 完整搜索（较慢）
-    python tests_Sign(r)/run_frontier_signr.py --quick    # 仅运行 legacy_experimental 族
+    python tests_MACD/run_frontier_macd.py            # 完整搜索
+    python tests_MACD/run_frontier_macd.py --quick    # 仅运行 legacy_experimental 族
 """
-=======
-"""Sign(R) baseline report (4 assets + All) with image-like Ours/Paper/%Err layout."""
->>>>>>> Stashed changes
 from __future__ import annotations
 
 import argparse
@@ -23,23 +19,29 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-<<<<<<< Updated upstream
-SIGNR_DIR = ROOT / "tests_Sign(r)"
-if str(SIGNR_DIR) not in sys.path:
-    sys.path.insert(0, str(SIGNR_DIR))
+MACD_DIR = ROOT / "tests_MACD"
+if str(MACD_DIR) not in sys.path:
+    sys.path.insert(0, str(MACD_DIR))
 
-import frontier_signr_enumeration as fe  # noqa: E402
+import frontier_macd_enumeration as fe  # noqa: E402
+from baseline_strategy_report import run_single_strategy_report  # noqa: E402
 
 MAX_SCORE = fe.MAX_SCORE  # 36
+
+LEGACY_EXPERIMENTAL_OVERRIDES = {
+    "EN": "REV",
+    "DT": "REV",
+    "CC": "RAD",
+    "LB": "REV",
+    "JO": "REV",
+    "ZH": "REV",
+}
+LEGACY_EXPERIMENTAL_EXCLUDED = {"FB", "ZA", "ZO", "EN", "ES"}
 
 
 # ---------------------------------------------------------------------------
 # Summary table printer
 # ---------------------------------------------------------------------------
-
-def _col(v: object, w: int) -> str:
-    return str(v).ljust(w)
-
 
 def print_summary_table(rows: list[dict], title: str, top_n: int = 10) -> None:
     print(f"\n{'='*90}")
@@ -104,13 +106,43 @@ def print_best(row: dict, title: str = "Best scenario") -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Sign(R) frontier search")
+    parser = argparse.ArgumentParser(description="MACD frontier search")
+    parser.add_argument(
+        "--baseline",
+        action="store_true",
+        help="输出 MACD baseline 报表（四资产 + All），不运行前沿搜索",
+    )
+    parser.add_argument(
+        "--no-legacy-filter",
+        action="store_true",
+        help="Baseline 模式下禁用 legacy overrides/exclusions",
+    )
+    parser.add_argument("--sigma", type=float, default=0.064, help="Baseline sigma target (default: 0.064)")
+    parser.add_argument("--test-start", default="2011-01-01")
+    parser.add_argument("--test-end", default="2019-12-31")
+    parser.add_argument("--dataset", choices=["RAD", "NON", "REV"], default="RAD")
     parser.add_argument(
         "--quick",
         action="store_true",
-        help="仅运行 legacy_experimental 族（以 Long 最优数据配置为基础）",
+        help="仅运行 legacy_experimental 族",
     )
     args = parser.parse_args()
+
+    if args.baseline:
+        overrides = {} if args.no_legacy_filter else LEGACY_EXPERIMENTAL_OVERRIDES
+        excluded = set() if args.no_legacy_filter else LEGACY_EXPERIMENTAL_EXCLUDED
+        run_single_strategy_report(
+            strategy="MACD",
+            sigma_tgt=args.sigma,
+            test_start=args.test_start,
+            test_end=args.test_end,
+            default_dataset=args.dataset,
+            source_overrides=overrides,
+            excluded=excluded,
+            include_all=True,
+            table_label="Table 3",
+        )
+        return
 
     all_rows: list[dict] = []
 
@@ -118,29 +150,29 @@ def main() -> None:
         print(">> Mode: quick（仅 legacy_experimental 族）")
         rows = fe.search_legacy_experimental()
         all_rows.extend(rows)
-        print_summary_table(rows, "Legacy-experimental family (Sign(R))", top_n=10)
+        print_summary_table(rows, "Legacy-experimental family (MACD)", top_n=10)
     else:
         print(">> Mode: full search（四族全部枚举，耗时较长…）")
 
         print("\n[1/4] clean_same_rule …", flush=True)
         clean_rows = fe.search_clean_same_rule()
         all_rows.extend(clean_rows)
-        print_summary_table(clean_rows, "clean_same_rule family (Sign(R))", top_n=5)
+        print_summary_table(clean_rows, "clean_same_rule family (MACD)", top_n=5)
 
         print("\n[2/4] coherent_override …", flush=True)
         co_rows = fe.search_coherent_override()
         all_rows.extend(co_rows)
-        print_summary_table(co_rows, "coherent_override family (Sign(R))", top_n=5)
+        print_summary_table(co_rows, "coherent_override family (MACD)", top_n=5)
 
         print("\n[3/4] structural_heavy …", flush=True)
         sh_rows = fe.search_structural_heavy()
         all_rows.extend(sh_rows)
-        print_summary_table(sh_rows, "structural_heavy family (Sign(R))", top_n=5)
+        print_summary_table(sh_rows, "structural_heavy family (MACD)", top_n=5)
 
         print("\n[4/4] legacy_experimental …", flush=True)
         le_rows = fe.search_legacy_experimental()
         all_rows.extend(le_rows)
-        print_summary_table(le_rows, "legacy_experimental family (Sign(R))", top_n=5)
+        print_summary_table(le_rows, "legacy_experimental family (MACD)", top_n=5)
 
     # ----------------------------------------------------------------
     # 全局最优
@@ -148,14 +180,14 @@ def main() -> None:
     all_rows.sort(key=lambda r: r["summary"]["rank"])
     best = all_rows[0]
 
-    print_best(best, title="Sign(R) — Global Best Scenario")
+    print_best(best, title="MACD — Global Best Scenario")
 
     # Save best result to JSON
     json_path = fe.save_best_to_json(best)
     print(f"\n>> Best overrides saved to: {json_path}")
 
     # ----------------------------------------------------------------
-    # 快速对比：每族的最佳代表
+    # 各族最佳代表汇总
     # ----------------------------------------------------------------
     if not args.quick:
         print("\n--- 各族最佳代表汇总 ---")
@@ -171,48 +203,6 @@ def main() -> None:
                 f"label: {r['label']}"
             )
         print()
-=======
-from baseline_strategy_report import run_single_strategy_report  # noqa: E402
-
-LEGACY_EXPERIMENTAL_OVERRIDES = {
-    "EN": "REV",
-    "DT": "REV",
-    "CC": "RAD",
-    "LB": "REV",
-    "JO": "REV",
-    "ZH": "REV",
-}
-LEGACY_EXPERIMENTAL_EXCLUDED = {"FB", "ZA", "ZO", "EN", "ES"}
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Sign(R) baseline report")
-    parser.add_argument("--sigma", type=float, default=0.064, help="sigma target (default: 0.064)")
-    parser.add_argument("--test-start", default="2011-01-01")
-    parser.add_argument("--test-end", default="2019-12-31")
-    parser.add_argument("--dataset", choices=["RAD", "NON", "REV"], default="RAD")
-    parser.add_argument(
-        "--no-legacy-filter",
-        action="store_true",
-        help="Disable legacy overrides/exclusions and use plain dataset for all contracts",
-    )
-    args = parser.parse_args()
-
-    overrides = {} if args.no_legacy_filter else LEGACY_EXPERIMENTAL_OVERRIDES
-    excluded = set() if args.no_legacy_filter else LEGACY_EXPERIMENTAL_EXCLUDED
-
-    run_single_strategy_report(
-        strategy="Sign(R)",
-        sigma_tgt=args.sigma,
-        test_start=args.test_start,
-        test_end=args.test_end,
-        default_dataset=args.dataset,
-        source_overrides=overrides,
-        excluded=excluded,
-        include_all=True,
-        table_label="Table 3",
-    )
->>>>>>> Stashed changes
 
 
 if __name__ == "__main__":

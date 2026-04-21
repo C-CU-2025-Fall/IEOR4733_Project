@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Sign(R) 策略数据源前沿枚举（自包含版本）。
+MACD 策略数据源前沿枚举（自包含版本）。
 
 功能：
   - 自包含数据加载，支持 source_overrides 逐 ticker 指定数据源
   - 4-asset scorecard：4 × 9 = 36 指标（Paper Table 3）
   - 遍历数据源 overrides、排除合约集合、报告参数，最大化 <=15% 容差评分
   - All 资产类别计算并上报，不计入 score
-  - 搜索结果以 JSON 写入 tests_Sign(r)/best_overrides_signr.json
+  - 搜索结果以 JSON 写入 tests_MACD/best_overrides_macd.json
 """
 from __future__ import annotations
 
@@ -37,12 +37,11 @@ from strategies import strategy_sign_r, strategy_macd  # noqa: E402
 # ---------------------------------------------------------------------------
 
 SIGMA = 0.058
-STRAT = "Sign(R)"
+STRAT = "MACD"
 ASSETS4 = ["Commodity", "Equity Index", "Fixed Income", "Forex"]
 MAX_SCORE = len(ASSETS4) * len(METRIC_NAMES)  # 36
 
 NUMERATOR_MODES = ["wealth_cagr", "annual_mean_simple", "annual_mean_log"]
-ASSET_PATH_MODES = ["contract_equal_path"]
 ALL_MODES = [
     "contract_equal_path",
     "asset_equal_path",
@@ -51,10 +50,9 @@ ALL_MODES = [
     "asset_count_weighted_simple",
 ]
 FAST_ALL_MODES = ["contract_equal_path", "asset_equal_path", "asset_count_weighted_path"]
-OVERRIDE_ASSETS = ["Commodity", "Equity Index", "Fixed Income"]
 
 # JSON output path
-RESULTS_JSON = Path(__file__).resolve().parent / "best_overrides_signr.json"
+RESULTS_JSON = Path(__file__).resolve().parent / "best_overrides_macd.json"
 
 
 # ---------------------------------------------------------------------------
@@ -173,7 +171,7 @@ def max_drawdown_from_path(path: np.ndarray) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Data-source override sets
+# Data-source override sets (same as Sign(R) — shared data quality findings)
 # ---------------------------------------------------------------------------
 
 _BASE_OVERRIDES: dict[str, str] = {}
@@ -242,7 +240,7 @@ def annual_return_from_reporting(reporting: dict, numerator_mode: str) -> float:
 # ---------------------------------------------------------------------------
 
 def build_reporting_portfolio(raw_data: list) -> dict | None:
-    """Build sleeve paths for Sign(R) strategy."""
+    """Build sleeve paths for MACD strategy."""
     sleeve_paths = []
     for rd in raw_data:
         Rt = compute_contract_returns(rd, STRAT, SIGMA)

@@ -1,0 +1,129 @@
+{
+  "strategy": "MACD",
+  "label": "legacy_experimental / annual_mean_simple / contract_equal_path",
+  "family": "legacy_experimental",
+  "sigma": 0.058,
+  "overrides": {
+    "EN": "REV",
+    "DT": "REV",
+    "CC": "RAD",
+    "LB": "REV",
+    "JO": "REV",
+    "ZH": "REV"
+  },
+  "excluded": [
+    "EN",
+    "ES",
+    "FB",
+    "ZA",
+    "ZO"
+  ],
+  "numerator_mode": "annual_mean_simple",
+  "all_mode": "contract_equal_path",
+  "score10": 13,
+  "score15": 14,
+  "max_score": 36,
+  "per_asset": {
+    "Commodity": {
+      "metrics": {
+        "E(R)": 0.339,
+        "std(R)": 0.214,
+        "DD": 0.146,
+        "Sharpe": 1.587,
+        "Sortino": 2.319,
+        "MDD": 0.037,
+        "Calmar": -0.28,
+        "% +ve": 0.552,
+        "Ave P/L": 1.066
+      },
+      "misses15": [
+        "E(R)",
+        "Sharpe",
+        "Sortino",
+        "MDD",
+        "Calmar"
+      ],
+      "n_contracts": 21
+    },
+    "Equity Index": {
+      "metrics": {
+        "E(R)": -0.287,
+        "std(R)": 0.558,
+        "DD": 0.415,
+        "Sharpe": -0.515,
+        "Sortino": -0.692,
+        "MDD": 0.0,
+        "Calmar": -0.09,
+        "% +ve": 0.498,
+        "Ave P/L": 0.919
+      },
+      "misses15": [
+        "E(R)",
+        "Sharpe",
+        "Sortino",
+        "MDD",
+        "Calmar"
+      ],
+      "n_contracts": 9
+    },
+    "Fixed Income": {
+      "metrics": {
+        "E(R)": -0.32,
+        "std(R)": 0.618,
+        "DD": 0.449,
+        "Sharpe": -0.517,
+        "Sortino": -0.712,
+        "MDD": 0.003,
+        "Calmar": -0.049,
+        "% +ve": 0.458,
+        "Ave P/L": 1.082
+      },
+      "misses15": [
+        "E(R)",
+        "DD",
+        "Sharpe",
+        "Sortino",
+        "MDD",
+        "Calmar"
+      ],
+      "n_contracts": 3
+    },
+    "Forex": {
+      "metrics": {
+        "E(R)": -0.329,
+        "std(R)": 0.404,
+        "DD": 0.298,
+        "Sharpe": -0.815,
+        "Sortino": -1.106,
+        "MDD": 0.588,
+        "Calmar": -0.057,
+        "% +ve": 0.47,
+        "Ave P/L": 0.976
+      },
+      "misses15": [
+        "E(R)",
+        "DD",
+        "Sharpe",
+        "Sortino",
+        "MDD",
+        "Calmar"
+      ],
+      "n_contracts": 9
+    },
+    "All": {
+      "metrics": {
+        "E(R)": 0.486,
+        "std(R)": 0.193,
+        "DD": 0.113,
+        "Sharpe": 2.514,
+        "Sortino": 4.308,
+        "MDD": 0.053,
+        "Calmar": 0.277,
+        "% +ve": 0.5,
+        "Ave P/L": 1.47
+      },
+      "misses15": [],
+      "n_contracts": 42
+    }
+  }
+}
