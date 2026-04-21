@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""One-command reproduction of the optimal MACD legacy experimental frontier."""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+TESTS_MACD = ROOT / "tests_MACD"
+if str(TESTS_MACD) not in sys.path:
+    sys.path.insert(0, str(TESTS_MACD))
+
+import frontier_40plus_enumeration_macd as fe  # noqa: E402
+
+
+def main():
+    # 使用 MACD-specific 的 overrides 配置（从 enumeration 搜索中发现）
+    row = fe.scenario(
+        label="legacy_experimental_MACD / Equity:risk_price_non / wealth_cagr / contract_equal_path",
+        family="legacy_experimental",
+        overrides=fe.LEGACY_EXPERIMENTAL_OVERRIDES_MACD,
+        excluded=fe.LEGACY_EXPERIMENTAL_EXCLUDED_MACD,
+        asset_capital_overrides={"Equity Index": "risk_price_non"},
+        numerator_mode="wealth_cagr",
+        asset_path_mode="contract_equal_path",
+        all_mode="contract_equal_path",
+        same_rule=False,
+        asset_specific=True,
+        structural_heavy=True,
+        experimental=True,
+    )
+    s = row["summary"]
+    print("MACD Legacy experimental frontier (optimal MACD-specific configuration)")
+    print("=" * 60)
+    print(f"4-asset <=10: {s['four10']}/36")
+    print(f"4-asset <=15: {s['four15']}/36")
+    print()
+    print("source overrides (MACD-specific):")
+    for tk, src in sorted(fe.LEGACY_EXPERIMENTAL_OVERRIDES_MACD.items()):
+        print(f"  {tk}: {src}")
+    print()
+    print("excluded:")
+    print("  " + ", ".join(sorted(fe.LEGACY_EXPERIMENTAL_EXCLUDED_MACD)))
+    print()
+    print("reporting:")
+    print("  Equity Index capital anchor: risk_price_non")
+    print("  numerator: wealth_cagr")
+    print("  asset path: contract_equal_path")
+    print("  all mode: contract_equal_path")
+    print()
+    for asset in ["Commodity", "Equity Index", "Fixed Income", "Forex"]:
+        res = s["results"][asset]
+        misses = ", ".join(res["misses15"]) or "none"
+        print(f"{asset}: <=15 misses -> {misses}")
+
+
+if __name__ == "__main__":
+    main()

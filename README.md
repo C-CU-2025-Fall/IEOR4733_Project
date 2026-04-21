@@ -30,6 +30,15 @@ python tests/frontier_40plus_enumeration.py
 # One-line reproduction of the retained 41/45 experimental upper bound
 python tests/run_legacy_41.py
 
+# Long
+python tests/run_legacy_41.py
+
+# MACD
+python tests_MACD/run_legacy_41_macd.py
+
+# Sign(R)
+python tests_Signr/run_legacy_41_signr.py
+
 # Probe whether Yahoo-based ES/EN paths help when putting Equity back
 python tests/equity_yf_rad_regen_probe.py
 ```
