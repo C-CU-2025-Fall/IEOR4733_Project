@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Enumerate clean same-rule and 40+ first Table 3 Long frontiers under one scorecard.
+Enumerate clean same-rule and 40+ first Table 3 MACD frontiers under one scorecard.
 
 Goals:
   1. push the clean same-rule line as far as it goes
   2. if still below 40/45, enumerate coherent 40+ first frontiers
   3. summarize the tradeoff between clean interpretation and high score
+  4. find MACD-specific optimal data source overrides
 """
 from __future__ import annotations
 
@@ -21,14 +22,15 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from baseline_run import compute_contract_returns, compute_portfolio_returns, load_contracts  # noqa: E402
-from config import ASSET_CLASSES, METRIC_NAMES, PAPER_TABLE3, SOURCE_OVERRIDES, LEGACY_EXPERIMENTAL_OVERRIDES_LONG, LEGACY_EXPERIMENTAL_EXCLUDED_LONG  # noqa: E402
+from config import ASSET_CLASSES, METRIC_NAMES, PAPER_TABLE3, SOURCE_OVERRIDES, LEGACY_EXPERIMENTAL_OVERRIDES_MACD, LEGACY_EXPERIMENTAL_EXCLUDED_MACD  # noqa: E402
 from data_loader import load_clc_full  # noqa: E402
 from metrics import compute_metrics, max_drawdown_from_path  # noqa: E402
 
 
 SIGMA = 0.058
+STRATEGY = "MACD"  # ← 主策略改为 MACD
 ASSETS4 = ["Commodity", "Equity Index", "Fixed Income", "Forex"]
-DOC_PATH = ROOT / "docs" / "frontier_40plus_enumeration.md"
+DOC_PATH = ROOT / "docs" / "frontier_40plus_enumeration_macd.md"
 
 NUMERATOR_MODES = ["wealth_cagr", "annual_mean_simple", "annual_mean_log", "annual_mean_sleeve"]
 ASSET_PATH_MODES = ["contract_equal_path", "sleeve_first_simple_path"]
@@ -59,8 +61,8 @@ def pct_err(value: float, paper: float) -> float:
     return abs((value - paper) / abs(paper)) * 100.0
 
 
-def paper_helper(asset: str) -> float:
-    paper = PAPER_TABLE3[asset]["Long"]
+def paper_helper(asset: str, strategy: str = STRATEGY) -> float:
+    paper = PAPER_TABLE3[asset][strategy]
     return paper["Calmar"] * paper["MDD"]
 
 
@@ -103,10 +105,10 @@ def aligned_price_p0(ticker: str, date0, source: str) -> float | None:
     return p0
 
 
-def build_reporting_portfolio(raw_data, capital_mode: str):
+def build_reporting_portfolio(raw_data, capital_mode: str, strategy: str = STRATEGY):
     sleeve_paths = []
     for rd in raw_data:
-        detail = compute_contract_returns(rd, "Long", SIGMA, detail=True)
+        detail = compute_contract_returns(rd, strategy, SIGMA, detail=True)  # ← 使用 MACD 而不是 Long
         start, t1 = rd["start"], rd["t1"]
         Rt = detail["Rt"][start:t1 + 1]
         prices = detail["prices"][start:t1 + 1]
@@ -267,6 +269,7 @@ def evaluate_scenario(
     numerator_mode: str,
     asset_path_mode: str,
     all_mode: str,
+    strategy: str = STRATEGY,
 ):
     overrides = dict(overrides_key)
     excluded = list(excluded_key)
@@ -283,10 +286,10 @@ def evaluate_scenario(
 
     for asset in ASSETS4:
         raw = load_raw(asset, overrides, excluded)
-        trade_returns = compute_portfolio_returns(raw, "Long", SIGMA, aggregation_mode="variable_n")
+        trade_returns = compute_portfolio_returns(raw, strategy, SIGMA, aggregation_mode="variable_n")  # ← MACD
         trade_metrics = dict(zip(METRIC_NAMES, compute_metrics(trade_returns, n_contracts=len(raw))))
         capital_mode = asset_capital_overrides.get(asset, default_capital_mode)
-        reporting = build_reporting_portfolio(raw, capital_mode)
+        reporting = build_reporting_portfolio(raw, capital_mode, strategy)
         reporting = asset_path_variant(reporting, asset_path_mode)
         ann = annual_return_from_reporting(reporting, numerator_mode)
         mdd = float(max_drawdown_from_path(reporting["portfolio_path"]))
@@ -294,7 +297,7 @@ def evaluate_scenario(
         trade_metrics["MDD"] = round(mdd, 3)
         trade_metrics["Calmar"] = round(cal, 3) if np.isfinite(cal) else float("nan")
 
-        paper = PAPER_TABLE3[asset]["Long"]
+        paper = PAPER_TABLE3[asset][strategy]  # ← 对标 MACD
         errors = {metric: pct_err(trade_metrics[metric], paper[metric]) for metric in METRIC_NAMES}
         misses = [metric for metric in METRIC_NAMES if errors[metric] >= 15.0]
         asset_reporting[asset] = reporting
@@ -302,7 +305,7 @@ def evaluate_scenario(
             "metrics": trade_metrics,
             "errors": errors,
             "misses15": misses,
-            "ann_gap": pct_err(ann, paper_helper(asset)),
+            "ann_gap": pct_err(ann, paper_helper(asset, strategy)),
             "cal_gap": pct_err(cal, paper["Calmar"]),
             "capital_mode": capital_mode,
         }
@@ -316,7 +319,7 @@ def evaluate_scenario(
         mean_cal_errs.append(results[asset]["cal_gap"])
 
     raw_all = load_raw("All", overrides, excluded)
-    all_trade_returns = compute_portfolio_returns(raw_all, "Long", SIGMA, aggregation_mode="variable_n")
+    all_trade_returns = compute_portfolio_returns(raw_all, strategy, SIGMA, aggregation_mode="variable_n")  # ← MACD
     all_metrics = dict(zip(METRIC_NAMES, compute_metrics(all_trade_returns, n_contracts=len(raw_all))))
     all_reporting = build_all_reporting(asset_reporting, all_mode)
     all_ann = annual_return_from_reporting(all_reporting, numerator_mode)
@@ -324,22 +327,24 @@ def evaluate_scenario(
     all_cal = all_ann / all_mdd if all_mdd > 0 and np.isfinite(all_ann) else float("nan")
     all_metrics["MDD"] = round(all_mdd, 3)
     all_metrics["Calmar"] = round(all_cal, 3) if np.isfinite(all_cal) else float("nan")
-    paper_all = PAPER_TABLE3["All"]["Long"]
-    errors_all = {metric: pct_err(all_metrics[metric], paper_all[metric]) for metric in METRIC_NAMES}
+    
+    # MACD only has 4-asset target, fill All with NaN
+    paper_all = {"E(R)": float("nan"), "std(R)": float("nan"), "DD": float("nan"), 
+                 "Sharpe": float("nan"), "Sortino": float("nan"), "MDD": float("nan"), 
+                 "Calmar": float("nan"), "% +ve": float("nan"), "Ave P/L": float("nan")}
+    errors_all = {metric: pct_err(all_metrics[metric], paper_all.get(metric, float("nan"))) for metric in METRIC_NAMES}
     misses_all = [metric for metric in METRIC_NAMES if errors_all[metric] >= 15.0]
     results["All"] = {
         "metrics": all_metrics,
         "errors": errors_all,
         "misses15": misses_all,
-        "ann_gap": pct_err(all_ann, paper_helper("All")),
-        "cal_gap": pct_err(all_cal, paper_all["Calmar"]),
+        "ann_gap": float("nan"),
+        "cal_gap": float("nan"),
         "capital_mode": "mixed" if asset_capital_overrides else default_capital_mode,
     }
-    score10 += sum(errors_all[m] < 10 for m in METRIC_NAMES)
-    score15 += sum(errors_all[m] < 15 for m in METRIC_NAMES)
 
     non_all_remaining = sum(len(results[a]["misses15"]) for a in ASSETS4)
-    all_blocker = "Yes" if len(misses_all) == 0 else ("No" if non_all_remaining == 0 else "Partly")
+    all_blocker = "Partly"
     return {
         "score10": score10,
         "score15": score15,
@@ -356,26 +361,8 @@ def evaluate_scenario(
             -four10,
             float(np.mean(mean_ann_errs)),
             float(np.mean(mean_cal_errs)),
-            len(misses_all),
         ),
     }
-
-
-def render_misses(summary: dict):
-    parts = []
-    for asset in ASSETS4:
-        misses = summary["results"][asset]["misses15"]
-        if misses:
-            parts.append(f"{asset}: {', '.join(misses)}")
-    return " ; ".join(parts) if parts else "none"
-
-
-def explanation_cost(same_rule: bool, asset_specific: bool, structural_heavy: bool):
-    if same_rule and not structural_heavy:
-        return "Low"
-    if asset_specific ^ structural_heavy:
-        return "Medium"
-    return "High"
 
 
 def candidate_row(label, family, summary, overrides, excluded, default_capital_mode, asset_capital_overrides, numerator_mode, asset_path_mode, all_mode, same_rule, asset_specific, structural_heavy, experimental):
@@ -394,7 +381,6 @@ def candidate_row(label, family, summary, overrides, excluded, default_capital_m
         "asset_specific": asset_specific,
         "structural_heavy": structural_heavy,
         "experimental": experimental,
-        "cost": explanation_cost(same_rule, asset_specific, structural_heavy),
     }
 
 
@@ -409,6 +395,7 @@ def scenario(label, family, overrides, excluded, default_capital_mode="risk_pric
         numerator_mode,
         asset_path_mode,
         all_mode,
+        STRATEGY,
     )
     return candidate_row(
         label,
@@ -428,6 +415,7 @@ def scenario(label, family, overrides, excluded, default_capital_mode="risk_pric
     )
 
 
+# 使用相同的 overrides 配置（可以后续根据搜索结果调整）
 BASE_CLEAN_OVERRIDES = dict(SOURCE_OVERRIDES)
 BASE_CLEAN_OVERRIDES.update(
     {
@@ -456,108 +444,9 @@ STRUCTURAL_HISTORY_OVERRIDES.update(
 )
 STRUCTURAL_HISTORY_EXCLUDED = {"FB", "ZA", "ZO", "EN", "ES"}
 
-HYBRID_STRUCTURAL_OVERRIDES = dict(BASE_CLEAN_OVERRIDES)
-HYBRID_STRUCTURAL_EXCLUDED = set(BASE_CLEAN_EXCLUDED) | {"EN", "ES"}
-
-LEGACY_EXPERIMENTAL_OVERRIDES = LEGACY_EXPERIMENTAL_OVERRIDES_LONG
-LEGACY_EXPERIMENTAL_EXCLUDED = LEGACY_EXPERIMENTAL_EXCLUDED_LONG
-
-
-def search_clean_same_rule():
-    rows = []
-    for numerator_mode, all_mode in itertools.product(CLEAN_NUMERATORS, ALL_MODES):
-        rows.append(
-            scenario(
-                label=f"clean / {numerator_mode} / contract_equal_path / {all_mode}",
-                family="clean_same_rule",
-                overrides=BASE_CLEAN_OVERRIDES,
-                excluded=BASE_CLEAN_EXCLUDED,
-                numerator_mode=numerator_mode,
-                asset_path_mode="contract_equal_path",
-                all_mode=all_mode,
-                same_rule=True,
-                asset_specific=False,
-                structural_heavy=False,
-                experimental=False,
-            )
-        )
-    rows.sort(key=lambda row: row["summary"]["rank"])
-    return rows
-
-
-def search_coherent_override():
-    rows = []
-    bases = [
-        ("clean", BASE_CLEAN_OVERRIDES, BASE_CLEAN_EXCLUDED, False),
-        ("structural_history", STRUCTURAL_HISTORY_OVERRIDES, STRUCTURAL_HISTORY_EXCLUDED, True),
-    ]
-    for base_name, overrides, excluded, structural_heavy in bases:
-        for asset, numerator_mode, all_mode in itertools.product(OVERRIDE_ASSETS, CLEAN_NUMERATORS, FAST_ALL_MODES):
-            rows.append(
-                scenario(
-                    label=f"{base_name} / {asset}:risk_price_non / {numerator_mode} / {all_mode}",
-                    family="coherent_override",
-                    overrides=overrides,
-                    excluded=excluded,
-                    asset_capital_overrides={asset: "risk_price_non"},
-                    numerator_mode=numerator_mode,
-                    asset_path_mode="contract_equal_path",
-                    all_mode=all_mode,
-                    same_rule=False,
-                    asset_specific=True,
-                    structural_heavy=structural_heavy,
-                    experimental=True,
-                )
-            )
-    rows.sort(key=lambda row: row["summary"]["rank"])
-    return rows
-
-
-def search_structural_heavy():
-    rows = []
-    structural_bases = [
-        ("history_seed", STRUCTURAL_HISTORY_OVERRIDES, STRUCTURAL_HISTORY_EXCLUDED),
-        ("clean_plus_en_es", BASE_CLEAN_OVERRIDES, set(BASE_CLEAN_EXCLUDED) | {"EN", "ES"}),
-    ]
-    for base_name, overrides, excluded in structural_bases:
-        for numerator_mode, all_mode in itertools.product(CLEAN_NUMERATORS, FAST_ALL_MODES):
-            rows.append(
-                scenario(
-                    label=f"{base_name} / {numerator_mode} / contract_equal_path / {all_mode}",
-                    family="structural_heavy",
-                    overrides=overrides,
-                    excluded=excluded,
-                    numerator_mode=numerator_mode,
-                    asset_path_mode="contract_equal_path",
-                    all_mode=all_mode,
-                    same_rule=True,
-                    asset_specific=False,
-                    structural_heavy=True,
-                    experimental=True,
-                )
-            )
-        # allow the historical experimental equity-only override on heavy bases too
-        rows.append(
-            scenario(
-                label=f"{base_name} / Equity:risk_price_non / wealth_cagr / contract_equal_path",
-                family="structural_heavy",
-                overrides=overrides,
-                excluded=excluded,
-                asset_capital_overrides={"Equity Index": "risk_price_non"},
-                numerator_mode="wealth_cagr",
-                asset_path_mode="contract_equal_path",
-                all_mode="contract_equal_path",
-                same_rule=False,
-                asset_specific=True,
-                structural_heavy=True,
-                experimental=True,
-            )
-        )
-    rows.sort(key=lambda row: row["summary"]["rank"])
-    return rows
-
 
 def search_legacy_experimental():
+    """搜索 MACD 的最优数据源配置"""
     rows = []
     for numerator_mode, all_mode in itertools.product(NUMERATOR_MODES, ALL_MODES):
         rows.append(
@@ -580,236 +469,37 @@ def search_legacy_experimental():
     return rows
 
 
-def pick_best_family(rows):
-    return rows[0]
-
-
-def top_40plus(rows, limit=8):
-    out = [row for row in rows if row["summary"]["score15"] >= 40]
-    return out[:limit]
-
-
-def recommendation_for(label, family, score15):
-    if family == "clean_same_rule":
-        return "主方案" if score15 >= 40 else "clean 主方案"
-    if family == "coherent_override":
-        return "备选方案"
-    return "仅实验上界"
-
-
-def summary_table_rows(candidates):
-    rows = []
-    for row in candidates:
-        summary = row["summary"]
-        rows.append(
-            [
-                row["label"],
-                f"{summary['score10']}/45",
-                f"{summary['score15']}/45",
-                "Yes" if row["same_rule"] else "No",
-                "Yes" if row["asset_specific"] else "No",
-                "Yes" if row["structural_heavy"] else "No",
-                summary["all_blocker_removed"],
-                row["cost"],
-                recommendation_for(row["label"], row["family"], summary["score15"]),
-            ]
-        )
-    return rows
-
-
-def detail_rows(rows, limit=10):
-    out = []
-    for row in rows[:limit]:
-        summary = row["summary"]
-        out.append(
-            [
-                row["label"],
-                f"{summary['score10']}/45",
-                f"{summary['score15']}/45",
-                f"{summary['four15']}/36",
-                f"{summary['mean_ann_gap']:.1f}%",
-                f"{summary['mean_cal_gap']:.1f}%",
-                row["default_capital_mode"] if not row["asset_capital_overrides"] else ", ".join(f"{k}->{v}" for k, v in row["asset_capital_overrides"].items()),
-                row["numerator_mode"],
-                row["all_mode"],
-                render_misses(summary),
-            ]
-        )
-    return out
-
-
-def frontier_payload_line(row):
-    return [
-        row["label"],
-        f"{row['summary']['score10']}/45",
-        f"{row['summary']['score15']}/45",
-        ", ".join(f"{k}:{v}" for k, v in sorted(row["overrides"].items()) if k in {"EN", "DT", "CC", "LB", "JO", "ZH", "NR", "ZC"}) or "none",
-        ",".join(row["excluded"]) or "none",
-        f"{row['default_capital_mode']} | {row['numerator_mode']} | {row['asset_path_mode']} | {row['all_mode']}",
-        "Yes" if row["same_rule"] else "No",
-        "Yes" if row["asset_specific"] else "No",
-        "Yes" if row["experimental"] else "No",
-        render_misses(row["summary"]),
-        row["summary"]["all_blocker_removed"],
-        row["cost"],
-        recommendation_for(row["label"], row["family"], row["summary"]["score15"]),
-    ]
-
-
 def main():
-    clean_rows = search_clean_same_rule()
-    coherent_rows = search_coherent_override()
-    structural_rows = search_structural_heavy()
+    print("=" * 80)
+    print(f"Searching for MACD-specific optimal data source frontiers")
+    print(f"Strategy: {STRATEGY}")
+    print("=" * 80)
+    
     legacy_rows = search_legacy_experimental()
-
-    best_clean = pick_best_family(clean_rows)
-    best_override = pick_best_family(coherent_rows)
-    best_structural = pick_best_family(structural_rows)
-    best_legacy = pick_best_family(legacy_rows)
-
-    top_cases = []
-    for candidate in [best_clean, best_override, best_structural, best_legacy]:
-        if candidate not in top_cases:
-            top_cases.append(candidate)
-
-    for row in top_40plus(clean_rows, limit=3):
-        if row not in top_cases:
-            top_cases.append(row)
-    for row in top_40plus(coherent_rows, limit=5):
-        if row not in top_cases:
-            top_cases.append(row)
-    for row in top_40plus(structural_rows, limit=5):
-        if row not in top_cases:
-            top_cases.append(row)
-    for row in top_40plus(legacy_rows, limit=8):
-        if row not in top_cases:
-            top_cases.append(row)
-
-    all_top = sorted(clean_rows + coherent_rows + structural_rows, key=lambda row: row["summary"]["rank"])
-    top_cases = sorted(top_cases, key=lambda row: row["summary"]["rank"])
-
-    report = [
-        "# Frontier 40+ Enumeration",
-        "",
-        "Unified workflow:",
-        "",
-        "1. push the clean same-rule line as far as it goes",
-        "2. if still below `40/45`, enumerate coherent `40+ first` frontiers",
-        "3. summarize interpretation cost vs score under one scorecard",
-        "",
-        "## Family Winners",
-        "",
-        md_table(
-            ["Family", "<=10", "<=15", "4-asset <=15", "Mean Ann Gap", "Mean Cal Gap", "All Blocker Removed?", "Label"],
-            [
-                ["clean same-rule", f"{best_clean['summary']['score10']}/45", f"{best_clean['summary']['score15']}/45", f"{best_clean['summary']['four15']}/36", f"{best_clean['summary']['mean_ann_gap']:.1f}%", f"{best_clean['summary']['mean_cal_gap']:.1f}%", best_clean["summary"]["all_blocker_removed"], best_clean["label"]],
-                ["coherent override", f"{best_override['summary']['score10']}/45", f"{best_override['summary']['score15']}/45", f"{best_override['summary']['four15']}/36", f"{best_override['summary']['mean_ann_gap']:.1f}%", f"{best_override['summary']['mean_cal_gap']:.1f}%", best_override["summary"]["all_blocker_removed"], best_override["label"]],
-                ["structural-heavy", f"{best_structural['summary']['score10']}/45", f"{best_structural['summary']['score15']}/45", f"{best_structural['summary']['four15']}/36", f"{best_structural['summary']['mean_ann_gap']:.1f}%", f"{best_structural['summary']['mean_cal_gap']:.1f}%", best_structural["summary"]["all_blocker_removed"], best_structural["label"]],
-                ["legacy experimental upper bound", f"{best_legacy['summary']['score10']}/45", f"{best_legacy['summary']['score15']}/45", f"{best_legacy['summary']['four15']}/36", f"{best_legacy['summary']['mean_ann_gap']:.1f}%", f"{best_legacy['summary']['mean_cal_gap']:.1f}%", best_legacy["summary"]["all_blocker_removed"], best_legacy["label"]],
-            ],
-        ),
-        "",
-        "## Clean Same-Rule Final Push",
-        "",
-        md_table(
-            ["Label", "<=10", "<=15", "4-asset <=15", "Mean Ann Gap", "Mean Cal Gap", "Capital", "Numerator", "All Mode", "4-asset Remaining Misses"],
-            detail_rows(clean_rows, limit=8),
-        ),
-        "",
-        "## Coherent Override Frontiers",
-        "",
-        md_table(
-            ["Label", "<=10", "<=15", "4-asset <=15", "Mean Ann Gap", "Mean Cal Gap", "Capital", "Numerator", "All Mode", "4-asset Remaining Misses"],
-            detail_rows(coherent_rows, limit=10),
-        ),
-        "",
-        "## Structural-Heavy Frontiers",
-        "",
-        md_table(
-            ["Label", "<=10", "<=15", "4-asset <=15", "Mean Ann Gap", "Mean Cal Gap", "Capital", "Numerator", "All Mode", "4-asset Remaining Misses"],
-            detail_rows(structural_rows, limit=10),
-        ),
-        "",
-        "## Legacy Experimental Upper Bound",
-        "",
-        md_table(
-            ["Label", "<=10", "<=15", "4-asset <=15", "Mean Ann Gap", "Mean Cal Gap", "Capital", "Numerator", "All Mode", "4-asset Remaining Misses"],
-            detail_rows(legacy_rows, limit=10),
-        ),
-        "",
-        "## 40+ First Cases",
-        "",
-        md_table(
-            [
-                "Frontier",
-                "Score <=10 /45",
-                "Score <=15 /45",
-                "Same-rule?",
-                "Asset-specific override?",
-                "Structural-heavy?",
-                "Main blocker removed?",
-                "Explanation cost",
-                "Recommendation",
-            ],
-            summary_table_rows([row for row in top_cases if row["summary"]["score15"] >= 40]),
-        ),
-        "",
-        "## Unified Candidate Payload",
-        "",
-        md_table(
-            [
-                "Name",
-                "<=10 /45",
-                "<=15 /45",
-                "Trade-lane overrides",
-                "Exclusions",
-                "Reporting bridge / numerator / path / all",
-                "Same-rule?",
-                "Asset-specific?",
-                "Historical experimental?",
-                "4-asset Remaining Misses",
-                "All still main blocker?",
-                "Explanation cost",
-                "Recommendation",
-            ],
-            [frontier_payload_line(row) for row in top_cases],
-        ),
-        "",
-        "## Overall Read",
-        "",
-        f"- clean same-rule max frontier: `{best_clean['label']}` → `<=15 {best_clean['summary']['score15']}/45`, `<=10 {best_clean['summary']['score10']}/45`",
-        f"- coherent override max frontier: `{best_override['label']}` → `<=15 {best_override['summary']['score15']}/45`, `<=10 {best_override['summary']['score10']}/45`",
-        f"- structural-heavy max frontier: `{best_structural['label']}` → `<=15 {best_structural['summary']['score15']}/45`, `<=10 {best_structural['summary']['score10']}/45`",
-        f"- legacy experimental upper bound: `{best_legacy['label']}` → `<=15 {best_legacy['summary']['score15']}/45`, `<=10 {best_legacy['summary']['score10']}/45`",
-        "",
-    ]
-
-    if best_clean["summary"]["score15"] >= 40:
-        report.extend(
-            [
-                "Final read:",
-                "",
-                "- clean same-rule already reaches `40+/45`; that remains the main recommended frontier.",
-            ]
-        )
-    else:
-        report.extend(
-            [
-                "Final read:",
-                "",
-                "- clean same-rule still does **not** reach `40+/45` under the current clean doctrine.",
-                "- the next review should therefore compare it against the `40+ first` cases above, not wait for more blind local search.",
-                "- under the current cleaner source doctrine, the only `40+` cases found here come from the legacy experimental upper-bound family.",
-            ]
-        )
-
-    DOC_PATH.write_text("\n".join(report) + "\n")
-    print(f"Wrote {DOC_PATH}")
-    print(f"Clean same-rule max: {best_clean['summary']['score15']}/45")
-    print(f"Coherent override max: {best_override['summary']['score15']}/45")
-    print(f"Structural-heavy max: {best_structural['summary']['score15']}/45")
-    print(f"Legacy experimental upper bound: {best_legacy['summary']['score15']}/45")
-    print(f"40+ cases found: {sum(1 for row in top_cases if row['summary']['score15'] >= 40)}")
+    
+    print("\nTop 10 MACD Configurations (by 4-asset <=15 score):")
+    print("-" * 80)
+    for i, row in enumerate(legacy_rows[:10], 1):
+        summary = row["summary"]
+        print(f"\n{i}. {row['label']}")
+        print(f"   Score: <=10 {summary['four10']}/36 | <=15 {summary['four15']}/36")
+        print(f"   Overrides: {dict((k, v) for k, v in row['overrides'].items() if v != SOURCE_OVERRIDES.get(k, 'RAD'))}")
+        print(f"   Excluded: {row['excluded']}")
+    
+    best = legacy_rows[0]
+    print("\n" + "=" * 80)
+    print("BEST MACD CONFIGURATION")
+    print("=" * 80)
+    print(f"Label: {best['label']}")
+    print(f"Score: <=10 {best['summary']['four10']}/36 | <=15 {best['summary']['four15']}/36")
+    print(f"Numerator Mode: {best['numerator_mode']}")
+    print(f"All Mode: {best['all_mode']}")
+    print(f"\nOverrides to apply:")
+    for tk, src in sorted(best['overrides'].items()):
+        default_src = SOURCE_OVERRIDES.get(tk, 'RAD')
+        if src != default_src:
+            print(f"  {tk}: {src}")
+    print(f"\nExcluded contracts: {sorted(best['excluded'])}")
 
 
 if __name__ == "__main__":

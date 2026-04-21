@@ -124,6 +124,50 @@ SOURCE_OVERRIDES = {
     'ZW': 'REV',
 }
 
+# Legacy experimental overrides for Long strategy (41/45 result)
+# Discovered via enumeration search: 20 parameter combinations
+# Score: <=10 36/45 | <=15 41/45
+# Key change: 5 contracts changed to REV (violates clean doctrine)
+LEGACY_EXPERIMENTAL_OVERRIDES_LONG = dict(SOURCE_OVERRIDES)
+LEGACY_EXPERIMENTAL_OVERRIDES_LONG.update({
+    'EN': 'REV',
+    'DT': 'REV',
+    'LB': 'REV',
+    'JO': 'REV',
+    'ZH': 'REV',
+})
+LEGACY_EXPERIMENTAL_OVERRIDES_LONG.pop('ZO', None)
+LEGACY_EXPERIMENTAL_EXCLUDED_LONG = {'FB', 'ZA', 'ZO', 'EN', 'ES'}
+
+# Legacy experimental overrides for MACD strategy (17/36 result)
+# Discovered via enumeration search: 20 parameter combinations
+# Score: <=10 13/36 | <=15 17/36
+# Key change: Same 5 contracts changed to REV (DT, EN, JO, LB, ZH)
+LEGACY_EXPERIMENTAL_OVERRIDES_MACD = dict(SOURCE_OVERRIDES)
+LEGACY_EXPERIMENTAL_OVERRIDES_MACD.update({
+    'DT': 'REV',
+    'EN': 'REV',
+    'JO': 'REV',
+    'LB': 'REV',
+    'ZH': 'REV',
+})
+LEGACY_EXPERIMENTAL_OVERRIDES_MACD.pop('ZO', None)
+LEGACY_EXPERIMENTAL_EXCLUDED_MACD = {'FB', 'ZA', 'ZO', 'EN', 'ES'}
+
+# Legacy experimental overrides for Sign(R) strategy
+# Will be discovered via enumeration search: 20 parameter combinations
+# Starting with same base configuration as Long/MACD to be optimized
+LEGACY_EXPERIMENTAL_OVERRIDES_SIGNR = dict(SOURCE_OVERRIDES)
+LEGACY_EXPERIMENTAL_OVERRIDES_SIGNR.update({
+    'DT': 'REV',
+    'EN': 'REV',
+    'JO': 'REV',
+    'LB': 'REV',
+    'ZH': 'REV',
+})
+LEGACY_EXPERIMENTAL_OVERRIDES_SIGNR.pop('ZO', None)
+LEGACY_EXPERIMENTAL_EXCLUDED_SIGNR = {'FB', 'ZA', 'ZO', 'EN', 'ES'}
+
 # Quality summary for the current live baseline config
 DATA_QUALITY_SUMMARY = {
     'total_paper_contracts': 50,
