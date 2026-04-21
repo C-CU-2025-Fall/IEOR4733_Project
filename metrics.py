@@ -39,6 +39,30 @@ METRIC_NAMES = [
 ]
 
 
+def cagr_from_path(path, periods_per_year=252):
+    """Annualized CAGR from a positive wealth/NAV path."""
+    arr = np.asarray(path, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    if len(arr) == 0:
+        return 0.0
+    start = arr[0]
+    end = arr[-1]
+    if start <= 0 or end <= 0:
+        return 0.0
+    return (end / start) ** (periods_per_year / len(arr)) - 1.0
+
+
+def max_drawdown_from_path(path):
+    """Classical peak-to-trough drawdown on any positive wealth/NAV path."""
+    arr = np.asarray(path, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    if len(arr) == 0:
+        return 0.0
+    peak = np.maximum.accumulate(arr)
+    drawdown = (peak - arr) / peak
+    return float(np.nanmax(drawdown))
+
+
 def compute_metrics(R_eq, n_contracts, w0=1.0):
     """Compute all 9 metrics from portfolio daily returns.
 

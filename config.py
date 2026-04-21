@@ -88,6 +88,35 @@ EXCLUDED_CONTRACTS = {
     # ZH, ZI, ZN, ZU, US: previously excluded; reinstated via fix_contracts.py (FIXED.CSV)
 }
 
+# Default source overrides (basic clean baseline)
+SOURCE_OVERRIDES = {
+    'DA': 'RAD_REGEN',
+    'EN': 'REV',
+    'ES': 'REV',
+    'GI': 'RAD_REGEN',
+    'JO': 'REV',
+    'JN': 'REV',
+    'SN': 'REV',
+    'KW': 'REV',
+    'LB': 'REV',
+    'CC': 'REV',
+    'MP': 'RAD_REGEN',
+    'NK': 'RAD_REGEN',
+    'SC': 'RAD_REGEN',
+    'SP': 'RAD_REGEN',
+    'ZA': 'RAD_REGEN',
+    'ZF': 'REV',
+    'ZG': 'RAD_REGEN',
+    'ZH': 'REV',
+    'ZI': 'REV',
+    'ZK': 'REV',
+    'ZN': 'REV',
+    'ZR': 'REV',
+    'ZT': 'RAD_REGEN',
+    'ZU': 'REV',
+    'ZW': 'REV',
+}
+
 # Quality summary
 DATA_QUALITY_SUMMARY = {
     'total_paper_contracts': 50,
@@ -124,6 +153,9 @@ PAPER_TABLE3 = {
         'Long':   {'E(R)':-0.198,'std(R)':0.472,'DD':0.285,'Sharpe':-0.420,'Sortino':-0.696,'MDD':0.219,'Calmar':-0.101,'% +ve':0.491,'Ave P/L':0.966},
         'Sign(R)': {'E(R)':-0.113,'std(R)':0.551,'DD':0.341,'Sharpe':-0.207,'Sortino':-0.332,'MDD':0.170,'Calmar':-0.071,'% +ve':0.499,'Ave P/L':0.968},
         'MACD':   {'E(R)':0.016,'std(R)':0.424,'DD':0.259,'Sharpe':0.037,'Sortino':0.061,'MDD':0.156,'Calmar':0.016,'% +ve':0.493,'Ave P/L':1.034},
+    },
+    'All': {
+        'Long':   {'E(R)':-0.013,'std(R)':0.363,'DD':0.230,'Sharpe':-0.036,'Sortino':-0.057,'MDD':0.037,'Calmar':-0.009,'% +ve':0.519,'Ave P/L':0.919},
     },
 }
 

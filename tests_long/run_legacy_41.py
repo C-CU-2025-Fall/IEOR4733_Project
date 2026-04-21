@@ -16,6 +16,42 @@ if str(TESTS) not in sys.path:
 import frontier_40plus_enumeration as fe  # noqa: E402
 
 
+def _fmt(vals):
+    return "  ".join(f"{v:>+7.3f}" for v in vals)
+
+
+def _print_table_style(s: dict) -> None:
+    assets = ["Commodity", "Equity Index", "Fixed Income", "Forex", "All"]
+    grand_n10, grand_n15 = 0, 0
+
+    for asset in assets:
+        res = s["results"][asset]
+        metrics = res["metrics"]
+        paper = fe.PAPER_TABLE3[asset]["Long"]
+
+        ours = [metrics[m] for m in fe.METRIC_NAMES]
+        pv = [paper[m] for m in fe.METRIC_NAMES]
+        errs = [res["errors"][m] for m in fe.METRIC_NAMES]
+
+        n10 = sum(1 for e in errs if e < 10)
+        n15 = sum(1 for e in errs if e < 15)
+        grand_n10 += n10
+        grand_n15 += n15
+
+        print(f"\n{'=' * 110}")
+        print(f"  Table 3 — {asset}")
+        print(f"  σ_tgt={fe.SIGMA} | EWMA(60) | bp=0.002")
+        print(f"{'=' * 110}")
+        print(f"\n  Long     (≤10%:{n10}/9  ≤15%:{n15}/9)")
+        print(f"  Ours  : {_fmt(ours)}")
+        print(f"  Paper : {_fmt(pv)}")
+        print(f"  %Err  : {'  '.join(f'{e:>6.1f}%' for e in errs)}")
+
+    print(f"\n{'=' * 60}")
+    print(f"  GRAND TOTAL: ≤10%: {grand_n10}/45 | ≤15%: {grand_n15}/45")
+    print(f"{'=' * 60}")
+
+
 def main():
     row = fe.scenario(
         label="legacy_experimental / Equity:risk_price_non / annual_mean_sleeve / contract_equal_path",
@@ -32,28 +68,7 @@ def main():
         experimental=True,
     )
     s = row["summary"]
-    print("Legacy experimental 41/45 frontier")
-    print("=" * 60)
-    print(f"<=10: {s['score10']}/45")
-    print(f"<=15: {s['score15']}/45")
-    print()
-    print("source overrides:")
-    for tk, src in sorted(fe.LEGACY_EXPERIMENTAL_OVERRIDES.items()):
-        print(f"  {tk}: {src}")
-    print()
-    print("excluded:")
-    print("  " + ", ".join(sorted(fe.LEGACY_EXPERIMENTAL_EXCLUDED)))
-    print()
-    print("reporting:")
-    print("  Equity Index capital anchor: risk_price_non")
-    print("  numerator: annual_mean_sleeve")
-    print("  asset path: contract_equal_path")
-    print("  all mode: contract_equal_path")
-    print()
-    for asset in ["Commodity", "Equity Index", "Fixed Income", "Forex", "All"]:
-        res = s["results"][asset]
-        misses = ", ".join(res["misses15"]) or "none"
-        print(f"{asset}: <=15 misses -> {misses}")
+    _print_table_style(s)
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ from metrics import compute_metrics
 from config import (
     ASSET_CLASSES, BP, TRADING_DAYS, SIGN_LOOKBACK,
     PAPER_TABLE2, PAPER_TABLE3, METRIC_NAMES,
+    EXCLUDED_CONTRACTS, SOURCE_OVERRIDES,
 )
 
 # ─── Parameters ───────────────────────────────────────────────────
@@ -38,30 +39,35 @@ W0 = 1.0                    # Initial wealth per contract
 
 # ─── Data Loading ─────────────────────────────────────────────────
 def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31',
-                   dataset='RAD'):
+                   excluded_contracts=None, source_overrides=None):
     """Load and prepare all contracts for an asset class.
 
     Returns list of dicts with:
-      rt[t] = p_t - p_{t-1}  (additive, p0-normalized)  [Paper Section 3.2]
-      sigma[t] = EWMA(60) std of rt                      [Paper Section 3.2]
-      norm_p = prices / prices[0]                         (p0-normalized)
-      pos_macd = MACD positions                           [Paper Eq 3,11,12]
+      rt[t] = p_t - p_{t-1}  (additive, raw prices)  [Paper Section 3.2]
+      sigma[t] = EWMA(60) std of rt                   [Paper Section 3.2]
+      prices = raw close prices
+      macd_pos = MACD positions                        [Paper Eq 3,11,12]
       start, t1 = test period indices
     """
+    if excluded_contracts is None:
+        excluded_contracts = EXCLUDED_CONTRACTS
+    if source_overrides is None:
+        source_overrides = SOURCE_OVERRIDES
     tickers = ASSET_CLASSES.get(ac_name, [])
     raw = []
     for tk in tickers:
-        df = load_clc_full(tk, data_dir='data/CLCDATA', dataset=dataset)
+        if tk in excluded_contracts:
+            continue
+        source = source_overrides.get(tk, 'RAD')
+        df = load_clc_full(tk, source=source)
         if df is None:
             continue
         prices = df['Close'].values.astype(float)
         if len(prices) < 500:
             continue
-        p0 = prices[0]
-        norm_p = prices / p0
-        # rt[t] = p_t - p_{t-1}, same length as norm_p  [Paper Eq below 4]
-        rt = np.zeros(len(norm_p))
-        rt[1:] = norm_p[1:] - norm_p[:-1]
+        # rt[t] = p_t - p_{t-1}, raw price diffs  [Paper Eq below 4]
+        rt = np.zeros(len(prices))
+        rt[1:] = prices[1:] - prices[:-1]
         # σ_t = EWMA(60) std of rt  [Paper Section 3.2]
         sigma = pd.Series(rt).ewm(span=EWMA_SPAN, adjust=False).std().values
         # Test period boundaries
@@ -72,26 +78,26 @@ def load_contracts(ac_name, test_start='2011-01-01', test_end='2019-12-31',
         t0 = mask_s.idxmax()
         t1 = len(df) - 1 - mask_e[::-1].values.argmax()
         start = max(t0, SIGN_LOOKBACK)
-        # dates for index alignment (exclusive of t1, matching table3_final.py)
         dates = df['Date'].iloc[start:t1].values
         raw.append({
-            'tk': tk, 'rt': rt, 'sigma': sigma, 'norm_p': norm_p,
+            'tk': tk, 'rt': rt, 'sigma': sigma,
             'prices': prices, 'start': start, 't1': t1, 'dates': dates,
-            'macd_pos': strategy_macd(norm_p),
+            'source': source,
+            'macd_pos': strategy_macd(prices),
         })
     return raw
 
 
 # ─── Eq 4: Trade Return ──────────────────────────────────────────
-def compute_contract_returns(rd, strat, sigma_tgt):
+def compute_contract_returns(rd, strat, sigma_tgt, detail=False):
     """Compute daily R_t for one contract using Paper Eq 4:
 
     R_t = A_{t-1} × (σ_tgt / σ_{t-1}) × r_t
         − bp × p_{t-1} × |(σ_tgt/σ_{t-1})×A_{t-1} − (σ_tgt/σ_{t-2})×A_{t-2}|
 
-    Returns full-length Rt array (slice to test period later).
+    Returns full-length Rt array, or detail dict if detail=True.
     """
-    rt, sigma, norm_p = rd['rt'], rd['sigma'], rd['norm_p']
+    rt, sigma, prices = rd['rt'], rd['sigma'], rd['prices']
     n = len(rt)
 
     # Position signal A_t
@@ -103,18 +109,29 @@ def compute_contract_returns(rd, strat, sigma_tgt):
         pos = rd['macd_pos']
 
     Rt = np.zeros(n)
+    scaled_pos = np.zeros(n)
+    gross_pnl = np.zeros(n)
+    tc_cost = np.zeros(n)
     for t in range(1, n):
         if sigma[t - 1] > 0 and (t < 2 or sigma[t - 2] > 0):
             a_prev = pos[t - 1] if strat != 'Long' else 1.0
             a_prev2 = pos[t - 2] if strat != 'Long' else 1.0
             sp = a_prev * sigma_tgt / sigma[t - 1]
             spp = a_prev2 * sigma_tgt / sigma[t - 2] if t >= 2 else 0.0
-            Rt[t] = sp * rt[t] - BP * norm_p[t - 1] * abs(sp - spp)
+            scaled_pos[t] = sp
+            gross_pnl[t] = sp * rt[t]
+            tc_cost[t] = BP * prices[t - 1] * abs(sp - spp)
+            Rt[t] = gross_pnl[t] - tc_cost[t]
+    if detail:
+        return {'Rt': Rt, 'A_t': pos, 'scaled_pos': scaled_pos,
+                'gross_pnl': gross_pnl, 'tc_cost': tc_cost,
+                'sigma': sigma, 'prices': prices, 'rt': rt}
     return Rt
 
 
 # ─── Eq 13: Portfolio Return ─────────────────────────────────────
-def compute_portfolio_returns(raw_data, strat, sigma_tgt):
+def compute_portfolio_returns(raw_data, strat, sigma_tgt,
+                              aggregation_mode='variable_n'):
     """Eq 13: R_port = (1/N) × Σ R_i  (equal-weight average)."""
     series = []
     for rd in raw_data:
@@ -122,7 +139,11 @@ def compute_portfolio_returns(raw_data, strat, sigma_tgt):
         start, t1, dates = rd['start'], rd['t1'], rd['dates']
         slc = Rt[start:t1]
         series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
-    return pd.DataFrame(series).T.dropna().mean(axis=1).values
+    df_all = pd.DataFrame(series)
+    if aggregation_mode == 'dropna':
+        return df_all.T.dropna().mean(axis=1).values
+    else:  # variable_n: average over available contracts each day
+        return df_all.T.mean(axis=1).values
 
 
 # ─── Table 2: Portfolio-level vol scaling ─────────────────────────
@@ -207,7 +228,7 @@ def main():
 
     for table_label, paper_table, port_vol in tables:
         for ac in asset_classes:
-            raw = load_contracts(ac, args.test_start, args.test_end, args.dataset)
+            raw = load_contracts(ac, args.test_start, args.test_end)
             n10, n15, tot = run_table(raw, ac, args.sigma, paper_table,
                                       table_label, port_vol)
             grand_n10 += n10
