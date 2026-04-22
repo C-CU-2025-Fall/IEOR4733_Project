@@ -3,6 +3,7 @@ data_loader.py — CLC data loading utilities
 """
 import os
 from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -10,11 +11,20 @@ import pandas as pd
 
 CSV_COLUMNS = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'OI']
 V2_CONTRACTS = ['ZH', 'ZU', 'US', 'ZN']
+PROJECT_ROOT = Path(__file__).resolve().parent
+
+
+def _resolve_data_dir(data_dir):
+    path = Path(data_dir)
+    if path.is_absolute():
+        return path
+    return PROJECT_ROOT / path
 
 
 @lru_cache(maxsize=None)
 def _read_clc_csv(path):
-    if not os.path.exists(path):
+    path = Path(path)
+    if not path.exists():
         return None
     df = pd.read_csv(path, header=None, names=CSV_COLUMNS)
     df['Date'] = pd.to_datetime(df['Date'], format='%m/%d/%Y')
@@ -49,8 +59,9 @@ def _generate_non_fwd_anchored(ticker, data_dir='data/CLC', anchor_date='2011-01
       - adjustment changes propagate forward, not backward
       - prices stay on a more realistic level near the test start than raw REV
     """
-    non = _read_clc_csv(os.path.join(data_dir, f'{ticker}_NON.CSV'))
-    rev = _read_clc_csv(os.path.join(data_dir, f'{ticker}_REV.CSV'))
+    data_dir = _resolve_data_dir(data_dir)
+    non = _read_clc_csv(data_dir / f'{ticker}_NON.CSV')
+    rev = _read_clc_csv(data_dir / f'{ticker}_REV.CSV')
     if non is None or rev is None:
         return None
 
@@ -88,8 +99,9 @@ def _generate_non_fwd_anchored(ticker, data_dir='data/CLC', anchor_date='2011-01
 @lru_cache(maxsize=None)
 def _generate_rad_regen(ticker, data_dir='data/CLC'):
     """Regenerate ratio-adjusted close series from NON + REV adjustment shifts."""
-    non = _read_clc_csv(os.path.join(data_dir, f'{ticker}_NON.CSV'))
-    rev = _read_clc_csv(os.path.join(data_dir, f'{ticker}_REV.CSV'))
+    data_dir = _resolve_data_dir(data_dir)
+    non = _read_clc_csv(data_dir / f'{ticker}_NON.CSV')
+    rev = _read_clc_csv(data_dir / f'{ticker}_REV.CSV')
     if non is None or rev is None:
         return None
 
@@ -137,17 +149,18 @@ def load_clc_full(ticker, data_dir='data/CLC', start_date='2009-01-01', source='
 
     Default 2009-01-01 gives enough warmup before the 2011 test window.
     """
+    data_dir = _resolve_data_dir(data_dir)
     source = source.upper()
     if source == 'RAD':
         if ticker in V2_CONTRACTS:
-            path = os.path.join(data_dir, f'{ticker}_RAD_v2.CSV')
+            path = data_dir / f'{ticker}_RAD_v2.CSV'
         else:
-            path = os.path.join(data_dir, f'{ticker}_RAD.CSV')
+            path = data_dir / f'{ticker}_RAD.CSV'
         df = _read_clc_csv(path)
     elif source == 'REV':
-        df = _read_clc_csv(os.path.join(data_dir, f'{ticker}_REV.CSV'))
+        df = _read_clc_csv(data_dir / f'{ticker}_REV.CSV')
     elif source == 'NON':
-        df = _read_clc_csv(os.path.join(data_dir, f'{ticker}_NON.CSV'))
+        df = _read_clc_csv(data_dir / f'{ticker}_NON.CSV')
     elif source == 'RAD_REGEN':
         df = _generate_rad_regen(ticker, data_dir=data_dir)
     elif source == 'NON_FWD_ANCHORED':
