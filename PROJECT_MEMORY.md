@@ -1,5 +1,5 @@
 # PROJECT_MEMORY.md
-# Last updated: 2026-04-21
+# Last updated: 2026-04-22
 
 Read this first when resuming work on this repo.
 
@@ -48,6 +48,54 @@ The active repo story is now:
     - `docs/contract_version_matrix_master.csv`
 
 Historical search / optimization lines remain below as archive context.
+
+---
+
+## DQN Walk-Forward (2026-04-22)
+
+### Completed
+
+1. **DQN Training Pipeline**
+   - Location: `dqn/train/`
+   - Scripts:
+     - `strategy_dqn.py` - DQN strategy (LSTM[64,32] + Double DQN)
+     - `train_dqn_walkforward.py` - Walk-forward training
+     - `prepare_dqn_walkforward.py` - Data preparation
+   - Hyperparameters: Paper Table 1 aligned
+   - Action space: Discrete {-1, 0, +1}
+   - State space: 8-dimensional (multi-scale MACD, RSI, vol-adjusted returns)
+
+2. **Trained Models**
+   - Location: `dqn/models/walkforward/`
+   - 18 models total (9 Forex contracts × 2 rounds)
+   - Round 1: Train 2005-2009 (5y) → Test 2010-2014 (5y)
+   - Round 2: Train 2005-2014 (10y) → Test 2015-2019 (5y)
+
+3. **Backtest Framework**
+   - Location: `dqn/backtest/`
+   - Script: `backtest_dqn_walkforward.py`
+   - Status: Basic (Long Only baseline integrated, DQN inference pending)
+
+### Current Status
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Training | ✅ Complete | 18/18 Forex models |
+| Data | ✅ Complete | Walk-forward rounds 1+2 |
+| Backtest | ⚠️ Partial | Long Only baseline only |
+| DQN Inference | ⏳ Pending | Integration needed |
+
+### Next Steps
+
+1. Integrate DQN inference into backtest framework
+2. Compare DQN Round 1 vs Round 2 performance
+3. Compare DQN vs Long Only baseline
+4. Extend to other asset classes (if Forex results promising)
+
+### Documentation
+
+- `dqn/README.md` - Main documentation
+- `dqn/docs/dqn_alignment_notes.md` - Implementation alignment notes
 ### Archived comparison lines
 
 1. **Archived same-rule candidate**
