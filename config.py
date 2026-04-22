@@ -205,6 +205,8 @@ PAPER_TABLE3 = {
     },
     'All': {
         'Long':   {'E(R)':-0.013,'std(R)':0.363,'DD':0.230,'Sharpe':-0.036,'Sortino':-0.057,'MDD':0.037,'Calmar':-0.009,'% +ve':0.519,'Ave P/L':0.919},
+        'Sign(R)': {'E(R)':0.086,'std(R)':0.296,'DD':0.186,'Sharpe':0.291,'Sortino':0.461,'MDD':0.016,'Calmar':0.142,'% +ve':0.510,'Ave P/L':1.008},
+        'MACD':   {'E(R)':-0.018,'std(R)':0.230,'DD':0.143,'Sharpe':-0.080,'Sortino':-0.129,'MDD':0.026,'Calmar':-0.029,'% +ve':0.493,'Ave P/L':1.013},
     },
 }
 
@@ -231,6 +233,8 @@ PAPER_TABLE2 = {
     },
     'All': {
         'Long':   {'E(R)':0.055,'std(R)':0.975,'DD':0.598,'Sharpe':0.058,'Sortino':0.092,'MDD':0.071,'Calmar':0.013,'% +ve':0.520,'Ave P/L':0.933},
+        'Sign(R)': {'E(R)':0.429,'std(R)':0.972,'DD':0.582,'Sharpe':0.441,'Sortino':0.737,'MDD':0.038,'Calmar':0.201,'% +ve':0.510,'Ave P/L':1.031},
+        'MACD':   {'E(R)':0.089,'std(R)':0.978,'DD':0.582,'Sharpe':0.091,'Sortino':0.153,'MDD':0.008,'Calmar':0.035,'% +ve':0.493,'Ave P/L':1.043},
     },
 }
 
