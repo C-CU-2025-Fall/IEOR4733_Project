@@ -50,6 +50,14 @@ Latest clarification:
   reporting-path diagnostic reproducer
 - `tests/run_structural_38.py --with-path-metrics` now exposes the same
   structural-38 data preset with current unified-path `MDD/Calmar`
+- `README.md` now carries the canonical three-layer explanation:
+  - Eq.4 trade-return layer
+  - sleeve/reporting wealth normalization layer
+  - current unified backtest layer
+- future agents should not collapse:
+  - old `p0` normalization discussion
+  - sleeve `capital0 = p0 * sigma_tgt / sigma0`
+  - current unified-path `MDD/Calmar`
 
 3. **Experimental adjusted upper bound**
 - retained only as runner + preset:
@@ -148,6 +156,12 @@ The branch now uses:
 
 - `drl/dqn/README.md`
 - `drl/dqn/docs/dqn_alignment_notes.md`
+- `drl/dqn/README.md` is now teammate-facing and current-code-only:
+  - one model per contract per retrain round
+  - no shared cross-contract DQN in the current codebase
+  - no DQN-owned metrics / table world
+- future agents should not describe the current DQN path as a shared-model
+  implementation unless that design is intentionally reintroduced
 ### Archived comparison lines
 
 1. **Archived same-rule candidate**

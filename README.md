@@ -53,12 +53,46 @@ Current highest-priority suspicious paper cells / transitions:
 
 ### DRL Pipeline
 - [docs/drl_pipeline.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/drl_pipeline.md)
+- [drl/dqn/README.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/drl/dqn/README.md)
 
 Use this as the teammate handoff note for:
 - shared feature preparation
 - DQN training / checkpoints / logs
 - unified backtesting commands
 - current DRL folder responsibilities
+
+## Eq.4, Sleeve Wealth, and Unified Backtest
+
+There are three different layers in this repo, and they should not be mixed up.
+
+**Eq.4 trade-return world**
+
+- uses additive price differences:
+  - `r_t = p_t - p_{t-1}`
+- positions are volatility-scaled by:
+  - `sigma_tgt / sigma_t`
+- this is the contract-level return definition used in the active baseline stack
+
+**Sleeve/reporting wealth world**
+
+- when a sleeve-style comparable wealth path is built, initial sleeve capital is normalized as:
+  - `capital0 = p0 * sigma_tgt / sigma0`
+- this normalization is **not** part of Eq.4 itself
+- it belongs to the sleeve/reporting wealth interpretation layer
+
+**Current unified backtest**
+
+- computes all final portfolio metrics, including `MDD` and `Calmar`, from the same simulated portfolio path
+- it is not the old split reporting-path diagnostic world
+
+Important warning:
+
+- old discussions sometimes mixed:
+  - `p0` normalization
+  - sleeve `capital0` normalization
+  - current unified-path `MDD / Calmar`
+- these are not the same thing
+- the current active baseline/backtest path uses the Eq.4 trade-return layer for contract returns and the unified portfolio path for final metrics
 
 ### Printable Structural-38 Summary
 - [docs/structural38_trade_tables_paper_style_a4.png](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/structural38_trade_tables_paper_style_a4.png)
