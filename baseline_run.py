@@ -11,7 +11,15 @@ Usage:
     python baseline_run.py --asset Forex    # Single asset class
     python baseline_run.py --sigma 0.064    # Custom σ_tgt
     python baseline_run.py --test-start 2015-01-01 --test-end 2019-12-31  # Custom period
-"""
+    python baseline_run.py --source-mode working --all-metrics # Use unified SOURCE_OVERRIDES from config.py
+    python baseline_run.py --source-mode pure-rad --all-metrics # 不用任何 override，所有合约默认走 RAD
+    python baseline_run.py --source-mode strategy-legacy --all-metrics # Use legacy overrides for each strategy                                                  
+                                                            Long 用 LEGACY_EXPERIMENTAL_OVERRIDES_LONG
+                                                            Sign(R) 用 LEGACY_EXPERIMENTAL_OVERRIDES_SIGNR
+                                                            MACD 用 LEGACY_EXPERIMENTAL_OVERRIDES_MACD
+    
+    
+    """
 import argparse
 from functools import lru_cache
 import os
@@ -28,6 +36,12 @@ from config import (
     ASSET_CLASSES, BP, TRADING_DAYS, SIGN_LOOKBACK,
     PAPER_TABLE2, PAPER_TABLE3, METRIC_NAMES, EXCLUDED_CONTRACTS,
     SOURCE_OVERRIDES,
+    LEGACY_EXPERIMENTAL_OVERRIDES_LONG,
+    LEGACY_EXPERIMENTAL_EXCLUDED_LONG,
+    LEGACY_EXPERIMENTAL_OVERRIDES_MACD,
+    LEGACY_EXPERIMENTAL_EXCLUDED_MACD,
+    LEGACY_EXPERIMENTAL_OVERRIDES_SIGNR,
+    LEGACY_EXPERIMENTAL_EXCLUDED_SIGNR,
 )
 
 # Core 5 metrics for summary table
@@ -281,9 +295,23 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
               aggregation_mode='variable_n',
               report_source=DEFAULT_REPORT_SOURCE,
               test_start='2011-01-01',
-              test_end='2019-12-31'):
+              test_end='2019-12-31',
+              strategies=None):
     """Run one table (Table 2 or 3) for one asset class."""
-    N = len(raw_data)
+    if isinstance(raw_data, dict):
+        strategy_counts = {strat: len(rows) for strat, rows in raw_data.items()}
+        if not any(strategy_counts.values()):
+            return 0, 0, 0
+        unique_counts = sorted(set(strategy_counts.values()))
+        n_label = str(unique_counts[0]) if len(unique_counts) == 1 else "mixed"
+    else:
+        N = len(raw_data)
+        if N == 0:
+            return 0, 0, 0
+        n_label = str(N)
+
+    if isinstance(raw_data, dict):
+        N = max((len(rows) for rows in raw_data.values()), default=0)
     if N == 0:
         return 0, 0, 0
 
@@ -299,21 +327,33 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
     port_str = f" | port_vol→{port_vol_target}" if port_vol_target else ""
     report_str = f" | report={report_source}" if report_source != 'trade' else ""
     print(f"\n{'=' * 90}")
-    print(f"  {table_label} — {ac_name} ({N} contracts)")
+    print(f"  {table_label} — {ac_name} ({n_label} contracts)")
     print(f"  σ_tgt={sigma_tgt} | EWMA({EWMA_SPAN}) | bp={BP}{port_str}{report_str}")
     print(f"  Metrics: {', '.join(metric_names)}")
     print(f"{'=' * 90}")
 
+    if strategies is None:
+        strategies = ['Long', 'Sign(R)', 'MACD']
+
+    available_targets = paper_table.get(ac_name, {})
     total_n10, total_n15, total = 0, 0, 0
-    for strat in ['Long']: #, 'Sign(R)', 'MACD']:
-        R = compute_portfolio_returns(raw_data, strat, sigma_tgt,
+    for strat in strategies:
+        if strat not in available_targets:
+            print(f"\n  {strat:8s} (skipped: no paper target for {ac_name} in {table_label})")
+            continue
+        strat_raw_data = raw_data.get(strat, []) if isinstance(raw_data, dict) else raw_data
+        N = len(strat_raw_data)
+        if N == 0:
+            print(f"\n  {strat:8s} (skipped: no contracts loaded for {ac_name})")
+            continue
+        R = compute_portfolio_returns(strat_raw_data, strat, sigma_tgt,
                                       aggregation_mode=aggregation_mode)
         if port_vol_target is not None:
             R = apply_portfolio_vol_scaling(R, port_vol_target)
         m_all = compute_metrics(R, n_contracts=N)
         if report_source != 'trade':
             reporting = compute_reporting_mdd_calmar_risk_price_sigma0(
-                raw_data,
+                strat_raw_data,
                 sigma_tgt=sigma_tgt,
                 strat=strat,
             )
@@ -323,7 +363,7 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
                 m_all[all_names.index('Calmar')] = calmar_rep
         # Extract only the metrics we care about
         m = [m_all[i] for i in metric_idx]
-        pv_dict = paper_table[ac_name][strat]
+        pv_dict = available_targets[strat]
         pv = [pv_dict[k] for k in metric_names]
         errs = [abs((m[i] - pv[i]) / abs(pv[i])) * 100 if pv[i] != 0 else 0
                 for i in range(n_metrics)]
@@ -424,11 +464,28 @@ def main():
                         choices=['trade', 'RISK_PRICE_SIGMA0'],
                         default=DEFAULT_REPORT_SOURCE,
                         help='Reporting source / bridge for MDD and Calmar only')
+    parser.add_argument('--source-mode', choices=['working', 'pure-rad', 'strategy-legacy'],
+                        default='working',
+                        help='Data source policy: current working overrides, pure RAD only, or strategy-specific legacy overrides (default: working)')
+    parser.add_argument('--strategies', default='Long,Sign(R),MACD',
+                        help='Comma-separated strategies to run (default: Long,Sign(R),MACD)')
     parser.add_argument('--exclude-contracts', default=None,
                         help='Comma-separated exclusion override, e.g. FB,ZA,ZO')
     args = parser.parse_args()
 
     excluded_contracts = parse_exclusion_arg(args.exclude_contracts)
+    strategies = [s.strip() for s in args.strategies.split(',') if s.strip()]
+
+    strategy_config_map = {
+        'Long': (LEGACY_EXPERIMENTAL_OVERRIDES_LONG, LEGACY_EXPERIMENTAL_EXCLUDED_LONG),
+        'Sign(R)': (LEGACY_EXPERIMENTAL_OVERRIDES_SIGNR, LEGACY_EXPERIMENTAL_EXCLUDED_SIGNR),
+        'MACD': (LEGACY_EXPERIMENTAL_OVERRIDES_MACD, LEGACY_EXPERIMENTAL_EXCLUDED_MACD),
+    }
+
+    if args.source_mode == 'working':
+        source_overrides = SOURCE_OVERRIDES
+    else:
+        source_overrides = {}
 
     asset_classes = [args.asset] if args.asset else [
         'Commodity', 'Equity Index', 'Fixed Income', 'Forex', 'All'
@@ -440,6 +497,8 @@ def main():
     else:
         metric_names = CORE_METRICS  # 5 core
     print(f"Using {'ALL 9' if args.all_metrics else 'CORE 5'} metrics: {metric_names}")
+    print(f"Using strategies: {strategies}")
+    print(f"Using source mode: {args.source_mode}")
 
     tables = []
     if args.table in ('3', 'both'):
@@ -451,7 +510,30 @@ def main():
 
     for table_label, paper_table, port_vol in tables:
         for ac in asset_classes:
-            if ac == 'All':
+            if args.source_mode == 'strategy-legacy':
+                raw = {}
+                for strat in strategies:
+                    strat_overrides, strat_excluded = strategy_config_map.get(strat, ({}, []))
+                    if ac == 'All':
+                        strat_raw = []
+                        for a in ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']:
+                            strat_raw.extend(load_contracts(
+                                a,
+                                args.test_start,
+                                args.test_end,
+                                excluded_contracts=list(strat_excluded),
+                                source_overrides=strat_overrides,
+                            ))
+                    else:
+                        strat_raw = load_contracts(
+                            ac,
+                            args.test_start,
+                            args.test_end,
+                            excluded_contracts=list(strat_excluded),
+                            source_overrides=strat_overrides,
+                        )
+                    raw[strat] = strat_raw
+            elif ac == 'All':
                 # All = combine all asset classes (excluding EXCLUDED_CONTRACTS)
                 raw = []
                 for a in ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']:
@@ -460,6 +542,7 @@ def main():
                         args.test_start,
                         args.test_end,
                         excluded_contracts=excluded_contracts,
+                        source_overrides=source_overrides,
                     ))
             else:
                 raw = load_contracts(
@@ -467,6 +550,7 @@ def main():
                     args.test_start,
                     args.test_end,
                     excluded_contracts=excluded_contracts,
+                    source_overrides=source_overrides,
                 )
             n10, n15, tot = run_table(raw, ac, args.sigma, paper_table,
                                       table_label, port_vol,
@@ -474,7 +558,8 @@ def main():
                                       aggregation_mode=args.aggregation,
                                       report_source=args.report_source,
                                       test_start=args.test_start,
-                                      test_end=args.test_end)
+                                      test_end=args.test_end,
+                                      strategies=strategies)
             if args.diagnostic and port_vol is None:  # only Table 3
                 run_diagnostics(raw, ac, args.sigma, args.test_start, args.test_end)
             grand_n10 += n10
