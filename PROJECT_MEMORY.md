@@ -53,49 +53,65 @@ Historical search / optimization lines remain below as archive context.
 
 ## DQN Walk-Forward (2026-04-22)
 
-### Completed
+### Current Direction
 
-1. **DQN Training Pipeline**
-   - Location: `dqn/train/`
-   - Scripts:
-     - `strategy_dqn.py` - DQN strategy (LSTM[64,32] + Double DQN)
-     - `train_dqn_walkforward.py` - Walk-forward training
-     - `prepare_dqn_walkforward.py` - Data preparation
-   - Hyperparameters: Paper Table 1 aligned
-   - Action space: Discrete {-1, 0, +1}
-   - State space: 8-dimensional (multi-scale MACD, RSI, vol-adjusted returns)
+The branch has now pivoted from a per-contract walk-forward prototype to a
+paper-faithful **shared-model DQN infrastructure**.
 
-2. **Trained Models**
-   - Location: `dqn/models/walkforward/`
-   - 18 models total (9 Forex contracts × 2 rounds)
-   - Round 1: Train 2005-2009 (5y) → Test 2010-2014 (5y)
-   - Round 2: Train 2005-2014 (10y) → Test 2015-2019 (5y)
+### Locked DQN spec
 
-3. **Backtest Framework**
-   - Location: `dqn/backtest/`
-   - Script: `backtest_dqn_walkforward.py`
-   - Status: Basic (Long Only baseline integrated, DQN inference pending)
+- shared-model training mode is now the default interpretation
+- discrete action space: `{-1, 0, +1}`
+- shared state schema:
+  - 8 features
+  - 60-step windows
+- Eq.4-style additive reward with transaction cost
+- architecture:
+  - LSTM `[64, 32]`
+  - Leaky-ReLU
+  - fixed Q-targets
+  - Double DQN
+  - dueling DQN
+
+### Active DQN modules
+
+- `dqn/spec.py`
+  - canonical shared DQN spec
+- `dqn/pipeline.py`
+  - shared state + reward construction
+- `dqn/model.py`
+  - shared dueling DQN model + agent
+- `dqn/train/prepare_dqn_walkforward.py`
+  - shared round data prep
+- `dqn/train/train_dqn_walkforward.py`
+  - shared round training
+- `dqn/backtest/backtest_dqn_walkforward.py`
+  - shared round inference / backtest
 
 ### Current Status
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Training | ✅ Complete | 18/18 Forex models |
-| Data | ✅ Complete | Walk-forward rounds 1+2 |
-| Backtest | ⚠️ Partial | Long Only baseline only |
-| DQN Inference | ⏳ Pending | Integration needed |
+| Shared spec | ✅ Complete | one source of truth |
+| State pipeline | ✅ Complete | one shared feature builder |
+| Dueling DQN | ✅ Complete | now in retained model |
+| Backtest inference | ✅ Complete | no longer falls back to `Long` |
+| GPU training run | ⏳ Not started | intentionally deferred |
 
-### Next Steps
+### Important interpretation
 
-1. Integrate DQN inference into backtest framework
-2. Compare DQN Round 1 vs Round 2 performance
-3. Compare DQN vs Long Only baseline
-4. Extend to other asset classes (if Forex results promising)
+- the state schema is shared across all contracts and future models
+- only the input time series differ by contract
+- new checkpoints are expected under:
+  - `dqn/models/shared_rounds/...`
+- prepared data are expected under:
+  - `dqn/data/shared_rounds/...`
+- old per-contract `dqn/models/walkforward/` artifacts are legacy prototype outputs
 
 ### Documentation
 
-- `dqn/README.md` - Main documentation
-- `dqn/docs/dqn_alignment_notes.md` - Implementation alignment notes
+- `dqn/README.md`
+- `dqn/docs/dqn_alignment_notes.md`
 ### Archived comparison lines
 
 1. **Archived same-rule candidate**

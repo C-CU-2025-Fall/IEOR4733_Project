@@ -397,6 +397,44 @@ def compute_contract_returns(rd, strat, sigma_tgt, detail=False):
     return Rt
 
 
+def compute_contract_returns_from_positions(rd, positions, sigma_tgt, detail=False):
+    """Compute Eq.4 returns from an explicit position array aligned to the full contract history."""
+    rt, sigma, prices = rd['rt'], rd['sigma'], rd['prices']
+    n = len(rt)
+    pos = np.asarray(positions, dtype=float)
+    if len(pos) != n:
+        raise ValueError(f"Explicit positions length mismatch for {rd['tk']}: {len(pos)} vs {n}")
+
+    Rt = np.zeros(n)
+    scaled_pos = np.zeros(n)
+    gross_pnl = np.zeros(n)
+    tc_cost = np.zeros(n)
+
+    for t in range(1, n):
+        if sigma[t - 1] > 0 and (t < 2 or sigma[t - 2] > 0):
+            a_prev = pos[t - 1]
+            a_prev2 = pos[t - 2] if t >= 2 else 0.0
+            sp = a_prev * sigma_tgt / sigma[t - 1]
+            spp = a_prev2 * sigma_tgt / sigma[t - 2] if t >= 2 else 0.0
+            scaled_pos[t] = sp
+            gross_pnl[t] = sp * rt[t]
+            tc_cost[t] = BP * prices[t - 1] * abs(sp - spp)
+            Rt[t] = gross_pnl[t] - tc_cost[t]
+
+    if detail:
+        return {
+            'Rt': Rt,
+            'A_t': pos,
+            'scaled_pos': scaled_pos,
+            'gross_pnl': gross_pnl,
+            'tc_cost': tc_cost,
+            'sigma': sigma,
+            'prices': prices,
+            'rt': rt,
+        }
+    return Rt
+
+
 # ─── Eq 13: Portfolio Return ─────────────────────────────────────
 def compute_portfolio_returns(raw_data, strat, sigma_tgt,
                               aggregation_mode='variable_n'):

@@ -1,61 +1,63 @@
-# DQN Walk-Forward Trading
+# Shared-Model DQN Walk-Forward
 
-Deep Reinforcement Learning (DQN) implementation for futures trading with walk-forward validation.
+Paper-faithful DQN infrastructure for futures trading with a shared-model,
+round-based walk-forward setup.
 
 ## Directory Structure
 
 ```
 dqn/
-├── train/                    # Training scripts
-│   ├── strategy_dqn.py       # DQN strategy implementation
-│   ├── train_dqn_walkforward.py  # Walk-forward training
-│   ├── prepare_dqn_walkforward.py # Data preparation
-│   ├── prepare_dqn_data.py   # Full-period data prep
-│   └── train_dqn_paper_aligned.py # Original paper-aligned training
-│
-├── models/                   # Trained models
-│   ├── walkforward/          # Walk-forward models (18 total)
-│   │   ├── AN_r1.pt, BN_r1.pt, ... (Round 1: 05-09→10-14)
-│   │   └── AN_r2.pt, BN_r2.pt, ... (Round 2: 05-14→15-19)
-│   └── full/                 # Full-period models (optional)
-│
-├── backtest/                 # Backtest framework
-│   └── backtest_dqn_walkforward.py
-│
-└── docs/                     # Documentation
+├── spec.py                   # Canonical DQN spec / rounds / paths
+├── pipeline.py               # Shared state + reward construction
+├── model.py                  # Dueling LSTM DQN + agent
+├── train/
+│   ├── strategy_dqn.py              # Runtime helpers + compatibility CLI
+│   ├── train_dqn_walkforward.py     # Shared round training
+│   ├── prepare_dqn_walkforward.py   # Shared round data prep
+│   ├── prepare_dqn_data.py          # Compatibility wrapper
+│   └── train_dqn_paper_aligned.py   # Compatibility alias
+├── backtest/
+│   └── backtest_dqn_walkforward.py  # Shared round inference/backtest
+└── docs/
     └── dqn_alignment_notes.md
 ```
 
-## Walk-Forward Scheme
+## Shared Round Scheme
 
 | Round | Training Period | Test Period | Models |
 |-------|----------------|-------------|--------|
-| 1 | 2005-2009 (5y) | 2010-2014 (5y) | `*_r1.pt` |
-| 2 | 2005-2014 (10y) | 2015-2019 (5y) | `*_r2.pt` |
+| 1 | 2005-2010 | 2011-2015 | one shared checkpoint |
+| 2 | 2005-2015 | 2016-2019 | one shared checkpoint |
 
 ## Quick Start
 
-### Train (Forex, Round 1)
+### Prepare Round Data
+```bash
+python dqn/train/prepare_dqn_walkforward.py --round 1 --asset Forex
+```
+
+### Train Shared Round Model
 ```bash
 python dqn/train/train_dqn_walkforward.py --round 1 --asset Forex --episodes 50
 ```
 
-### Backtest
+### Backtest Shared Round Model
 ```bash
 python dqn/backtest/backtest_dqn_walkforward.py --round 1 --asset Forex
-python dqn/backtest/backtest_dqn_walkforward.py --all --asset Forex
 ```
 
 ## Model Details
 
-- **Architecture**: LSTM[64, 32] + Double DQN + Fixed Q-targets
+- **Architecture**: LSTM[64, 32] + Leaky-ReLU + Dueling DQN + Double DQN + Fixed Q-targets
 - **Action Space**: Discrete {-1, 0, +1}
-- **State Space**: 8-dimensional (price, returns, MACD, RSI, vol)
+- **State Space**: Shared 8-dimensional schema with 60-step windows
 - **Hyperparameters**: Paper Table 1 aligned
+- **Training Mode**: Shared model weights per round, not per-contract models
 
 ## Current Status
 
-- ✅ Round 1: 9/9 Forex models trained
-- ✅ Round 2: 9/9 Forex models trained
-- ⏳ Backtest framework: Basic (Long Only baseline)
-- ⏳ DQN inference integration: Pending
+- ✅ Shared DQN spec locked
+- ✅ Shared state / reward pipeline centralized
+- ✅ Dueling DQN added
+- ✅ Backtest wired for shared-model inference
+- ⏳ No new shared-model training run yet
