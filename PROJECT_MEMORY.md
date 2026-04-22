@@ -28,9 +28,28 @@ The active repo story is now:
 2. **Trade-world structural reference**
 - command:
   - `python tests/run_structural_38.py --table 3`
+  - `python tests/run_structural_38.py --table 3 --with-path-metrics`
 - purpose:
   - current trade-world-only reference
   - excludes `MDD` / `Calmar`
+
+Baseline simplification status (locked):
+- one baseline computation stack
+- one backtesting/metric stack
+- model layers (e.g. `drl/dqn/`) only emit positions
+- no parallel reporting-world lane in active runners
+
+Latest clarification:
+- old bridge/reporting experiments and current unified backtest are different
+  objects
+- old bridge lines could keep trade metrics on one path while computing
+  `MDD/Calmar` on a separate reporting path
+- current unified backtest computes all 9 metrics from the same simulated
+  portfolio path
+- `run_strategy_backtest.py` is therefore a unified-path view, not a historical
+  reporting-path diagnostic reproducer
+- `tests/run_structural_38.py --with-path-metrics` now exposes the same
+  structural-38 data preset with current unified-path `MDD/Calmar`
 
 3. **Experimental adjusted upper bound**
 - retained only as runner + preset:
@@ -51,21 +70,28 @@ Historical search / optimization lines remain below as archive context.
 
 ---
 
-## DQN Walk-Forward (2026-04-22)
+## DRL / DQN Walk-Forward (2026-04-22)
 
 ### Current Direction
 
-The branch has now pivoted from a per-contract walk-forward prototype to a
-paper-faithful **shared-model DQN infrastructure**.
+The branch now uses:
+- one model per contract
+- shared RL state space across DQN / PG / A2C
+- Table 3 only
+- baseline-owned universal backtesting metrics for baseline and RL strategies
 
 ### Locked DQN spec
 
-- shared-model training mode is now the default interpretation
-- discrete action space: `{-1, 0, +1}`
+- training mode: single-contract
+- discrete action space (`DQN`/`PG`): `{-1, 0, +1}`
+- continuous action range (`A2C`): `[-1, 1]`
 - shared state schema:
   - 8 features
   - 60-step windows
 - Eq.4-style additive reward with transaction cost
+- return-feature volatility convention: EWMA(60) on additive `r_t`
+- MACD feature normalization: 63-window volatility
+- horizon features: 21 / 42 / 63 / 252 with `sqrt(H)` scaling
 - architecture:
   - LSTM `[64, 32]`
   - Leaky-ReLU
@@ -73,45 +99,55 @@ paper-faithful **shared-model DQN infrastructure**.
   - Double DQN
   - dueling DQN
 
-### Active DQN modules
+### Active DRL modules
 
-- `dqn/spec.py`
-  - canonical shared DQN spec
-- `dqn/pipeline.py`
+- `drl_shared/spec.py`
+  - shared state/action/retrain/path defaults
+- `drl_shared/state_space.py`
   - shared state + reward construction
-- `dqn/model.py`
-  - shared dueling DQN model + agent
-- `dqn/train/prepare_dqn_walkforward.py`
-  - shared round data prep
-- `dqn/train/train_dqn_walkforward.py`
-  - shared round training
-- `dqn/backtest/backtest_dqn_walkforward.py`
-  - shared round inference / backtest
+- `drl_shared/prepare_features.py`
+  - global shared feature preparation
+- `strategy_backtester.py`
+  - global strategy backtesting entrypoint over baseline stack
+- `run_strategy_backtest.py`
+  - global CLI entrypoint for Long/Sign/MACD/DQN
+- `drl/dqn/spec.py`
+  - DQN-specific training/checkpoint metadata + paths
+- `drl/dqn/model.py`
+  - dueling DQN model + agent
+- `drl/dqn/train/prepare_dqn_walkforward.py`
+  - compatibility CLI delegating to global shared feature prep
+- `drl/dqn/train/train_dqn_walkforward.py`
+  - single-contract training + per-run log folders
+- `drl/dqn/backtest/backtest_dqn_walkforward.py`
+  - Table 3 CLI adapter
+- `drl/dqn/backtest/engine.py`
+  - DQN inference adapter + baseline metric caller (no local metric math)
 
 ### Current Status
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Shared spec | ✅ Complete | one source of truth |
+| Shared state spec | ✅ Complete | one source of truth |
 | State pipeline | ✅ Complete | one shared feature builder |
 | Dueling DQN | ✅ Complete | now in retained model |
-| Backtest inference | ✅ Complete | no longer falls back to `Long` |
+| Baseline-unified backtest wiring | ✅ Complete | DQN now routes to `baseline_run.compute_strategy_metrics` |
+| Per-run log folders | ✅ Complete | `logs/rl/<algo>/<ticker>/<round>/<run_id>/` |
 | GPU training run | ⏳ Not started | intentionally deferred |
 
 ### Important interpretation
 
-- the state schema is shared across all contracts and future models
-- only the input time series differ by contract
-- new checkpoints are expected under:
-  - `dqn/models/shared_rounds/...`
-- prepared data are expected under:
-  - `dqn/data/shared_rounds/...`
-- old per-contract `dqn/models/walkforward/` artifacts are legacy prototype outputs
+- the state schema is shared across DQN / PG / A2C
+- model weights are not shared across contracts
+- checkpoints are expected under:
+  - `drl/dqn/models/contract_rounds/dqn/<ticker>/r<k>.pt`
+- prepared shared features are expected under:
+  - `drl/features/contract_rounds/<ticker>/r<k>.npz`
 
 ### Documentation
 
-- `dqn/README.md`
-- `dqn/docs/dqn_alignment_notes.md`
+- `drl/dqn/README.md`
+- `drl/dqn/docs/dqn_alignment_notes.md`
 ### Archived comparison lines
 
 1. **Archived same-rule candidate**
@@ -150,8 +186,14 @@ and should not silently inherit new `baseline_run.py` defaults. In particular:
     - `E(R), std(R), DD, Sharpe, Sortino, % +ve, Ave P/L`
   - no `MDD`
   - no `Calmar`
-  - `report_source="trade"`
 - this keeps it as a structural-38 trade-world reproducer rather than a live-baseline reporting runner
+
+Current extension on top of that:
+- `tests/run_structural_38.py --with-path-metrics`
+  - still uses structural-38 source overrides / exclusions
+  - but inserts current unified-backtest `MDD` / `Calmar`
+  - this is for side-by-side inspection only
+  - it should not be confused with the older reporting-path bridge experiments
 
 4. **Version-matrix audit line**
 - command:
@@ -228,12 +270,17 @@ Current docs:
 - `docs/paper_table_suspicious_cells.md`
 - `docs/structural38_trade_tables_paper_style_a4.png`
 - `docs/reproducibility_external_search.md`
+- `docs/drl_pipeline.md`
 
 Attribution base kept on purpose:
 - runner:
   - `tests/er_attribution_analysis.py`
 - machine-readable base:
   - `docs/contract_version_matrix_master.csv`
+
+Teammate handoff:
+- for the current DRL architecture / commands / outputs, start with:
+  - `docs/drl_pipeline.md`
 
 ### Keep as archived-but-retained
 

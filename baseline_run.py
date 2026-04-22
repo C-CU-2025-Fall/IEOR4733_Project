@@ -36,15 +36,10 @@ CORE_METRICS = ['E(R)', 'std(R)', 'Sharpe', '% +ve', 'Ave P/L']
 CORE_METRIC_IDX = [METRIC_NAMES.index(n) for n in CORE_METRICS]
 
 # ─── Parameters ───────────────────────────────────────────────────
-DEFAULT_SIGMA_TGT = 0.0630   # Working frontier after adjusted-only MDD-first v4 re-search
+DEFAULT_SIGMA_TGT = 0.0580   # Unified default target vol for baseline + DRL stack
 EWMA_SPAN = 60              # EWMA span for σ_t [Paper Section 3.2]
 T = TRADING_DAYS            # 252
 W0 = 1.0                    # Initial wealth per contract
-DEFAULT_REPORT_SOURCE = 'auto'  # Table 3 -> trade, Table 2 -> RISK_PRICE_SIGMA0 unless explicitly overridden
-DEFAULT_REPORT_BRIDGE_MODE = 'same_as_port_contract'
-
-
-
 # ─── Data Loading ─────────────────────────────────────────────────
 
 
@@ -456,6 +451,107 @@ def compute_portfolio_returns(raw_data, strat, sigma_tgt,
         raise ValueError(f'Unknown aggregation_mode: {aggregation_mode}')
     return port.values
 
+
+def compute_portfolio_returns_from_position_provider(
+    raw_data,
+    sigma_tgt,
+    position_provider,
+    aggregation_mode='variable_n',
+):
+    """Eq 13 portfolio returns from explicit per-contract position arrays.
+
+    position_provider must return a full-history position array for each contract payload.
+    """
+    series = []
+    for rd in raw_data:
+        pos = np.asarray(position_provider(rd), dtype=float)
+        Rt = compute_contract_returns_from_positions(rd, pos, sigma_tgt)
+        start, t1, dates = rd['start'], rd['t1'], rd['dates']
+        slc = Rt[start:t1 + 1]
+        series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
+    df_all = pd.DataFrame(series)
+    if aggregation_mode == 'dropna':
+        port = df_all.T.dropna().mean(axis=1)
+    elif aggregation_mode == 'variable_n':
+        port = df_all.T.mean(axis=1)
+    else:
+        raise ValueError(f'Unknown aggregation_mode: {aggregation_mode}')
+    return port.values
+
+
+def compute_strategy_metrics(
+    raw_data,
+    strat,
+    sigma_tgt,
+    aggregation_mode='variable_n',
+    port_vol_target=None,
+    port_bridge='constant_posthoc',
+    position_provider=None,
+):
+    """Compute all 9 metrics for one strategy using the unified baseline stack."""
+    built_in = {'Long', 'Sign(R)', 'MACD'}
+    if position_provider is None:
+        if strat not in built_in:
+            raise ValueError(f"Unknown baseline strategy without position provider: {strat}")
+        R = compute_portfolio_returns(raw_data, strat, sigma_tgt, aggregation_mode=aggregation_mode)
+    else:
+        R = compute_portfolio_returns_from_position_provider(
+            raw_data,
+            sigma_tgt=sigma_tgt,
+            position_provider=position_provider,
+            aggregation_mode=aggregation_mode,
+        )
+
+    if port_vol_target is not None:
+        R = get_portfolio_bridge(port_bridge, port_vol_target)(R)
+
+    N = len(raw_data)
+    all_names = ['E(R)', 'std(R)', 'DD', 'Sharpe', 'Sortino',
+                 'MDD', 'Calmar', '% +ve', 'Ave P/L']
+    m_all_raw = compute_metrics(R, n_contracts=N, round_output=False)
+
+    return dict(zip(all_names, m_all_raw))
+
+
+def evaluate_asset_strategy_table3(
+    ac_name,
+    strat,
+    sigma_tgt,
+    test_start='2011-01-01',
+    test_end='2019-12-31',
+    excluded_contracts=None,
+    source_overrides=None,
+    aggregation_mode='variable_n',
+    position_provider=None,
+):
+    """Evaluate one strategy on Table 3 with the unified baseline backtest stack."""
+    if excluded_contracts is None:
+        excluded_contracts = EXCLUDED_CONTRACTS
+    if source_overrides is None:
+        source_overrides = SOURCE_OVERRIDES
+    raw = load_contracts(
+        ac_name,
+        test_start,
+        test_end,
+        excluded_contracts=excluded_contracts,
+        source_overrides=source_overrides,
+    )
+    metrics_raw = compute_strategy_metrics(
+        raw_data=raw,
+        strat=strat,
+        sigma_tgt=sigma_tgt,
+        aggregation_mode=aggregation_mode,
+        position_provider=position_provider,
+    )
+    metrics_round = {k: round(v, 3) for k, v in metrics_raw.items()}
+    paper = PAPER_TABLE3.get(ac_name, {}).get(strat, None)
+    errs = {}
+    if paper is not None:
+        for k in METRIC_NAMES:
+            target = paper.get(k, 0.0)
+            errs[k] = pct_err_raw(metrics_raw[k], target) if target != 0 else 0.0
+    return metrics_round, metrics_raw, paper, errs
+
 # ─── Output ───────────────────────────────────────────────────────
 def fmt(vals):
     return "  ".join(f"{v:>+7.3f}" for v in vals)
@@ -471,8 +567,7 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
               port_vol_target=None, metric_names=None,
               aggregation_mode='variable_n',
               port_bridge='constant_posthoc',
-              report_source=DEFAULT_REPORT_SOURCE,
-              report_bridge_mode=DEFAULT_REPORT_BRIDGE_MODE,
+              strategy_entries=None,
               test_start='2011-01-01',
               test_end='2019-12-31'):
     """Run one table (Table 2 or 3) for one asset class."""
@@ -489,47 +584,28 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
     metric_idx = [all_names.index(n) for n in metric_names]
     n_metrics = len(metric_names)
 
-    effective_report_source = report_source
-    if report_source == 'auto':
-        effective_report_source = 'RISK_PRICE_SIGMA0' if port_vol_target is not None else 'trade'
-
-    effective_report_bridge_mode = report_bridge_mode if port_vol_target is not None else 'split_world'
     port_str = f" | port_vol→{port_vol_target} | bridge={port_bridge}" if port_vol_target else ""
-    report_mode_str = (
-        f" | report_bridge={effective_report_bridge_mode}"
-        if effective_report_source != 'trade' and port_vol_target is not None
-        else ""
-    )
-    report_str = f" | report={effective_report_source}{report_mode_str}" if effective_report_source != 'trade' else ""
     print(f"\n{'=' * 90}")
     print(f"  {table_label} — {ac_name} ({N} contracts)")
-    print(f"  σ_tgt={sigma_tgt} | EWMA({EWMA_SPAN}) | bp={BP}{port_str}{report_str}")
+    print(f"  σ_tgt={sigma_tgt} | EWMA({EWMA_SPAN}) | bp={BP}{port_str}")
     print(f"  Metrics: {', '.join(metric_names)}")
     print(f"{'=' * 90}")
 
+    if strategy_entries is None:
+        strategy_entries = [('Long', None)]
+
     total_n10, total_n15, total = 0, 0, 0
-    for strat in ['Long']: #, 'Sign(R)', 'MACD']:
-        R = compute_portfolio_returns(raw_data, strat, sigma_tgt,
-                                      aggregation_mode=aggregation_mode)
-        if port_vol_target is not None:
-            R = get_portfolio_bridge(port_bridge, port_vol_target)(R)
-        m_all_raw = compute_metrics(R, n_contracts=N, round_output=False)
-        if effective_report_source != 'trade':
-            reporting = compute_reporting_mdd_calmar_risk_price_sigma0(
-                raw_data,
-                sigma_tgt=sigma_tgt,
-                strat=strat,
-                port_bridge=port_bridge if port_vol_target is not None else None,
-                port_vol_target=port_vol_target,
-                report_bridge_mode=effective_report_bridge_mode,
-                round_output=False,
-            )
-            if reporting is not None:
-                mdd_rep, calmar_rep, _ = reporting
-                m_all_raw[all_names.index('MDD')] = mdd_rep
-                m_all_raw[all_names.index('Calmar')] = calmar_rep
-        # Extract only the metrics we care about
-        m_raw = [m_all_raw[i] for i in metric_idx]
+    for strat, position_provider in strategy_entries:
+        metric_map = compute_strategy_metrics(
+            raw_data=raw_data,
+            strat=strat,
+            sigma_tgt=sigma_tgt,
+            aggregation_mode=aggregation_mode,
+            port_vol_target=port_vol_target,
+            port_bridge=port_bridge,
+            position_provider=position_provider,
+        )
+        m_raw = [metric_map[n] for n in metric_names]
         m = [round(v, 3) for v in m_raw]
         pv_dict = paper_table[ac_name][strat]
         pv = [pv_dict[k] for k in metric_names]
@@ -632,14 +708,6 @@ def main():
     parser.add_argument('--aggregation', choices=['variable_n', 'dropna'],
                         default='variable_n',
                         help='Portfolio aggregation mode (default: variable_n)')
-    parser.add_argument('--report-source',
-                        choices=['auto', 'trade', 'RISK_PRICE_SIGMA0'],
-                        default=DEFAULT_REPORT_SOURCE,
-                        help='Reporting source / bridge for MDD and Calmar only (default: auto = Table 3 trade, Table 2 RISK_PRICE_SIGMA0)')
-    parser.add_argument('--report-bridge-mode',
-                        choices=['split_world', 'same_as_port_simple', 'same_as_port_contract', 'same_as_port_additive'],
-                        default=DEFAULT_REPORT_BRIDGE_MODE,
-                        help='How Table 2 portfolio bridge enters reporting MDD/Calmar (default: same_as_port_contract)')
     parser.add_argument('--exclude-contracts', default=None,
                         help='Comma-separated exclusion override, e.g. FB,ZA,ZO')
     args = parser.parse_args()
@@ -689,8 +757,6 @@ def main():
                                       metric_names=metric_names,
                                       aggregation_mode=args.aggregation,
                                       port_bridge=args.port_bridge,
-                                      report_source=args.report_source,
-                                      report_bridge_mode=args.report_bridge_mode,
                                       test_start=args.test_start,
                                       test_end=args.test_end)
             if args.diagnostic and port_vol is None:  # only Table 3

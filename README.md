@@ -27,6 +27,7 @@ python baseline_run.py --table 3 --all-metrics --sigma 0.058
 # Current trade-world structural reference
 python tests/run_structural_38.py --table 3
 python tests/run_structural_38.py --table both
+python tests/run_structural_38.py --table 3 --with-path-metrics
 
 # Retained experimental upper-bound reproducer
 python tests/run_legacy_41.py
@@ -49,6 +50,15 @@ Current highest-priority suspicious paper cells / transitions:
 - `Equity Index / Long / DD: 0.606 -> 0.606`
 - `Fixed Income / Long / MDD: 0.108 -> 0.061`
 - `All / Long` risk-adjusted metrics flipping sign
+
+### DRL Pipeline
+- [docs/drl_pipeline.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/drl_pipeline.md)
+
+Use this as the teammate handoff note for:
+- shared feature preparation
+- DQN training / checkpoints / logs
+- unified backtesting commands
+- current DRL folder responsibilities
 
 ### Printable Structural-38 Summary
 - [docs/structural38_trade_tables_paper_style_a4.png](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/structural38_trade_tables_paper_style_a4.png)
@@ -136,6 +146,18 @@ It intentionally does **not** print:
 This keeps the structural reference focused on the current trade-world
 comparison, without mixing in the unresolved reporting-world disputes.
 
+If you need the same structural-38 data/source preset but want to inspect
+portfolio-path `MDD` / `Calmar` from the current unified backtest stack, use:
+- `python tests/run_structural_38.py --table 3 --with-path-metrics`
+
+Important distinction:
+- old bridge / reporting-path experiments could compute `MDD` / `Calmar` on a
+  separate reporting-world path
+- current unified backtest computes all 9 metrics from the same simulated
+  portfolio path
+- therefore `--with-path-metrics` is **not** a resurrection of the old
+  reporting-path diagnostic world; it is the current one-path backtest view
+
 ## 41/45 Retained Status
 
 `41/45` is retained only as an **experimental upper-bound reproducer**.
@@ -161,5 +183,12 @@ but are no longer part of the main README narrative.
 ## Notes
 
 - `README` is now minimal operational documentation.
+- Backtesting/metrics are baseline-owned (`baseline_run.py`) for all strategies.
+- DRL shared modules live in `drl_shared/`; DQN-only code lives in `drl/dqn/`.
+- Shared feature prep command: `python drl_shared/prepare_features.py --asset Forex --round 1`
+- Global strategy backtest command: `python run_strategy_backtest.py --strategy Long --asset Forex`
+- DQN adapter backtest command: `python drl/dqn/backtest/backtest_dqn_walkforward.py --strategy Long --asset Forex`
+- `run_strategy_backtest.py` defaults to no exclusions unless you pass `--exclude-contracts`
+- teammate handoff note: [docs/drl_pipeline.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/drl_pipeline.md)
 - Historical search logic, abandoned directions, and legacy score narratives live
   only in [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md).
