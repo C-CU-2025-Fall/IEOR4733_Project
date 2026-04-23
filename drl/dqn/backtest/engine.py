@@ -139,8 +139,9 @@ def dqn_position_provider(
                     device=device,
                 )
             agent, manifest, _ = cache[agent_key]
-            if manifest and model_version.lower() != "v0":
-                expected_state = "v2_ewma60_close_deviation"
+            if manifest and model_version.lower() not in ("v0",):
+                from drl_shared.spec import feature_spec
+                expected_state = feature_spec(model_version)["state_spec_version"]
                 actual_state = manifest.get("state_spec_version")
                 if actual_state != expected_state:
                     raise ValueError(f"State spec mismatch for {ticker} r{rn}: {actual_state} != {expected_state}")

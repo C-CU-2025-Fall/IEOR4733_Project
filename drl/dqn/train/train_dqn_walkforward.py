@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -88,6 +89,8 @@ def train_contract_round(
     model_version: str = ACTIVE_MODEL_VERSION,
     device: str | None = None,
     seed: int | None = None,
+    preset: str | None = None,
+    sigma_tgt: float = 0.058,
 ) -> tuple[Path, Path]:
     ticker = ticker.upper()
     round_info = RETRAIN_ROUNDS[round_num]
@@ -112,6 +115,8 @@ def train_contract_round(
             "log_dir": str(logger.dir),
             "bundle_dir": str(bundle_dir),
             "seed": seed,
+            "preset": preset,
+            "sigma_tgt": sigma_tgt,
             **feature_meta,
         },
     )
@@ -180,8 +185,10 @@ def train_contract_round(
             else:
                 patience_counter += 1
                 if patience_counter >= early_stop_patience:
+
                     logger.log(f"Early stop @ ep{ep + 1} (best={best_avg:+.2f} @ ep{best_ep})")
                     break
+
 
         if (ep + 1) % report_interval == 0:
             elapsed = time.time() - t0

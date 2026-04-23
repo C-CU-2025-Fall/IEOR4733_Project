@@ -54,8 +54,8 @@ def build_feature_matrix(
 ) -> np.ndarray:
     """Build the shared 8-dimensional state matrix.
 
-    Locked v2 convention:
-    - close feature is causal EWMA60 price deviation
+    Locked v3 convention:
+    - close feature is causal EWMA60 price deviation, annualized via EWMA_std(p)
     - return features use EWMA(60) sigma of additive r_t
     - MACD feature keeps 63-window volatility normalization
     """
@@ -66,9 +66,14 @@ def build_feature_matrix(
         p_mean = prices.mean()
         p_std = prices.std() + 1e-10
         feats[:, 0] = (prices - p_mean) / p_std
-    else:
+    elif model_version.lower() == "v2":
         ema_price = pd.Series(prices).ewm(span=EWMA_SPAN, adjust=False).mean().to_numpy(dtype=float)
         feats[:, 0] = (prices - ema_price) / (sigma * np.sqrt(EWMA_SPAN) + 1e-10)
+    else:
+        # v3+: causal EWMA60 price deviation, annualized via EWMA_std of prices
+        ema_price = pd.Series(prices).ewm(span=EWMA_SPAN, adjust=False).mean().to_numpy(dtype=float)
+        ewma_std_price = pd.Series(prices).ewm(span=EWMA_SPAN, adjust=False).std().to_numpy(dtype=float)
+        feats[:, 0] = (prices - ema_price) / (ewma_std_price * np.sqrt(252) + 1e-10)
 
     for idx, horizon in enumerate(HORIZONS):
         col = np.zeros(n, dtype=float)

@@ -13,7 +13,7 @@ HORIZONS = (21, 42, 63, 252)
 RSI_WINDOW = 30
 WARMUP = 252
 STATE_SPEC_VERSION = "v2_ewma60_close_deviation"
-ACTIVE_FEATURE_VERSION = "v2"
+ACTIVE_FEATURE_VERSION = "v2.1"
 
 DISCRETE_ACTION_VALUES = (-1.0, 0.0, 1.0)
 CONTINUOUS_ACTION_RANGE = (-1.0, 1.0)
@@ -91,14 +91,18 @@ def resolve_feature_data_path(round_num: int, ticker: str, model_version: str = 
 def feature_spec(model_version: str = ACTIVE_FEATURE_VERSION) -> dict:
     return {
         "model_version": model_version.lower(),
-        "state_spec_version": STATE_SPEC_VERSION if model_version.lower() != "v0" else "v0_full_sample_zscore",
+        "state_spec_version": (
+            STATE_SPEC_VERSION
+            if model_version.lower() not in ("v0", "v2")
+            else ("v0_full_sample_zscore" if model_version.lower() == "v0" else "v2_ewma60_close_deviation")
+        ),
         "seq_len": SEQ_LEN,
         "feature_dim": FEATURE_DIM,
         "close_feature": {
-            "name": "ewma60_close_deviation" if model_version.lower() != "v0" else "full_sample_zscore",
-            "formula": "(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))"
-            if model_version.lower() != "v0"
-            else "(p_t - mean(p)) / std(p)",
+            "name": "ewma60_price_deviation_annualized" if model_version.lower() not in ("v0", "v2") else ("full_sample_zscore" if model_version.lower() == "v0" else "ewma60_close_deviation"),
+            "formula": "(p_t - EMA60(p)_t) / (EWMA60_std(p)_t * sqrt(252))"
+            if model_version.lower() not in ("v0", "v2")
+            else ("(p_t - mean(p)) / std(p)" if model_version.lower() == "v0" else "(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))"),
             "causal": model_version.lower() != "v0",
         },
         "return_horizons": list(HORIZONS),
