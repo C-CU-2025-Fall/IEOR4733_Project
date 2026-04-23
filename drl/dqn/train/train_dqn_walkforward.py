@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import random
 import sys
 import time
 from pathlib import Path
@@ -13,59 +15,109 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from drl.dqn.logging_utils import RunLogger
-from drl.dqn.model import DEVICE, DQNAgent
+from drl.dqn.logging_utils import RunLogger, make_run_id
+from drl.dqn.model import DQNAgent
 from drl.dqn.spec import (
+    ACTIVE_MODEL_VERSION,
     EPISODES,
     MAX_STEPS_PER_EP,
     RETRAIN_ROUNDS,
     checkpoint_metadata,
     contract_data_path,
-    contract_model_path,
+    checkpoint_path_for_bundle,
+    feature_spec,
+    model_bundle_root,
     round_name,
 )
 from drl_shared.state_space import ContractArrays, ContractEnv
 
 
-def load_contract_round(ticker: str, round_num: int) -> ContractArrays:
+def _npz_scalar(data, key: str, default=None):
+    if key not in data:
+        return default
+    value = data[key]
+    if getattr(value, "shape", None) == ():
+        return value.item()
+    return value
+
+
+def load_contract_round(ticker: str, round_num: int, model_version: str = ACTIVE_MODEL_VERSION) -> tuple[ContractArrays, dict]:
     ticker = ticker.upper()
-    path = contract_data_path(round_num, ticker)
+    path = contract_data_path(round_num, ticker, model_version=model_version)
     if not path.exists():
         raise FileNotFoundError(
             f"No prepared shared feature data found at {path}. "
             "Run python drl_shared/prepare_features.py first."
         )
     data = np.load(path, allow_pickle=True)
-    return ContractArrays(
+    expected = feature_spec(model_version)
+    actual_state = _npz_scalar(data, "state_spec_version")
+    if actual_state != expected["state_spec_version"]:
+        raise ValueError(
+            f"Feature spec mismatch for {ticker} r{round_num}: "
+            f"{actual_state!r} != {expected['state_spec_version']!r}. "
+            "Regenerate features with drl_shared/prepare_features.py."
+        )
+    meta = {
+        "feature_artifact_path": str(path),
+        "feature_spec": json.loads(str(_npz_scalar(data, "feature_spec", "{}"))),
+        "state_spec_version": actual_state,
+        "model_version": str(_npz_scalar(data, "model_version", model_version)),
+        "train_start": str(_npz_scalar(data, "train_start", "")),
+        "train_end": str(_npz_scalar(data, "train_end", "")),
+        "test_start": str(_npz_scalar(data, "test_start", "")),
+        "test_end": str(_npz_scalar(data, "test_end", "")),
+    }
+    contract = ContractArrays(
         ticker=ticker,
         prices=data["prices"],
         returns=data["returns"],
         sigma=data["sigma"],
         features=data["features"],
         dates=data["dates"],
-        source=str(data["source"]),
+        source=str(_npz_scalar(data, "source", "")),
     )
+    return contract, meta
 
 
-def train_contract_round(ticker: str, round_num: int, episodes: int = EPISODES, early_stop_patience: int = 0) -> tuple[Path, Path]:
+def train_contract_round(
+    ticker: str,
+    round_num: int,
+    episodes: int = EPISODES,
+    early_stop_patience: int = 0,
+    model_version: str = ACTIVE_MODEL_VERSION,
+    device: str | None = None,
+    seed: int | None = None,
+) -> tuple[Path, Path]:
     ticker = ticker.upper()
     round_info = RETRAIN_ROUNDS[round_num]
-    contract = load_contract_round(ticker, round_num)
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed)
+    contract, feature_meta = load_contract_round(ticker, round_num, model_version=model_version)
     env = ContractEnv(contract)
-    agent = DQNAgent()
-    logger = RunLogger("dqn", ticker, round_num)
+    agent = DQNAgent(device=device)
+    run_id = make_run_id()
+    bundle_dir = model_bundle_root(round_num, ticker, run_id=run_id, model_version=model_version)
+    logger = RunLogger("dqn", ticker, round_num, run_id=run_id, base_dir=bundle_dir)
     metadata = checkpoint_metadata(
         round_num,
         ticker,
         algorithm="dqn",
+        model_version=model_version,
         extra={
             "run_id": logger.run_id,
             "episodes": episodes,
-            "device": DEVICE,
+            "device": agent.device,
             "log_dir": str(logger.dir),
+            "bundle_dir": str(bundle_dir),
+            "seed": seed,
+            **feature_meta,
         },
     )
-    logger.write_json("config.json", metadata)
+    logger.write_json("manifest.json", metadata)
+    logger.write_json("train_config.json", metadata["hyperparameters"] | {"episodes": episodes, "seed": seed})
+    logger.write_json("feature_spec.json", metadata["feature_spec"])
 
     t0 = time.time()
     report_interval = max(1, episodes // 10)
@@ -82,7 +134,9 @@ def train_contract_round(ticker: str, round_num: int, episodes: int = EPISODES, 
     logger.log(f"DQN Training — {ticker} — {round_name(round_num)}")
     logger.log(f"Train: {round_info['train_start']} ~ {round_info['train_end']}")
     logger.log(f"Test : {round_info['test_start']} ~ {round_info['test_end']}")
-    logger.log(f"Source: {contract.source} | Train days: {len(contract.prices)} | Device: {DEVICE}")
+    logger.log(f"Source: {contract.source} | Train days: {len(contract.prices)} | Device: {agent.device}")
+    logger.log(f"Model bundle: {bundle_dir}")
+    logger.log(f"State spec: {metadata['state_spec_version']}")
     logger.log("Architecture: LSTM[64,32] + Leaky-ReLU + Fixed Q-targets + Double DQN + Dueling DQN")
     if early_stop_patience > 0:
         logger.log(f"Early Stop: patience={early_stop_patience}")
@@ -143,7 +197,7 @@ def train_contract_round(ticker: str, round_num: int, episodes: int = EPISODES, 
         agent.target.load_state_dict(best_state)
         logger.log(f"Restored best model (ep={best_ep})")
 
-    out_path = contract_model_path(round_num, ticker, algorithm="dqn")
+    out_path = checkpoint_path_for_bundle(bundle_dir)
     agent.save(out_path, metadata=metadata)
     logger.write_csv("episode_metrics.csv", episode_rows)
     logger.write_json("checkpoint_metadata.json", metadata)
@@ -158,6 +212,17 @@ if __name__ == "__main__":
     parser.add_argument("--round", type=int, required=True, choices=sorted(RETRAIN_ROUNDS))
     parser.add_argument("--episodes", type=int, default=EPISODES)
     parser.add_argument("--early-stop", type=int, default=0, help="Early stopping patience (0=disabled)")
+    parser.add_argument("--model-version", default=ACTIVE_MODEL_VERSION)
+    parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
+    parser.add_argument("--seed", type=int, default=None)
     args = parser.parse_args()
 
-    train_contract_round(args.ticker, args.round, args.episodes, early_stop_patience=args.early_stop)
+    train_contract_round(
+        args.ticker,
+        args.round,
+        args.episodes,
+        early_stop_patience=args.early_stop,
+        model_version=args.model_version,
+        device=args.device,
+        seed=args.seed,
+    )

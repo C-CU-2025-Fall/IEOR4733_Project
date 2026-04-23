@@ -15,7 +15,7 @@ if str(REPO_ROOT) not in sys.path:
 from config import SOURCE_OVERRIDES
 from data_loader import load_clc_full
 from drl.dqn.backtest.engine import portfolio_metrics
-from drl.dqn.spec import RETRAIN_ROUNDS, contract_model_path
+from drl.dqn.spec import ACTIVE_MODEL_VERSION, RETRAIN_ROUNDS, resolve_checkpoint_path
 from drl_shared.spec import FEATURE_DIM, SEQ_LEN, WARMUP, feature_data_path
 from drl_shared.state_space import build_contract_arrays, get_feature_window
 
@@ -37,13 +37,14 @@ def _load_train_frame(ticker: str, round_num: int):
     return train, source
 
 
-def verify_state_schema(ticker: str, round_num: int) -> dict:
+def verify_state_schema(ticker: str, round_num: int, model_version: str = ACTIVE_MODEL_VERSION) -> dict:
     train, source = _load_train_frame(ticker, round_num)
     contract = build_contract_arrays(
         ticker=ticker,
         prices=train["Close"].to_numpy(dtype=float),
         dates=train["Date"].to_numpy(),
         source=source,
+        model_version=model_version,
     )
     window = get_feature_window(contract.features, WARMUP + 8)
 
@@ -64,8 +65,17 @@ def verify_state_schema(ticker: str, round_num: int) -> dict:
     }
 
 
-def verify_prepared_round_data(ticker: str, round_num: int) -> dict:
-    prepared_path = feature_data_path(round_num, ticker)
+def _npz_scalar(data, key: str, default=None):
+    if key not in data:
+        return default
+    value = data[key]
+    if getattr(value, "shape", None) == ():
+        return value.item()
+    return value
+
+
+def verify_prepared_round_data(ticker: str, round_num: int, model_version: str = ACTIVE_MODEL_VERSION) -> dict:
+    prepared_path = feature_data_path(round_num, ticker, model_version=model_version)
     if not prepared_path.exists():
         raise FileNotFoundError(f"Prepared state file missing: {prepared_path}")
 
@@ -75,6 +85,7 @@ def verify_prepared_round_data(ticker: str, round_num: int) -> dict:
         prices=train["Close"].to_numpy(dtype=float),
         dates=train["Date"].to_numpy(),
         source=source,
+        model_version=model_version,
     )
 
     data = np.load(prepared_path, allow_pickle=True)
@@ -83,7 +94,7 @@ def verify_prepared_round_data(ticker: str, round_num: int) -> dict:
         "returns": np.allclose(data["returns"], contract.returns),
         "sigma": np.allclose(data["sigma"], contract.sigma, equal_nan=True),
         "features": np.allclose(data["features"], contract.features),
-        "source": str(data["source"]) == source,
+        "source": str(_npz_scalar(data, "source", "")) == source,
     }
     failed = [name for name, ok in checks.items() if not ok]
     if failed:
@@ -96,8 +107,8 @@ def verify_prepared_round_data(ticker: str, round_num: int) -> dict:
     }
 
 
-def verify_checkpoint_presence(ticker: str, round_num: int) -> dict:
-    checkpoint = contract_model_path(round_num, ticker, algorithm="dqn")
+def verify_checkpoint_presence(ticker: str, round_num: int, model_version: str = ACTIVE_MODEL_VERSION) -> dict:
+    checkpoint = resolve_checkpoint_path(round_num, ticker, model_version=model_version)
     if not checkpoint.exists():
         raise FileNotFoundError(
             f"Contract checkpoint missing: {checkpoint}. "
@@ -119,6 +130,7 @@ def main():
     parser.add_argument("--asset", default="Forex")
     parser.add_argument("--round", type=int, default=1, choices=sorted(RETRAIN_ROUNDS))
     parser.add_argument("--ticker", default="AN")
+    parser.add_argument("--model-version", default=ACTIVE_MODEL_VERSION)
     parser.add_argument("--require-prepared", action="store_true")
     parser.add_argument("--require-checkpoint", action="store_true")
     args = parser.parse_args()
@@ -126,7 +138,7 @@ def main():
     ticker = args.ticker.upper()
     print(f"Verify DQN pipeline — asset={args.asset} round=r{args.round} ticker={ticker}")
 
-    state = verify_state_schema(ticker, args.round)
+    state = verify_state_schema(ticker, args.round, model_version=args.model_version)
     print(
         f"[OK] state schema: train_days={state['train_days']} "
         f"feature_shape={state['feature_shape']} window_shape={state['window_shape']} "
@@ -140,17 +152,17 @@ def main():
     )
 
     if args.require_prepared:
-        prepared = verify_prepared_round_data(ticker, args.round)
+        prepared = verify_prepared_round_data(ticker, args.round, model_version=args.model_version)
         print(f"[OK] prepared round data: {prepared['prepared_path']} rows={prepared['rows']}")
     else:
-        prepared_path = feature_data_path(args.round, ticker)
+        prepared_path = feature_data_path(args.round, ticker, model_version=args.model_version)
         print(f"[INFO] prepared round data not required. expected path: {prepared_path}")
 
     if args.require_checkpoint:
-        checkpoint = verify_checkpoint_presence(ticker, args.round)
+        checkpoint = verify_checkpoint_presence(ticker, args.round, model_version=args.model_version)
         print(f"[OK] contract checkpoint: {checkpoint['checkpoint']}")
     else:
-        checkpoint = contract_model_path(args.round, ticker, algorithm="dqn")
+        checkpoint = resolve_checkpoint_path(args.round, ticker, model_version=args.model_version)
         print(f"[INFO] checkpoint not required. expected path: {checkpoint}")
 
 

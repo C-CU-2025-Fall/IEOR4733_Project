@@ -51,16 +51,16 @@ Current entrypoints:
 
 ```bash
 # Prepare shared features
-python drl_shared/prepare_features.py --ticker AN --round 1
+python drl_shared/prepare_features.py --ticker AN --round 1 --model-version v2
 
 # Train one contract model
-python drl/dqn/train/train_dqn_walkforward.py --ticker AN --round 1 --episodes 50
+python drl/dqn/train/train_dqn_walkforward.py --ticker AN --round 1 --episodes 50 --device cpu --model-version v2
 
 # Unified baseline backtest
 python run_strategy_backtest.py --strategy Long --asset Forex
 
 # DQN adapter backtest
-python drl/dqn/backtest/backtest_dqn_walkforward.py --strategy DQN --asset Forex
+python drl/dqn/backtest/backtest_dqn_walkforward.py --strategy DQN --asset Forex --model-version v2 --progress
 ```
 
 Important runtime notes:
@@ -73,9 +73,10 @@ Important runtime notes:
 
 The current shared state uses `seq_len = 60` and `feature_dim = 8`.
 
-Features:
+Features for active `v2`:
 
-- feature 0: normalized price level
+- feature 0: causal EWMA60 close-price deviation
+  - `(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))`
 - features 1-4: vol-adjusted returns for horizons `21 / 42 / 63 / 252`
 - feature 5: averaged MACD feature normalized by 63-day price volatility
 - feature 6: RSI(30)-style feature
@@ -84,6 +85,7 @@ Features:
 Locked conventions:
 
 - return features use `EWMA(60)` sigma of additive `r_t`
+- feature 0 does not use full-sample z-score
 - MACD normalization uses the 63-day price-vol window
 - active DQN action set is discrete `{-1, 0, +1}`
 - the shared state space is intended for later `PG / A2C`, but those are not yet implemented as full sibling folders
@@ -91,6 +93,12 @@ Locked conventions:
 ## DQN Architecture
 
 There is **one DQN trainer**, not three separate DQN models.
+
+Training granularity and network head structure are separate:
+
+- training granularity: one model per contract per round
+- current retained Forex checkpoints: single-contract LSTM DQN with one FC Q-head
+- new code path can train/load the dueling-head DQN architecture below
 
 That one trainer currently includes three retained mechanisms:
 
@@ -109,6 +117,11 @@ The retained architecture is:
 - dueling output heads:
   - value head
   - advantage head
+
+The retained Forex checkpoints under `models/walkforward/` are still
+single-contract checkpoints. They use a single FC Q-head checkpoint format
+(`q` / `t`) rather than the newer dueling-head checkpoint format
+(`q_net` / `target_net`).
 
 ## Eq.4 and Evaluation
 
@@ -140,23 +153,43 @@ Final metrics are computed by the unified baseline/backtest stack, which owns:
 
 ## Logging and Artifacts
 
-Each training run writes to:
+Active v2 training writes a complete model bundle to:
 
-`logs/rl/<algo>/<ticker>/<round>/<run_id>/`
+`drl/dqn/models/v2/<ticker>/r<round>/<run_id>/`
 
 Artifacts include:
 
+- `checkpoint.pt`
+- `manifest.json`
+- `train_config.json`
+- `feature_spec.json`
 - `train.log`
-- `config.json`
 - `episode_metrics.csv`
 - `checkpoint_metadata.json`
 
 Expected locations:
 
 - prepared features:
-  - `drl/features/contract_rounds/<ticker>/r<k>.npz`
+  - `drl/features/v2/<ticker>/r<k>.npz`
 - DQN checkpoints:
-  - `drl/dqn/models/contract_rounds/dqn/<ticker>/r<k>.pt`
+  - `drl/dqn/models/v2/<ticker>/r<k>/<run_id>/checkpoint.pt`
+- retained Forex GPU checkpoint compatibility path:
+  - `drl/dqn/models/walkforward/<ticker>_r<k>.pt`
+
+The code resolves v2 bundles for active training/backtests. The old
+`models/walkforward` files are historical `v0` compatibility artifacts and
+should not be mixed with v2 feature results.
+
+`manifest.json` is the source of truth for:
+
+- model version
+- state spec version
+- feature formulas
+- `sigma_tgt`
+- transaction-cost convention
+- action space
+- architecture and DQN hyperparameters
+- ticker / source / retrain round dates
 
 ## Status
 
@@ -165,6 +198,7 @@ What is true today:
 - the DRL infrastructure is implemented
 - the state-space / training / inference / backtest interfaces are wired
 - actual prepared features and checkpoints depend on the local or server environment
+- active v2 requires retraining before v2 DQN results should be interpreted
 
 This README does **not** claim:
 

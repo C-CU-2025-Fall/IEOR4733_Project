@@ -392,7 +392,7 @@ def compute_contract_returns(rd, strat, sigma_tgt, detail=False):
     return Rt
 
 
-def compute_contract_returns_from_positions(rd, positions, sigma_tgt, detail=False):
+def compute_contract_returns_from_positions_loop(rd, positions, sigma_tgt, detail=False):
     """Compute Eq.4 returns from an explicit position array aligned to the full contract history."""
     rt, sigma, prices = rd['rt'], rd['sigma'], rd['prices']
     n = len(rt)
@@ -415,6 +415,67 @@ def compute_contract_returns_from_positions(rd, positions, sigma_tgt, detail=Fal
             gross_pnl[t] = sp * rt[t]
             tc_cost[t] = BP * prices[t - 1] * abs(sp - spp)
             Rt[t] = gross_pnl[t] - tc_cost[t]
+
+    if detail:
+        return {
+            'Rt': Rt,
+            'A_t': pos,
+            'scaled_pos': scaled_pos,
+            'gross_pnl': gross_pnl,
+            'tc_cost': tc_cost,
+            'sigma': sigma,
+            'prices': prices,
+            'rt': rt,
+        }
+    return Rt
+
+
+def compute_contract_returns_from_positions(rd, positions, sigma_tgt, detail=False):
+    """Vectorized Eq.4 returns from an explicit position array.
+
+    This is the production path for model adapters. ``compute_contract_returns_from_positions_loop``
+    remains as the reference implementation and is covered by parity tests.
+    """
+    rt, sigma, prices = rd['rt'], rd['sigma'], rd['prices']
+    n = len(rt)
+    pos = np.asarray(positions, dtype=float)
+    if len(pos) != n:
+        raise ValueError(f"Explicit positions length mismatch for {rd['tk']}: {len(pos)} vs {n}")
+
+    Rt = np.zeros(n)
+    scaled_pos = np.zeros(n)
+    gross_pnl = np.zeros(n)
+    tc_cost = np.zeros(n)
+    if n <= 1:
+        if detail:
+            return {
+                'Rt': Rt,
+                'A_t': pos,
+                'scaled_pos': scaled_pos,
+                'gross_pnl': gross_pnl,
+                'tc_cost': tc_cost,
+                'sigma': sigma,
+                'prices': prices,
+                'rt': rt,
+            }
+        return Rt
+
+    idx = np.arange(1, n)
+    sig_prev = sigma[idx - 1]
+    valid = sig_prev > 0
+    if len(idx) > 1:
+        valid[1:] &= sigma[idx[1:] - 2] > 0
+
+    valid_idx = idx[valid]
+    if len(valid_idx):
+        sp = pos[valid_idx - 1] * sigma_tgt / sigma[valid_idx - 1]
+        spp = np.zeros(len(valid_idx))
+        has_prev = valid_idx >= 2
+        spp[has_prev] = pos[valid_idx[has_prev] - 2] * sigma_tgt / sigma[valid_idx[has_prev] - 2]
+        scaled_pos[valid_idx] = sp
+        gross_pnl[valid_idx] = sp * rt[valid_idx]
+        tc_cost[valid_idx] = BP * prices[valid_idx - 1] * np.abs(sp - spp)
+        Rt[valid_idx] = gross_pnl[valid_idx] - tc_cost[valid_idx]
 
     if detail:
         return {

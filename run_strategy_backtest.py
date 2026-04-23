@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+from pathlib import Path
 
 from baseline_run import EWMA_SPAN
 from config import BP, METRIC_NAMES
@@ -29,25 +31,59 @@ def _parse_exclusions(exclude_contracts: str | None) -> list[str]:
     return sorted(set(tk for tk in tokens if tk))
 
 
+def _sigma_from_bundle(bundle: str | None) -> float | None:
+    if not bundle:
+        return None
+    manifest = Path(bundle) / "manifest.json"
+    if not manifest.exists():
+        return None
+    with manifest.open("r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+    value = payload.get("sigma_tgt")
+    return float(value) if value is not None else None
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--strategy", default="Long", choices=STRATEGIES)
     parser.add_argument("--asset", default="Forex")
-    parser.add_argument("--sigma", type=float, default=0.058)
+    parser.add_argument("--sigma", type=float, default=None)
     parser.add_argument("--round", type=int, default=None, help="Only for DQN. If omitted, stitch all rounds.")
     parser.add_argument("--checkpoint", default=None, help="Only for DQN; optional explicit checkpoint path.")
+    parser.add_argument("--checkpoint-bundle", default=None, help="Only for DQN; explicit versioned bundle directory.")
+    parser.add_argument("--model-version", default="v2", help="Only for DQN; versioned model bundle namespace.")
+    parser.add_argument("--run-id", default="latest", help='Only for DQN; bundle run id or "latest".')
+    parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto", help="Only for DQN; torch inference device.")
+    parser.add_argument("--progress", action="store_true", help="Only for DQN; show inference progress bars with ETA.")
+    parser.add_argument("--batch-size", type=int, default=2048, help="Only for DQN; inference batch size.")
     parser.add_argument("--exclude-contracts", default=None, help="Comma-separated exclusions, e.g. FB,ZA")
     args = parser.parse_args()
 
     excluded = _parse_exclusions(args.exclude_contracts)
+    effective_sigma = args.sigma
+    if effective_sigma is None and args.strategy == "DQN":
+        effective_sigma = _sigma_from_bundle(args.checkpoint_bundle)
+    if effective_sigma is None:
+        effective_sigma = 0.058
+
     provider = None
     if args.strategy == "DQN":
-        provider = dqn_position_provider(round_num=args.round, checkpoint=args.checkpoint)
+        provider = dqn_position_provider(
+            round_num=args.round,
+            checkpoint=args.checkpoint,
+            checkpoint_bundle=args.checkpoint_bundle,
+            model_version=args.model_version,
+            run_id=args.run_id,
+            device=args.device,
+            progress=args.progress,
+            batch_size=args.batch_size,
+            expected_sigma_tgt=effective_sigma,
+        )
 
     metrics_raw = backtest_strategy_metrics(
         asset_name=args.asset,
         strategy=args.strategy,
-        sigma_tgt=args.sigma,
+        sigma_tgt=effective_sigma,
         position_provider=provider,
         excluded_contracts=excluded,
         round_output=False,
@@ -60,7 +96,7 @@ def main():
 
     print(f"\n{'=' * 90}")
     print(f"  Table 3 — {args.asset} ({n_contracts} contracts)")
-    print(f"  σ_tgt={args.sigma} | EWMA({EWMA_SPAN}) | bp={BP} | excluded={excluded_str}")
+    print(f"  σ_tgt={effective_sigma} | EWMA({EWMA_SPAN}) | bp={BP} | excluded={excluded_str}")
     print(f"  Metrics: {', '.join(metric_names)}")
     print(f"{'=' * 90}")
     print()
@@ -81,10 +117,13 @@ def main():
     print(f"  Ours  : {_fmt([metrics[m] for m in metric_names])}")
     if args.strategy == "DQN":
         print()
+        print(f"DQN device: {args.device}")
         if args.round is not None:
             print(f"DQN round override: r{args.round}")
         else:
             print("DQN using stitched round schedule (r1 + r2)")
+        print(f"DQN model version: {args.model_version}")
+        print(f"DQN run id: {args.run_id}")
 
 
 if __name__ == "__main__":

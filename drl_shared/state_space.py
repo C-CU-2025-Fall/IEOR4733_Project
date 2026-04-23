@@ -8,6 +8,7 @@ import pandas as pd
 
 from config import BP, EWMA_SPAN, MACD_PAIRS, MACD_VOL_WINDOW
 from drl_shared.spec import (
+    ACTIVE_FEATURE_VERSION,
     CONTINUOUS_ACTION_RANGE,
     DISCRETE_ACTION_VALUES,
     FEATURE_DIM,
@@ -45,19 +46,29 @@ def continuous_action_to_position(action: float) -> float:
     return float(np.clip(action, lo, hi))
 
 
-def build_feature_matrix(prices: np.ndarray, returns: np.ndarray, sigma: np.ndarray) -> np.ndarray:
+def build_feature_matrix(
+    prices: np.ndarray,
+    returns: np.ndarray,
+    sigma: np.ndarray,
+    model_version: str = ACTIVE_FEATURE_VERSION,
+) -> np.ndarray:
     """Build the shared 8-dimensional state matrix.
 
-    Locked convention:
+    Locked v2 convention:
+    - close feature is causal EWMA60 price deviation
     - return features use EWMA(60) sigma of additive r_t
     - MACD feature keeps 63-window volatility normalization
     """
     n = len(prices)
     feats = np.zeros((n, FEATURE_DIM), dtype=np.float32)
 
-    p_mean = prices.mean()
-    p_std = prices.std() + 1e-10
-    feats[:, 0] = (prices - p_mean) / p_std
+    if model_version.lower() == "v0":
+        p_mean = prices.mean()
+        p_std = prices.std() + 1e-10
+        feats[:, 0] = (prices - p_mean) / p_std
+    else:
+        ema_price = pd.Series(prices).ewm(span=EWMA_SPAN, adjust=False).mean().to_numpy(dtype=float)
+        feats[:, 0] = (prices - ema_price) / (sigma * np.sqrt(EWMA_SPAN) + 1e-10)
 
     for idx, horizon in enumerate(HORIZONS):
         col = np.zeros(n, dtype=float)
@@ -146,10 +157,11 @@ def build_contract_arrays(
     prices: np.ndarray,
     dates: np.ndarray,
     source: str,
+    model_version: str = ACTIVE_FEATURE_VERSION,
 ) -> ContractArrays:
     returns = compute_additive_returns(prices)
     sigma = compute_ewma_sigma(returns)
-    features = build_feature_matrix(prices, returns, sigma)
+    features = build_feature_matrix(prices, returns, sigma, model_version=model_version)
     return ContractArrays(
         ticker=ticker,
         prices=np.asarray(prices, dtype=float),
@@ -174,7 +186,7 @@ class ContractEnv:
         self.max_idx = len(self.prices) - 1
         self.idx = WARMUP
         self.last_position = 0.0
-        self.last_sigma = sigma[WARMUP - 1] if WARMUP >= 1 else sigma[0]
+        self.last_sigma = self.sigma[WARMUP - 1] if WARMUP >= 1 else self.sigma[0]
 
     def reset(self) -> np.ndarray:
         self.idx = WARMUP
@@ -203,4 +215,3 @@ class ContractEnv:
         self.last_position = position
         done = self.idx >= self.max_idx - 1
         return get_feature_window(self.features, self.idx), float(reward), done
-

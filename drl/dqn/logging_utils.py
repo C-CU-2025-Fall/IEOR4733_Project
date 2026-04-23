@@ -20,9 +20,10 @@ class RunLogger:
     ticker: str
     round_num: int
     run_id: str = field(default_factory=make_run_id)
+    base_dir: Path | None = None
 
     def __post_init__(self):
-        self.dir = run_log_dir(self.algorithm, self.ticker, self.round_num, self.run_id)
+        self.dir = self.base_dir or run_log_dir(self.algorithm, self.ticker, self.round_num, self.run_id)
         self.dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.dir / "train.log"
 

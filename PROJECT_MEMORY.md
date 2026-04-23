@@ -150,6 +150,14 @@ The branch now uses:
 - model weights are not shared across contracts
 - checkpoints are expected under:
   - `drl/dqn/models/contract_rounds/dqn/<ticker>/r<k>.pt`
+- retained Forex GPU checkpoints currently also exist under the older path:
+  - `drl/dqn/models/walkforward/<ticker>_r<k>.pt`
+- DQN status/backtest code resolves both paths, preferring `contract_rounds`
+  when available
+- this is a path / checkpoint-head compatibility issue only:
+  - the retained Forex checkpoints are still one model per contract per round
+  - they use a single FC Q-head checkpoint format (`q` / `t`)
+  - newer training code writes the dueling-head format (`q_net` / `target_net`)
 - prepared shared features are expected under:
   - `drl/features/contract_rounds/<ticker>/r<k>.npz`
 
@@ -706,3 +714,32 @@ The repo currently supports:
 - one clean-but-sub-40 same-rule interpretation,
 - and one explicit experimental `41/45` upper bound;
 the main unresolved issue is no longer `MDD`, but the reporting annual-return / `Calmar` definition and Equity-sensitive upper-bound structure.
+
+---
+
+## 7. DRL v2 Infrastructure Lock
+
+As of 2026-04-23, the active DRL implementation is versioned v2 infrastructure:
+
+- `feature 0` is no longer full-sample close-price z-score
+- active close feature:
+  - `(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))`
+- active state spec:
+  - `v2_ewma60_close_deviation`
+- feature artifacts live under:
+  - `drl/features/v2/<ticker>/r<round>.npz`
+- new DQN training writes versioned bundles:
+  - `drl/dqn/models/v2/<ticker>/r<round>/<run_id>/`
+- each bundle must carry:
+  - `checkpoint.pt`
+  - `manifest.json`
+  - `train_config.json`
+  - `feature_spec.json`
+  - `episode_metrics.csv`
+  - `train.log`
+- DQN backtesting is bundle/spec driven and emits positions only
+- final metrics remain owned by the unified baseline/backtest stack
+- old Forex checkpoints under `drl/dqn/models/walkforward/` are `v0` compatibility artifacts, not v2 evidence
+
+Future agents should not compare old `v0` checkpoint results against new v2
+features without retraining, because the state input distribution changed.

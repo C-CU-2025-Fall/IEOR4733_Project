@@ -35,11 +35,11 @@ Example:
 
 ```bash
 python drl_shared/prepare_features.py --asset Forex --round 1
-python drl_shared/prepare_features.py --ticker AN --round 1
+python drl_shared/prepare_features.py --ticker AN --round 1 --model-version v2
 ```
 
 Output:
-- `drl/features/contract_rounds/<ticker>/r<k>.npz`
+- `drl/features/v2/<ticker>/r<k>.npz`
 
 Stored fields:
 - `prices`
@@ -49,23 +49,39 @@ Stored fields:
 - `dates`
 - `source`
 - round metadata
+- `model_version`
+- `state_spec_version`
+- serialized `feature_spec`
 
 ### 2) Train one DQN model per contract
 
 Example:
 
 ```bash
-python drl/dqn/train/train_dqn_walkforward.py --ticker AN --round 1 --episodes 50
+python drl/dqn/train/train_dqn_walkforward.py --ticker AN --round 1 --episodes 50 --device cpu --model-version v2
 ```
 
 Inputs:
 - prepared shared feature file for that ticker/round
 
 Outputs:
-- checkpoint:
-  - `drl/dqn/models/contract_rounds/dqn/<ticker>/r<k>.pt`
-- logs:
-  - `logs/rl/dqn/<ticker>/r<k>/<run_id>/`
+- versioned model bundle:
+  - `drl/dqn/models/v2/<ticker>/r<k>/<run_id>/`
+- required bundle files:
+  - `checkpoint.pt`
+  - `manifest.json`
+  - `train_config.json`
+  - `feature_spec.json`
+  - `episode_metrics.csv`
+  - `train.log`
+
+Compatibility note:
+- the current Forex GPU checkpoints are retained under the older path:
+  - `drl/dqn/models/walkforward/<ticker>_r<k>.pt`
+- those Forex checkpoints are `v0` compatibility artifacts, not active v2 evidence
+- those checkpoints are still per-contract models; their checkpoint format
+  uses a single FC Q-head (`q` / `t`) rather than the newer dueling-head format
+  (`q_net` / `target_net`)
 
 ### 3) Run unified backtests
 
@@ -74,13 +90,13 @@ Global baseline-owned CLI:
 ```bash
 python run_strategy_backtest.py --strategy Long --asset Forex
 python run_strategy_backtest.py --strategy MACD --asset Forex
-python run_strategy_backtest.py --strategy DQN --asset Forex
+python run_strategy_backtest.py --strategy DQN --asset Forex --model-version v2 --progress
 ```
 
 DQN adapter CLI:
 
 ```bash
-python drl/dqn/backtest/backtest_dqn_walkforward.py --strategy DQN --asset Forex
+python drl/dqn/backtest/backtest_dqn_walkforward.py --strategy DQN --asset Forex --model-version v2 --progress
 ```
 
 Important:
@@ -93,6 +109,9 @@ Important:
 - default `sigma_tgt = 0.058`
 - state window: `60`
 - feature dimension: `8`
+- active state spec: `v2_ewma60_close_deviation`
+- close-price feature:
+  - `(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))`
 - return-feature horizons: `21 / 42 / 63 / 252`
 - return-feature vol normalization: `EWMA(60)` on additive `r_t`
 - MACD feature normalization: `63`-window volatility
@@ -120,9 +139,11 @@ Important:
 - DQN inference adapter:
   - `drl/dqn/backtest/engine.py`
 
-## What Is Not Done Yet
+## Current Training Status
 
-- no GPU training run has been executed in this refactored pipeline yet
+- v2 infrastructure is implemented; full v2 training is not assumed complete
+- old Forex GPU walk-forward checkpoints exist for 9 contracts x 2 rounds as `v0` compatibility artifacts
+- local machines without `torch` can inspect metadata but cannot run DQN inference/training
 - no PG folder yet
 - no A2C folder yet
 - no top-level DRL experiment registry yet
@@ -132,8 +153,9 @@ Important:
 ```bash
 python tests/run_structural_38.py --table 3
 python run_strategy_backtest.py --strategy Long --asset Forex
-python drl_shared/prepare_features.py --ticker AN --round 1
+python drl_shared/prepare_features.py --ticker AN --round 1 --model-version v2
 python drl/dqn/tests/verify_shared_dqn.py --asset Forex --round 1 --ticker AN --require-prepared
+python -m unittest tests.test_drl_v2
 ```
 
 These cover:

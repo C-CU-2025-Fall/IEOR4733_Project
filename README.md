@@ -56,10 +56,29 @@ Current highest-priority suspicious paper cells / transitions:
 - [drl/dqn/README.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/drl/dqn/README.md)
 
 Use this as the teammate handoff note for:
-- shared feature preparation
-- DQN training / checkpoints / logs
+- shared versioned feature preparation
+- DQN training / versioned checkpoint bundles
 - unified backtesting commands
 - current DRL folder responsibilities
+
+Current DRL v2 commands:
+
+```bash
+# Prepare v2 shared features
+python drl_shared/prepare_features.py --ticker AN --round 1 --model-version v2
+
+# Train one v2 DQN bundle for one contract / round
+python drl/dqn/train/train_dqn_walkforward.py --ticker AN --round 1 --episodes 50 --device cpu --model-version v2
+
+# Backtest DQN through the unified backtester; DQN only emits positions
+python run_strategy_backtest.py --strategy DQN --asset Forex --model-version v2 --progress
+```
+
+DRL v2 state-space note:
+- `feature 0` is now causal EWMA60 close deviation:
+  - `(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))`
+- old full-sample close z-score is not the active v2 spec
+- old Forex checkpoints are historical `v0` compatibility artifacts unless retrained into a v2 bundle
 
 ## Eq.4, Sleeve Wealth, and Unified Backtest
 
@@ -110,33 +129,13 @@ Preview:
 
 ## DQN Walk-Forward Status
 
-Per-contract independent DQN models (LSTM[64,32] + Dueling Double DQN).
+The active DRL code is now v2 infrastructure, not a completed v2 training result.
 
-**Training**: 9 Forex contracts × 2 rounds = 18 models (50ep, patience=3)
-
-**TC Fix (2026-04-23)**: Transaction cost now uses separate vol_scales:
-- Current position: `σ_tgt / σ_{t-1}`
-- Previous position: `σ_tgt / σ_{t-2}`
-- Previously both used the same `σ_{t-1}`, causing TC overestimation
-- Fix in `drl_shared/state_space.py:compute_eq4_reward()`
-
-**Early Stopping**: Added per-episode check with patience param (`--early-stop 3`)
-
-**Forex DQN Walk-Forward Results (2011-2019, σ_tgt=0.058)**:
-
-| Metric | DQN | Paper | Error | ≤15% |
-|--------|-----|-------|-------|------|
-| E(R) | -0.397 | -0.198 | 100.5% | ❌ |
-| std(R) | 0.435 | 0.472 | 7.8% | ✅ |
-| DD | 0.306 | 0.285 | 7.4% | ✅ |
-| Sharpe | -0.913 | -0.420 | 117.4% | ❌ |
-| Sortino | -1.298 | -0.696 | 86.5% | ❌ |
-| MDD | 0.435 | 0.219 | 98.6% | ❌ |
-| Calmar | -0.125 | -0.101 | 23.8% | ❌ |
-| % +ve | 0.478 | 0.491 | 2.6% | ✅ |
-| Ave P/L | 0.932 | 0.966 | 3.5% | ✅ |
-
-**4/9 metrics within 15%**. std(R), DD, % +ve, Ave P/L aligned. E(R) still too negative → cascading into Sharpe/Sortino/MDD.
+- training unit: one DQN model per contract per retrain round
+- model artifact: versioned bundle under `drl/dqn/models/v2/<ticker>/r<round>/<run_id>/`
+- bundle source of truth: `manifest.json`
+- backtest path: bundle checkpoint -> batched position inference -> unified baseline backtester
+- old Forex checkpoints remain readable as `v0` compatibility artifacts, but are not v2 evidence
 
 ## Latest Alignment Snapshot
 

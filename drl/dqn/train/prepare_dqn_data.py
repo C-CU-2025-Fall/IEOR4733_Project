@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper for single-contract DQN data preparation."""
+"""Deprecated compatibility wrapper for global shared DRL feature preparation."""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +14,7 @@ from drl.dqn.train.prepare_dqn_walkforward import (
     prepare_contract_round_features as prepare_contract_round_data,
     prepare_round_features as prepare_round,
 )
-from drl_shared.spec import RETRAIN_ROUNDS
+from drl_shared.spec import ACTIVE_FEATURE_VERSION, RETRAIN_ROUNDS
 
 
 if __name__ == "__main__":
@@ -22,8 +22,9 @@ if __name__ == "__main__":
     parser.add_argument("--asset", default="All", help='Asset universe or "All"')
     parser.add_argument("--ticker", default=None)
     parser.add_argument("--round", type=int, default=1, choices=sorted(RETRAIN_ROUNDS))
+    parser.add_argument("--model-version", default=ACTIVE_FEATURE_VERSION)
     args = parser.parse_args()
     if args.ticker:
-        prepare_contract_round_data(args.ticker.upper(), args.round)
+        prepare_contract_round_data(args.ticker.upper(), args.round, model_version=args.model_version)
     else:
-        prepare_round(args.asset, args.round)
+        prepare_round(args.asset, args.round, model_version=args.model_version)
