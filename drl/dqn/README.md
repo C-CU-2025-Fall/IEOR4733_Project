@@ -120,6 +120,15 @@ The shared reward helper follows the current Eq.4-style trade-return convention:
   - `sigma_tgt / sigma_t`
 - transaction cost with raw `p_{t-1}`
 
+**TC uses separate vol_scales (fixed 2026-04-23)**:
+
+At time `t`, the position change being costed is `Δ(pos_{t-1}, pos_{t-2})`:
+- `pos_{t-1} = A_{t-1} × σ_tgt / σ_{t-1}` (current)
+- `pos_{t-2} = A_{t-2} × σ_tgt / σ_{t-2}` (previous)
+- `TC = bp × p_{t-1} × |pos_{t-1} - pos_{t-2}|`
+
+`ContractEnv` tracks `last_sigma` to provide `σ_{t-2}` across steps.
+
 Final portfolio evaluation does **not** happen here.
 
 Final metrics are computed by the unified baseline/backtest stack, which owns:

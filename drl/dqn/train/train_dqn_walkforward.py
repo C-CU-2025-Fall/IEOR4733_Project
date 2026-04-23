@@ -47,7 +47,7 @@ def load_contract_round(ticker: str, round_num: int) -> ContractArrays:
     )
 
 
-def train_contract_round(ticker: str, round_num: int, episodes: int = EPISODES) -> tuple[Path, Path]:
+def train_contract_round(ticker: str, round_num: int, episodes: int = EPISODES, early_stop_patience: int = 0) -> tuple[Path, Path]:
     ticker = ticker.upper()
     round_info = RETRAIN_ROUNDS[round_num]
     contract = load_contract_round(ticker, round_num)
@@ -71,12 +71,21 @@ def train_contract_round(ticker: str, round_num: int, episodes: int = EPISODES) 
     report_interval = max(1, episodes // 10)
     global_step = 0
     episode_rows = []
+
+    # Early stopping state
+    best_avg = -np.inf
+    best_state = None
+    best_ep = 0
+    patience_counter = 0
+
     logger.log(f"{'=' * 70}")
     logger.log(f"DQN Training — {ticker} — {round_name(round_num)}")
     logger.log(f"Train: {round_info['train_start']} ~ {round_info['train_end']}")
     logger.log(f"Test : {round_info['test_start']} ~ {round_info['test_end']}")
     logger.log(f"Source: {contract.source} | Train days: {len(contract.prices)} | Device: {DEVICE}")
     logger.log("Architecture: LSTM[64,32] + Leaky-ReLU + Fixed Q-targets + Double DQN + Dueling DQN")
+    if early_stop_patience > 0:
+        logger.log(f"Early Stop: patience={early_stop_patience}")
     logger.log(f"{'=' * 70}")
 
     for ep in range(episodes):
@@ -107,6 +116,19 @@ def train_contract_round(ticker: str, round_num: int, episodes: int = EPISODES) 
         }
         episode_rows.append(row)
 
+        # Early stopping: check every episode
+        if early_stop_patience > 0:
+            if total_reward > best_avg:
+                best_avg = total_reward
+                best_state = {k: v.clone() for k, v in agent.q_net.state_dict().items()}
+                best_ep = ep + 1
+                patience_counter = 0
+            else:
+                patience_counter += 1
+                if patience_counter >= early_stop_patience:
+                    logger.log(f"Early stop @ ep{ep + 1} (best={best_avg:+.2f} @ ep{best_ep})")
+                    break
+
         if (ep + 1) % report_interval == 0:
             elapsed = time.time() - t0
             logger.log(
@@ -114,6 +136,12 @@ def train_contract_round(ticker: str, round_num: int, episodes: int = EPISODES) 
                 f"steps={steps} epsilon={row['epsilon_end']:.4f} "
                 f"loss={last_loss:.6f} ({elapsed:.0f}s)"
             )
+
+    # Restore best model if early stopped
+    if best_state is not None and patience_counter >= early_stop_patience:
+        agent.q_net.load_state_dict(best_state)
+        agent.target.load_state_dict(best_state)
+        logger.log(f"Restored best model (ep={best_ep})")
 
     out_path = contract_model_path(round_num, ticker, algorithm="dqn")
     agent.save(out_path, metadata=metadata)
@@ -129,6 +157,7 @@ if __name__ == "__main__":
     parser.add_argument("--ticker", required=True)
     parser.add_argument("--round", type=int, required=True, choices=sorted(RETRAIN_ROUNDS))
     parser.add_argument("--episodes", type=int, default=EPISODES)
+    parser.add_argument("--early-stop", type=int, default=0, help="Early stopping patience (0=disabled)")
     args = parser.parse_args()
 
-    train_contract_round(args.ticker, args.round, args.episodes)
+    train_contract_round(args.ticker, args.round, args.episodes, early_stop_patience=args.early_stop)

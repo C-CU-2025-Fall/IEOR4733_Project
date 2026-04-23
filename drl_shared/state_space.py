@@ -104,16 +104,29 @@ def compute_eq4_reward(
     prev_action: float,
     sigma_tgt: float = SIGMA_TGT_DEFAULT,
     bp: float = BP,
+    prev_sigma: float | None = None,
 ) -> tuple[float, float, float, float]:
-    """Paper Eq.4 reward for one step."""
+    """Paper Eq.4 reward for one step.
+
+    TC uses σ_{t-1} for current position and σ_{t-2} for previous position.
+    At time t, action A_{t-1} was decided based on r_t, so:
+      vol_scale_current = σ_tgt / σ_{t-1}
+      vol_scale_prev    = σ_tgt / σ_{t-2}  (from prev_sigma)
+    """
     if idx <= 0 or idx >= len(returns):
         return 0.0, 0.0, 0.0, 0.0
-    sig_prev = sigma[idx - 1]
-    if not np.isfinite(sig_prev) or sig_prev <= 0:
+    sig_t_1 = sigma[idx - 1]
+    if not np.isfinite(sig_t_1) or sig_t_1 <= 0:
         return 0.0, 0.0, 0.0, 0.0
-    vol_scale = sigma_tgt / sig_prev
+    vol_scale = sigma_tgt / sig_t_1
     gross = action * vol_scale * returns[idx]
-    tc = bp * prices[idx - 1] * abs(action * vol_scale - prev_action * vol_scale)
+
+    # TC: use σ_{t-2} for previous position's vol_scale
+    if prev_sigma is not None and np.isfinite(prev_sigma) and prev_sigma > 0:
+        vol_scale_prev = sigma_tgt / prev_sigma
+    else:
+        vol_scale_prev = vol_scale
+    tc = bp * prices[idx - 1] * abs(action * vol_scale - prev_action * vol_scale_prev)
     return gross - tc, gross, tc, vol_scale
 
 
@@ -161,10 +174,12 @@ class ContractEnv:
         self.max_idx = len(self.prices) - 1
         self.idx = WARMUP
         self.last_position = 0.0
+        self.last_sigma = sigma[WARMUP - 1] if WARMUP >= 1 else sigma[0]
 
     def reset(self) -> np.ndarray:
         self.idx = WARMUP
         self.last_position = 0.0
+        self.last_sigma = self.sigma[WARMUP - 1] if WARMUP >= 1 else self.sigma[0]
         return get_feature_window(self.features, self.idx)
 
     def step(self, action_id: int) -> tuple[np.ndarray, float, bool]:
@@ -182,7 +197,9 @@ class ContractEnv:
             self.last_position,
             sigma_tgt=self.sigma_tgt,
             bp=BP,
+            prev_sigma=self.last_sigma,
         )
+        self.last_sigma = self.sigma[self.idx - 1]
         self.last_position = position
         done = self.idx >= self.max_idx - 1
         return get_feature_window(self.features, self.idx), float(reward), done

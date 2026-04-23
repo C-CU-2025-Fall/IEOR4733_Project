@@ -1,5 +1,5 @@
 # PROJECT_MEMORY.md
-# Last updated: 2026-04-22
+# Last updated: 2026-04-23
 
 Read this first when resuming work on this repo.
 
@@ -113,6 +113,7 @@ The branch now uses:
   - shared state/action/retrain/path defaults
 - `drl_shared/state_space.py`
   - shared state + reward construction
+  - **TC fix (2026-04-23)**: `compute_eq4_reward()` now uses `σ_{t-1}` for current position and `σ_{t-2}` for previous position in TC calculation; `ContractEnv` tracks `last_sigma`
 - `drl_shared/prepare_features.py`
   - global shared feature preparation
 - `strategy_backtester.py`
@@ -126,7 +127,7 @@ The branch now uses:
 - `drl/dqn/train/prepare_dqn_walkforward.py`
   - compatibility CLI delegating to global shared feature prep
 - `drl/dqn/train/train_dqn_walkforward.py`
-  - single-contract training + per-run log folders
+  - single-contract training + per-run log folders + early stopping (`--early-stop N`)
 - `drl/dqn/backtest/backtest_dqn_walkforward.py`
   - Table 3 CLI adapter
 - `drl/dqn/backtest/engine.py`
@@ -141,7 +142,7 @@ The branch now uses:
 | Dueling DQN | ✅ Complete | now in retained model |
 | Baseline-unified backtest wiring | ✅ Complete | DQN now routes to `baseline_run.compute_strategy_metrics` |
 | Per-run log folders | ✅ Complete | `logs/rl/<algo>/<ticker>/<round>/<run_id>/` |
-| GPU training run | ⏳ Not started | intentionally deferred |
+| GPU training run | ✅ Forex complete | 9 contracts × 2 rounds, 50ep, patience=3 early stop |
 
 ### Important interpretation
 
@@ -162,6 +163,22 @@ The branch now uses:
   - no DQN-owned metrics / table world
 - future agents should not describe the current DQN path as a shared-model
   implementation unless that design is intentionally reintroduced
+
+### Forex Walk-Forward Backtest (2026-04-23)
+
+18 models (9 contracts × 2 rounds), 50ep, early_stop_patience=3.
+σ_tgt=0.058, test period 2011-2019.
+
+**4/9 metrics within 15%**:
+- ✅ std(R): 0.435 vs 0.472 (7.8%)
+- ✅ DD: 0.306 vs 0.285 (7.4%)
+- ✅ % +ve: 0.478 vs 0.491 (2.6%)
+- ✅ Ave P/L: 0.932 vs 0.966 (3.5%)
+
+Still off:
+- ❌ E(R): -0.397 vs -0.198 (100.5%) — too negative, cascading into Sharpe/Sortino/MDD
+
+Remaining asset classes (Commodity, Equity Index, Fixed Income) not yet trained.
 ### Archived comparison lines
 
 1. **Archived same-rule candidate**

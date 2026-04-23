@@ -108,6 +108,36 @@ Preview:
 
 ![Structural-38 trade-world paper-style A4](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/structural38_trade_tables_paper_style_a4.png)
 
+## DQN Walk-Forward Status
+
+Per-contract independent DQN models (LSTM[64,32] + Dueling Double DQN).
+
+**Training**: 9 Forex contracts × 2 rounds = 18 models (50ep, patience=3)
+
+**TC Fix (2026-04-23)**: Transaction cost now uses separate vol_scales:
+- Current position: `σ_tgt / σ_{t-1}`
+- Previous position: `σ_tgt / σ_{t-2}`
+- Previously both used the same `σ_{t-1}`, causing TC overestimation
+- Fix in `drl_shared/state_space.py:compute_eq4_reward()`
+
+**Early Stopping**: Added per-episode check with patience param (`--early-stop 3`)
+
+**Forex DQN Walk-Forward Results (2011-2019, σ_tgt=0.058)**:
+
+| Metric | DQN | Paper | Error | ≤15% |
+|--------|-----|-------|-------|------|
+| E(R) | -0.397 | -0.198 | 100.5% | ❌ |
+| std(R) | 0.435 | 0.472 | 7.8% | ✅ |
+| DD | 0.306 | 0.285 | 7.4% | ✅ |
+| Sharpe | -0.913 | -0.420 | 117.4% | ❌ |
+| Sortino | -1.298 | -0.696 | 86.5% | ❌ |
+| MDD | 0.435 | 0.219 | 98.6% | ❌ |
+| Calmar | -0.125 | -0.101 | 23.8% | ❌ |
+| % +ve | 0.478 | 0.491 | 2.6% | ✅ |
+| Ave P/L | 0.932 | 0.966 | 3.5% | ✅ |
+
+**4/9 metrics within 15%**. std(R), DD, % +ve, Ave P/L aligned. E(R) still too negative → cascading into Sharpe/Sortino/MDD.
+
 ## Latest Alignment Snapshot
 
 Current retained trade-world snapshot:
