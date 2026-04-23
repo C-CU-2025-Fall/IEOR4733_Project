@@ -142,17 +142,40 @@ The branch now uses:
 | Dueling DQN | ✅ Complete | now in retained model |
 | Baseline-unified backtest wiring | ✅ Complete | DQN now routes to `baseline_run.compute_strategy_metrics` |
 | Per-run log folders | ✅ Complete | `logs/rl/<algo>/<ticker>/<round>/<run_id>/` |
-| GPU training run | ✅ Forex complete | 9 contracts × 2 rounds, 50ep, patience=3 early stop |
+| GPU training run | ✅ FI+FX complete | v2.1 STRUCTURAL_38, 50ep, patience=3, σ=0.058 |
 
 ### Important interpretation
 
 - the state schema is shared across DQN / PG / A2C
 - model weights are not shared across contracts
 - checkpoints are expected under:
-  - `drl/dqn/models/contract_rounds/dqn/<ticker>/r<k>.pt`
-- retained Forex GPU checkpoints currently also exist under the older path:
-  - `drl/dqn/models/walkforward/<ticker>_r<k>.pt`
-- DQN status/backtest code resolves both paths, preferring `contract_rounds`
+  - `drl/dqn/models/v2.1/<ticker>/r<round>/<run_id>/`
+- preset support: `--preset structural_38` propagates overrides + exclusions through pipeline
+- manifest.json records: preset, sigma_tgt, feature_spec, model_version
+
+### v2.1 DQN Results (2026-04-23)
+
+**Long-only baseline (STRUCTURAL_38, σ=0.058):**
+- Trade metrics: 28/28 (7/7 per asset) — **perfect alignment**
+- Path metrics: 2/8
+- Total: 30/36
+
+**DQN v2.1 (50ep, patience=3):**
+- Forex: 4/9 (MDD ✅ Calmar ✅ % +ve ✅ Ave P/L ✅)
+- Fixed Income: 1/9 (Ave P/L ✅)
+- **Root cause**: DQN action=0 (no position) 69% of time; model avoids TC by not trading
+
+**Feature normalization experiments:**
+- v0: full-sample z-score, std=1.02 → best alignment but has lookahead bias
+- v2: EWMA_std(r)*√60, std=0.48 → causal, moderate alignment
+- v3: EWMA_std(p)*√252, std=0.06 → too flat, signal destroyed
+- See docs/feature0_comparison.png
+
+**Next steps:**
+- Increase episodes (200+) so DQN learns "trading > not trading" in trending markets
+- Consider reward shaping to penalize excessive inaction
+- Train EQ + Commodity with v2.1 + STRUCTURAL_38
+- Backtest engine should read preset from manifest.json automatically
   when available
 - this is a path / checkpoint-head compatibility issue only:
   - the retained Forex checkpoints are still one model per contract per round

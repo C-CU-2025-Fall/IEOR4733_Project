@@ -129,13 +129,30 @@ Preview:
 
 ## DQN Walk-Forward Status
 
-The active DRL code is now v2 infrastructure, not a completed v2 training result.
+The active DRL code uses **v2.1** infrastructure with STRUCTURAL_38 preset.
 
 - training unit: one DQN model per contract per retrain round
-- model artifact: versioned bundle under `drl/dqn/models/v2/<ticker>/r<round>/<run_id>/`
-- bundle source of truth: `manifest.json`
+- model artifact: versioned bundle under `drl/dqn/models/v2.1/<ticker>/r<round>/<run_id>/`
+- bundle source of truth: `manifest.json` (includes preset, sigma_tgt, feature_spec)
 - backtest path: bundle checkpoint -> batched position inference -> unified baseline backtester
-- old Forex checkpoints remain readable as `v0` compatibility artifacts, but are not v2 evidence
+- preset support: `--preset structural_38` propagates source_overrides + exclusions through features, training, and backtest
+- parallel training: `scripts/train_v2.1_quick.py` (ProcessPoolExecutor, 8 workers)
+
+### Key Findings (2026-04-23)
+
+- **Long-only baseline (STRUCTURAL_38, σ=0.058)**: Trade metrics **28/28** (7/7 per asset), Total **30/36** with path metrics
+- **DQN v2.1 (50ep, patience=3, σ=0.058)**:
+  - Forex: 4/9 (MDD ✅ Calmar ✅ % +ve ✅ Ave P/L ✅)
+  - Fixed Income: 1/9 (Ave P/L ✅ only)
+  - **Root cause**: DQN selects action=0 (no position) ~69% of the time — model learns that not trading avoids TC losses
+- **Feature normalization comparison**: v0 (full-sample z-score) > v2 (EWMA_std(r)*√60) > v3 (EWMA_std(p)*√252)
+  - See `docs/feature0_comparison.png` for visualization
+- **Version history**: v0 (Forex only) → v2 (all 50 contracts) → v2.1 (STRUCTURAL_38 preset) → v3 (experiment, worse)
+
+### Next Steps
+- Increase training episodes (200+) to let DQN explore beyond "don't trade"
+- Consider reward shaping to penalize excessive inaction
+- Train remaining asset classes (Equity Index, Commodity) with v2.1 + STRUCTURAL_38
 
 ## Latest Alignment Snapshot
 
