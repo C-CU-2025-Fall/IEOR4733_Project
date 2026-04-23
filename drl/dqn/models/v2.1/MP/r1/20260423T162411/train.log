@@ -1,0 +1,15 @@
+======================================================================
+DQN Training — MP — r1
+Train: 2005-01-01 ~ 2010-12-31
+Test : 2011-01-01 ~ 2015-12-31
+Source: RAD_REGEN | Train days: 1509 | Device: cuda
+Model bundle: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/v2.1/MP/r1/20260423T162411
+State spec: v2_ewma60_close_deviation
+Architecture: LSTM[64,32] + Leaky-ReLU + Fixed Q-targets + Double DQN + Dueling DQN
+Early Stop: patience=3
+======================================================================
+ep 5/50 reward=-11.6871 steps=1255 epsilon=0.2686 loss=0.002120 (76s)
+Early stop @ ep7 (best=-10.33 @ ep4)
+Restored best model (ep=4)
+Saved checkpoint: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/v2.1/MP/r1/20260423T162411/checkpoint.pt
+Saved logs: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/v2.1/MP/r1/20260423T162411

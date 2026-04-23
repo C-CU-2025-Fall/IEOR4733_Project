@@ -11,7 +11,14 @@ venv/
 # Data files — CLC futures data committed to repo
 data/futures/
 data/futures_processed/
-models/
+
+# Old model format (v0)
+models/dqn/*.pt
+
+# Track v0 walkforward and v2+ versioned models
+!models/dqn_walkforward/
+!models/dqn_walkforward/**
+!drl/dqn/models/
 
 # Logs
 *.log

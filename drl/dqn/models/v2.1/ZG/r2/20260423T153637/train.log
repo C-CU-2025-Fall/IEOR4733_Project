@@ -1,0 +1,10 @@
+======================================================================
+DQN Training — ZG — r2
+Train: 2005-01-01 ~ 2015-12-31
+Test : 2016-01-01 ~ 2019-12-31
+Source: RAD_REGEN | Train days: 2772 | Device: cuda
+Model bundle: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/v2.1/ZG/r2/20260423T153637
+State spec: v2_ewma60_close_deviation
+Architecture: LSTM[64,32] + Leaky-ReLU + Fixed Q-targets + Double DQN + Dueling DQN
+Early Stop: patience=5
+======================================================================
