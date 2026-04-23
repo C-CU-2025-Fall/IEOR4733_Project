@@ -1,16 +1,15 @@
-# IEOR4733_Project — Current Active Line
+# IEOR4733_Project
 
-Reproduction workspace for Zhang, Zohren, Roberts (2019), now reduced to the
-current active line:
+Reproduction workspace for Zhang, Zohren, Roberts (2019).
 
-- one current runtime baseline
-- one trade-world structural reference
-- one retained experimental `41/45` upper-bound reproducer
-- one data-issues note
-- one suspicious-paper-cells note
+The repo now has one active interpretation:
 
-Historical search waves and abandoned exploration branches are intentionally no
-longer narrated here. They remain in:
+- baseline = `structural_38` long-only line
+- DRL/DQN uses the same data doctrine
+- one unified backtester computes all final metrics
+- old versioned DQN artifact families are archive-only, not mainline
+
+Historical search waves and abandoned branches live in:
 - [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md)
 
 Paper:
@@ -19,256 +18,155 @@ Paper:
 ## Main Commands
 
 ```bash
-pip install numpy pandas yfinance
-
-# Current runtime baseline
+# Baseline references
 python baseline_run.py --table 3 --all-metrics --sigma 0.058
-
-# Current trade-world structural reference
 python tests/run_structural_38.py --table 3
 python tests/run_structural_38.py --table both
 python tests/run_structural_38.py --table 3 --with-path-metrics
 
-# Retained experimental upper-bound reproducer
-python tests/run_legacy_41.py
+# Unified backtester
+python run_strategy_backtest.py --strategy Long --asset Forex
+python run_strategy_backtest.py --strategy DQN --asset Forex
+python run_strategy_backtest.py --strategy DQN --asset "Fixed Income"
+
+# DRL feature prep and training
+python drl_shared/prepare_features.py --ticker AN --round 1
+python drl/dqn/train/train_dqn_walkforward.py --ticker AN --round 1 --episodes 50 --device cpu
 ```
 
-## Current References
+## Current Baseline
 
-### Data Issues
-- [docs/data_issues.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/data_issues.md)
+`tests/run_structural_38.py` is the authoritative reproducible baseline.
 
-This is the main current note for:
-- problematic contract batches
-- the modified structural-38 working variant
-- trade-world-only alignment for the four asset classes
+It locks:
+- `STRUCTURAL_38_OVERRIDES`
+- `STRUCTURAL_38_EXCLUDED`
+- the current trade-world baseline interpretation
 
-### Suspicious Paper Cells
-- [docs/paper_table_suspicious_cells.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/paper_table_suspicious_cells.md)
+This is the baseline we actually compare against for local reproducibility. The
+ideal paper/data world is useful context, but it is not the active benchmark
+for this repo.
 
-Current highest-priority suspicious paper cells / transitions:
-- `Equity Index / Long / DD: 0.606 -> 0.606`
-- `Fixed Income / Long / MDD: 0.108 -> 0.061`
-- `All / Long` risk-adjusted metrics flipping sign
+## DRL Mainline
 
-### DRL Pipeline
-- [docs/drl_pipeline.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/drl_pipeline.md)
-- [drl/dqn/README.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/drl/dqn/README.md)
+DRL now follows the same baseline doctrine as the structural baseline:
 
-Use this as the teammate handoff note for:
-- shared versioned feature preparation
-- DQN training / versioned checkpoint bundles
-- unified backtesting commands
-- current DRL folder responsibilities
+- same `structural_38` source overrides
+- same `structural_38` exclusions
+- same unified backtester
+- no active `v0 / v2 / v2.1 / v3` story
 
-Current DRL v2 commands:
+Current DRL paths:
+- features:
+  - `drl/features/<ticker>/r<round>.npz`
+- DQN bundles:
+  - `drl/dqn/models/<ticker>/r<round>/<run_id>/`
 
-```bash
-# Prepare v2 shared features
-python drl_shared/prepare_features.py --ticker AN --round 1 --model-version v2
+Old directories such as:
+- `drl/dqn/models/walkforward/`
+- `drl/dqn/models/v2.1/`
 
-# Train one v2 DQN bundle for one contract / round
-python drl/dqn/train/train_dqn_walkforward.py --ticker AN --round 1 --episodes 50 --device cpu --model-version v2
+may still exist on disk, but they are archive artifacts and are not resolved by
+the active default path.
 
-# Backtest DQN through the unified backtester; DQN only emits positions
-python run_strategy_backtest.py --strategy DQN --asset Forex --model-version v2 --progress
-```
+## Shared State Space
 
-DRL v2 state-space note:
-- `feature 0` is now causal EWMA60 close deviation:
+Current shared state:
+- `seq_len = 60`
+- `feature_dim = 8`
+- feature 0:
   - `(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))`
-- old full-sample close z-score is not the active v2 spec
-- old Forex checkpoints are historical `v0` compatibility artifacts unless retrained into a v2 bundle
+- features 1-4:
+  - vol-adjusted returns for `21 / 42 / 63 / 252`
+- feature 5:
+  - averaged MACD normalized by 63-day price volatility
+- feature 6:
+  - RSI(30)-style feature
+- feature 7:
+  - volatility ratio
+
+This shared state is meant for `DQN` now, and later `PG / A2C`.
 
 ## Eq.4, Sleeve Wealth, and Unified Backtest
 
-There are three different layers in this repo, and they should not be mixed up.
+Three layers should not be mixed:
 
 **Eq.4 trade-return world**
-
-- uses additive price differences:
+- additive price differences:
   - `r_t = p_t - p_{t-1}`
-- positions are volatility-scaled by:
+- volatility-scaled positions:
   - `sigma_tgt / sigma_t`
-- this is the contract-level return definition used in the active baseline stack
 
 **Sleeve/reporting wealth world**
-
-- when a sleeve-style comparable wealth path is built, initial sleeve capital is normalized as:
+- comparable sleeve wealth can use:
   - `capital0 = p0 * sigma_tgt / sigma0`
-- this normalization is **not** part of Eq.4 itself
-- it belongs to the sleeve/reporting wealth interpretation layer
+- this is not Eq.4 itself
 
 **Current unified backtest**
+- computes all final portfolio metrics, including `MDD` and `Calmar`, from the
+  same simulated portfolio path
 
-- computes all final portfolio metrics, including `MDD` and `Calmar`, from the same simulated portfolio path
-- it is not the old split reporting-path diagnostic world
+## Current References
 
-Important warning:
-
-- old discussions sometimes mixed:
-  - `p0` normalization
-  - sleeve `capital0` normalization
-  - current unified-path `MDD / Calmar`
-- these are not the same thing
-- the current active baseline/backtest path uses the Eq.4 trade-return layer for contract returns and the unified portfolio path for final metrics
-
-### Printable Structural-38 Summary
-- [docs/structural38_trade_tables_paper_style_a4.png](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/structural38_trade_tables_paper_style_a4.png)
-
-This A4 asset shows:
-- Table 3 and Table 2
-- four asset classes only
-- trade-world metrics only
-- no `MDD`
-- no `Calmar`
-
-Preview:
-
-![Structural-38 trade-world paper-style A4](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/structural38_trade_tables_paper_style_a4.png)
-
-## DQN Walk-Forward Status
-
-The active DRL code uses **v2.1** infrastructure with STRUCTURAL_38 preset.
-
-- training unit: one DQN model per contract per retrain round
-- model artifact: versioned bundle under `drl/dqn/models/v2.1/<ticker>/r<round>/<run_id>/`
-- bundle source of truth: `manifest.json` (includes preset, sigma_tgt, feature_spec)
-- backtest path: bundle checkpoint -> batched position inference -> unified baseline backtester
-- preset support: `--preset structural_38` propagates source_overrides + exclusions through features, training, and backtest
-- parallel training: `scripts/train_v2.1_quick.py` (ProcessPoolExecutor, 8 workers)
-
-### Key Findings (2026-04-23)
-
-- **Long-only baseline (STRUCTURAL_38, σ=0.058)**: Trade metrics **28/28** (7/7 per asset), Total **30/36** with path metrics
-- **DQN v2.1 (50ep, patience=3, σ=0.058)**:
-  - Forex: 4/9 (MDD ✅ Calmar ✅ % +ve ✅ Ave P/L ✅)
-  - Fixed Income: 1/9 (Ave P/L ✅ only)
-  - **Root cause**: DQN selects action=0 (no position) ~69% of the time — model learns that not trading avoids TC losses
-- **Feature normalization comparison**: v0 (full-sample z-score) > v2 (EWMA_std(r)*√60) > v3 (EWMA_std(p)*√252)
-  - See `docs/feature0_comparison.png` for visualization
-- **Version history**: v0 (Forex only) → v2 (all 50 contracts) → v2.1 (STRUCTURAL_38 preset) → v3 (experiment, worse)
-
-### Next Steps
-- Increase training episodes (200+) to let DQN explore beyond "don't trade"
-- Consider reward shaping to penalize excessive inaction
-- Train remaining asset classes (Equity Index, Commodity) with v2.1 + STRUCTURAL_38
+- data issues:
+  - [docs/data_issues.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/data_issues.md)
+- suspicious paper cells:
+  - [docs/paper_table_suspicious_cells.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/paper_table_suspicious_cells.md)
+- DRL pipeline handoff:
+  - [docs/drl_pipeline.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/drl_pipeline.md)
+- DQN folder README:
+  - [drl/dqn/README.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/drl/dqn/README.md)
+- printable A4 structural summary:
+  - [docs/structural38_trade_tables_paper_style_a4.png](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/structural38_trade_tables_paper_style_a4.png)
 
 ## Latest Alignment Snapshot
 
-Current retained trade-world snapshot:
+Current active structural-38 long-only baseline:
 
-- source overrides:
-  - `CC: RAD_REGEN`
-  - `DT: RAD`
-  - `JO: RAD_REGEN`
-  - `LB: RAD`
-  - `ZH: RAD_REGEN`
-- excluded:
-  - `FB`
-  - `ZA`
+- trade-world `<=15%`:
+  - `28/28`
+- unified-path total:
+  - `30/36`
 
-Trade-world metrics only:
+### Long-Only Progress Table
+
+This is the current active progress anchor for the repo.
+
+| Scope | Setting | Result |
+| --- | --- | --- |
+| Baseline | `structural_38` long-only, trade-world Table 3 | `28/28` at `<=15%` |
+| Baseline + path metrics | `structural_38` long-only, unified backtest Table 3 | `30/36` at `<=15%` |
+| Current interpretation | reproducible local baseline | active mainline |
+
+Current long-only structural-38 Table 3 trade-world comparison:
+
+| Asset | Ours | Paper | `%Err` |
+| --- | --- | --- | --- |
+| Commodity | `-0.263, +0.385, +0.260, -0.683, -1.009, +0.491, +0.925` | `-0.298, +0.412, +0.258, -0.723, -1.152, +0.473, +0.987` | `11.8, 6.6, 1.0, 5.5, 12.4, 3.9, 6.2` |
+| Equity Index | `+0.541, +0.868, +0.682, +0.624, +0.794, +0.547, +0.920` | `+0.504, +0.928, +0.606, +0.543, +0.831, +0.541, +0.928` | `7.4, 6.5, 12.6, 14.8, 4.5, 1.2, 0.9` |
+| Fixed Income | `+0.568, +0.889, +0.590, +0.639, +0.962, +0.533, +0.974` | `+0.605, +0.939, +0.561, +0.645, +1.081, +0.515, +1.048` | `6.2, 5.4, 5.2, 1.0, 11.0, 3.4, 7.0` |
+| Forex | `-0.179, +0.438, +0.282, -0.409, -0.635, +0.490, +0.972` | `-0.198, +0.472, +0.285, -0.420, -0.696, +0.491, +0.966` | `9.6, 7.3, 1.0, 2.6, 8.8, 0.1, 0.6` |
+
+Metric order:
 - `E(R), std(R), DD, Sharpe, Sortino, % +ve, Ave P/L`
-- no `MDD`
-- no `Calmar`
-- no `All`
 
-**Table 3**
+Current long-only structural-38 Table 3 unified-path extension:
 
-| Asset | Contracts | `<=10 / 7` | `<=15 / 7` |
-| --- | ---: | ---: | ---: |
-| Commodity | 24 | 5 | 7 |
-| Equity Index | 11 | 5 | 7 |
-| Fixed Income | 4 | 6 | 7 |
-| Forex | 9 | 7 | 7 |
+| Asset | MDD / Calmar Ours | MDD / Calmar Paper | `%Err` |
+| --- | --- | --- | --- |
+| Commodity | `+0.127, -0.090` | `+0.248, -0.130` | `48.8, 30.5` |
+| Equity Index | `+0.112, +0.368` | `+0.127, +0.466` | `11.5, 21.0` |
+| Fixed Income | `+0.214, +0.444` | `+0.108, +0.455` | `98.0, 2.3` |
+| Forex | `+0.259, -0.084` | `+0.219, -0.101` | `18.4, 17.0` |
 
-- Total:
-  - `<=10: 23/28`
-  - `<=15: 28/28`
-
-**Table 2**  
-`port_vol_target=0.97`, `bridge=rolling252_lagged`
-
-| Asset | Contracts | `<=10 / 7` | `<=15 / 7` |
-| --- | ---: | ---: | ---: |
-| Commodity | 24 | 7 | 7 |
-| Equity Index | 11 | 5 | 5 |
-| Fixed Income | 4 | 5 | 6 |
-| Forex | 9 | 7 | 7 |
-
-- Total:
-  - `<=10: 24/28`
-  - `<=15: 25/28`
-
-Most suspicious remaining paper-side cells in this snapshot:
+Most suspicious remaining paper-side cells:
 - `Equity Index / Table 2 / DD: 0.606`
 - `Equity Index / Table 2 / Sortino: 1.102`
 - `Fixed Income / Table 2 / Sortino: 1.180`
 
-## Structural-38 Trade-World Reference
+## 41/45 Status
 
-`tests/run_structural_38.py` is the preferred current trade-world reference.
-
-It intentionally prints only:
-- `E(R)`
-- `std(R)`
-- `DD`
-- `Sharpe`
-- `Sortino`
-- `% +ve`
-- `Ave P/L`
-
-It intentionally does **not** print:
-- `MDD`
-- `Calmar`
-
-This keeps the structural reference focused on the current trade-world
-comparison, without mixing in the unresolved reporting-world disputes.
-
-If you need the same structural-38 data/source preset but want to inspect
-portfolio-path `MDD` / `Calmar` from the current unified backtest stack, use:
-- `python tests/run_structural_38.py --table 3 --with-path-metrics`
-
-Important distinction:
-- old bridge / reporting-path experiments could compute `MDD` / `Calmar` on a
-  separate reporting-world path
-- current unified backtest computes all 9 metrics from the same simulated
-  portfolio path
-- therefore `--with-path-metrics` is **not** a resurrection of the old
-  reporting-path diagnostic world; it is the current one-path backtest view
-
-## 41/45 Retained Status
-
-`41/45` is retained only as an **experimental upper-bound reproducer**.
-
-Keep/use:
+`41/45` is retained only as an experimental upper-bound reproducer:
 - [tests/run_legacy_41.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/run_legacy_41.py)
-- [frontier_presets.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/frontier_presets.py)
 
-Do not read it as the current promoted mainline interpretation.
-
-## Attribution
-
-The 50-contract attribution base is intentionally preserved in compressed form:
-
-- runner:
-  - [tests/er_attribution_analysis.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/er_attribution_analysis.py)
-- machine-readable base:
-  - [docs/contract_version_matrix_master.csv](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/contract_version_matrix_master.csv)
-
-Older attribution markdown outputs remain in the repo as archive-level material,
-but are no longer part of the main README narrative.
-
-## Notes
-
-- `README` is now minimal operational documentation.
-- Backtesting/metrics are baseline-owned (`baseline_run.py`) for all strategies.
-- DRL shared modules live in `drl_shared/`; DQN-only code lives in `drl/dqn/`.
-- Shared feature prep command: `python drl_shared/prepare_features.py --asset Forex --round 1`
-- Global strategy backtest command: `python run_strategy_backtest.py --strategy Long --asset Forex`
-- DQN adapter backtest command: `python drl/dqn/backtest/backtest_dqn_walkforward.py --strategy Long --asset Forex`
-- `run_strategy_backtest.py` defaults to no exclusions unless you pass `--exclude-contracts`
-- teammate handoff note: [docs/drl_pipeline.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/drl_pipeline.md)
-- Historical search logic, abandoned directions, and legacy score narratives live
-  only in [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md).
+It is not part of the active baseline or active DRL interpretation.

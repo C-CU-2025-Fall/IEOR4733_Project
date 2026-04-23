@@ -3,766 +3,129 @@
 
 Read this first when resuming work on this repo.
 
----
-
 ## 0. Current Truth
 
-The repo presentation is now intentionally split into two layers:
+The repo now has one active interpretation:
 
-- `README.md`
-  - minimal operational documentation only
-- `PROJECT_MEMORY.md`
-  - all abandoned search history
-  - retained upper-bound context
-  - archived exploration lines
-
-The active repo story is now:
-
-1. **Live baseline**
-- command:
-  - `python baseline_run.py --table 3 --all-metrics --sigma 0.058`
-- current score:
-  - `<=10 25/45`
-  - `<=15 31/45`
-
-2. **Trade-world structural reference**
-- command:
-  - `python tests/run_structural_38.py --table 3`
-  - `python tests/run_structural_38.py --table 3 --with-path-metrics`
-- purpose:
-  - current trade-world-only reference
-  - excludes `MDD` / `Calmar`
-
-Baseline simplification status (locked):
-- one baseline computation stack
-- one backtesting/metric stack
-- model layers (e.g. `drl/dqn/`) only emit positions
-- no parallel reporting-world lane in active runners
-
-Latest clarification:
-- old bridge/reporting experiments and current unified backtest are different
-  objects
-- old bridge lines could keep trade metrics on one path while computing
-  `MDD/Calmar` on a separate reporting path
-- current unified backtest computes all 9 metrics from the same simulated
-  portfolio path
-- `run_strategy_backtest.py` is therefore a unified-path view, not a historical
-  reporting-path diagnostic reproducer
-- `tests/run_structural_38.py --with-path-metrics` now exposes the same
-  structural-38 data preset with current unified-path `MDD/Calmar`
-- `README.md` now carries the canonical three-layer explanation:
-  - Eq.4 trade-return layer
-  - sleeve/reporting wealth normalization layer
-  - current unified backtest layer
-- future agents should not collapse:
-  - old `p0` normalization discussion
-  - sleeve `capital0 = p0 * sigma_tgt / sigma0`
-  - current unified-path `MDD/Calmar`
-
-3. **Experimental adjusted upper bound**
-- retained only as runner + preset:
-  - `python tests/run_legacy_41.py`
-  - `frontier_presets.py`
-- interpretation:
-  - explicit experimental upper bound only
-  - not promoted mainline
-
-4. **Attribution base**
-- intentionally preserved in compressed form:
-  - runner:
-    - `python tests/er_attribution_analysis.py`
-  - machine-readable base:
-    - `docs/contract_version_matrix_master.csv`
-
-Historical search / optimization lines remain below as archive context.
-
----
-
-## DRL / DQN Walk-Forward (2026-04-22)
-
-### Current Direction
-
-The branch now uses:
-- one model per contract
-- shared RL state space across DQN / PG / A2C
-- Table 3 only
-- baseline-owned universal backtesting metrics for baseline and RL strategies
-
-### Locked DQN spec
-
-- training mode: single-contract
-- discrete action space (`DQN`/`PG`): `{-1, 0, +1}`
-- continuous action range (`A2C`): `[-1, 1]`
-- shared state schema:
-  - 8 features
-  - 60-step windows
-- Eq.4-style additive reward with transaction cost
-- return-feature volatility convention: EWMA(60) on additive `r_t`
-- MACD feature normalization: 63-window volatility
-- horizon features: 21 / 42 / 63 / 252 with `sqrt(H)` scaling
-- architecture:
-  - LSTM `[64, 32]`
-  - Leaky-ReLU
-  - fixed Q-targets
-  - Double DQN
-  - dueling DQN
-
-### Active DRL modules
-
-- `drl_shared/spec.py`
-  - shared state/action/retrain/path defaults
-- `drl_shared/state_space.py`
-  - shared state + reward construction
-  - **TC fix (2026-04-23)**: `compute_eq4_reward()` now uses `σ_{t-1}` for current position and `σ_{t-2}` for previous position in TC calculation; `ContractEnv` tracks `last_sigma`
-- `drl_shared/prepare_features.py`
-  - global shared feature preparation
-- `strategy_backtester.py`
-  - global strategy backtesting entrypoint over baseline stack
-- `run_strategy_backtest.py`
-  - global CLI entrypoint for Long/Sign/MACD/DQN
-- `drl/dqn/spec.py`
-  - DQN-specific training/checkpoint metadata + paths
-- `drl/dqn/model.py`
-  - dueling DQN model + agent
-- `drl/dqn/train/prepare_dqn_walkforward.py`
-  - compatibility CLI delegating to global shared feature prep
-- `drl/dqn/train/train_dqn_walkforward.py`
-  - single-contract training + per-run log folders + early stopping (`--early-stop N`)
-- `drl/dqn/backtest/backtest_dqn_walkforward.py`
-  - Table 3 CLI adapter
-- `drl/dqn/backtest/engine.py`
-  - DQN inference adapter + baseline metric caller (no local metric math)
-
-### Current Status
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Shared state spec | ✅ Complete | one source of truth |
-| State pipeline | ✅ Complete | one shared feature builder |
-| Dueling DQN | ✅ Complete | now in retained model |
-| Baseline-unified backtest wiring | ✅ Complete | DQN now routes to `baseline_run.compute_strategy_metrics` |
-| Per-run log folders | ✅ Complete | `logs/rl/<algo>/<ticker>/<round>/<run_id>/` |
-| GPU training run | ✅ FI+FX complete | v2.1 STRUCTURAL_38, 50ep, patience=3, σ=0.058 |
-
-### Important interpretation
-
-- the state schema is shared across DQN / PG / A2C
-- model weights are not shared across contracts
-- checkpoints are expected under:
-  - `drl/dqn/models/v2.1/<ticker>/r<round>/<run_id>/`
-- preset support: `--preset structural_38` propagates overrides + exclusions through pipeline
-- manifest.json records: preset, sigma_tgt, feature_spec, model_version
-
-### v2.1 DQN Results (2026-04-23)
-
-**Long-only baseline (STRUCTURAL_38, σ=0.058):**
-- Trade metrics: 28/28 (7/7 per asset) — **perfect alignment**
-- Path metrics: 2/8
-- Total: 30/36
-
-**DQN v2.1 (50ep, patience=3):**
-- Forex: 4/9 (MDD ✅ Calmar ✅ % +ve ✅ Ave P/L ✅)
-- Fixed Income: 1/9 (Ave P/L ✅)
-- **Root cause**: DQN action=0 (no position) 69% of time; model avoids TC by not trading
-
-**Feature normalization experiments:**
-- v0: full-sample z-score, std=1.02 → best alignment but has lookahead bias
-- v2: EWMA_std(r)*√60, std=0.48 → causal, moderate alignment
-- v3: EWMA_std(p)*√252, std=0.06 → too flat, signal destroyed
-- See docs/feature0_comparison.png
-
-**Next steps:**
-- Increase episodes (200+) so DQN learns "trading > not trading" in trending markets
-- Consider reward shaping to penalize excessive inaction
-- Train EQ + Commodity with v2.1 + STRUCTURAL_38
-- Backtest engine should read preset from manifest.json automatically
-  when available
-- this is a path / checkpoint-head compatibility issue only:
-  - the retained Forex checkpoints are still one model per contract per round
-  - they use a single FC Q-head checkpoint format (`q` / `t`)
-  - newer training code writes the dueling-head format (`q_net` / `target_net`)
-- prepared shared features are expected under:
-  - `drl/features/contract_rounds/<ticker>/r<k>.npz`
-
-### Documentation
-
-- `drl/dqn/README.md`
-- `drl/dqn/docs/dqn_alignment_notes.md`
-- `drl/dqn/README.md` is now teammate-facing and current-code-only:
-  - one model per contract per retrain round
-  - no shared cross-contract DQN in the current codebase
-  - no DQN-owned metrics / table world
-- future agents should not describe the current DQN path as a shared-model
-  implementation unless that design is intentionally reintroduced
-
-### Forex Walk-Forward Backtest (2026-04-23)
-
-18 models (9 contracts × 2 rounds), 50ep, early_stop_patience=3.
-σ_tgt=0.058, test period 2011-2019.
-
-**4/9 metrics within 15%**:
-- ✅ std(R): 0.435 vs 0.472 (7.8%)
-- ✅ DD: 0.306 vs 0.285 (7.4%)
-- ✅ % +ve: 0.478 vs 0.491 (2.6%)
-- ✅ Ave P/L: 0.932 vs 0.966 (3.5%)
-
-Still off:
-- ❌ E(R): -0.397 vs -0.198 (100.5%) — too negative, cascading into Sharpe/Sortino/MDD
-
-Remaining asset classes (Commodity, Equity Index, Fixed Income) not yet trained.
-### Archived comparison lines
-
-1. **Archived same-rule candidate**
-- retained only as a historical comparison point
-- it is **not valid under the current no-direct-NON doctrine**
-- command:
-  - `python archive/tests/frontier_40plus_enumeration.py`
-- current score:
-  - `<=10 29/45`
-  - `<=15 34/45`
-- invalidating reason:
-  - it contains `NR:NON`
-  - it contains `ZC:NON`
-
-3. **Experimental adjusted upper bound**
-- the retained `41/45` family
-- command:
-  - `python archive/tests/frontier_40plus_enumeration.py`
-- representative case:
-  - exclusions: `FB, ZA, ZO, EN, ES`
-  - Equity-only reporting: `risk_price_non`
-  - numerator: `annual_mean_sleeve`
-  - all mode: `contract_equal_path`
-- current score:
-  - `<=10 36/45`
-  - `<=15 41/45`
-
-Interpretation:
-- the archived same-rule candidate is below `40+/45`
-- current `41/45` is **experimental upper bound**, not promoted main line
-
-Archived reproduction scripts are pinned to their own historical reporting settings
-and should not silently inherit new `baseline_run.py` defaults. In particular:
-- `tests/run_structural_38.py` is intentionally fixed to:
-  - detailed tables use trade-world metrics only:
-    - `E(R), std(R), DD, Sharpe, Sortino, % +ve, Ave P/L`
-  - no `MDD`
-  - no `Calmar`
-- this keeps it as a structural-38 trade-world reproducer rather than a live-baseline reporting runner
-
-Current extension on top of that:
-- `tests/run_structural_38.py --with-path-metrics`
-  - still uses structural-38 source overrides / exclusions
-  - but inserts current unified-backtest `MDD` / `Calmar`
-  - this is for side-by-side inspection only
-  - it should not be confused with the older reporting-path bridge experiments
-
-4. **Version-matrix audit line**
-- command:
-  - removed from working tree during cleanup
-- retained machine-readable base:
-  - `docs/contract_version_matrix_master.csv`
-- scope:
-  - all 50 contracts
-  - versions per contract
-  - contexts:
-    - `baseline_50`
-    - `structural_38_family`
-    - `legacy_41_family`
-  - sigma:
-    - `0.058`
-    - `0.059`
-    - `0.060`
-  - both Table 2 and Table 3
-- purpose:
-  - per-contract version / exclusion rule base
-  - future searches should read this matrix first, not search blindly
-
-5. **Baseline-first optimization / upper-bound line**
-- command:
-  - removed from working tree during cleanup
-- note:
-  - conclusions retained below in memory only
-- current retained conclusion:
-  - strict `baseline_50`, frozen formula, `0-drop`:
-    - Table 3 `29/45`
-    - Table 2 `12/45`
-    - version mix:
-      - `47 × RAD_RAW`
-      - `3 × RAD_V2`
-  - global consistent upper bound:
-    - Table 3 `27/45`
-    - Table 2 `16/45`
-    - version mix:
-      - `22 × RAD_REGEN`
-      - `12 × RAD_RAW`
-      - `9 × REV`
-      - `7 × NON_FWD_ANCHORED`
-  - formula-relaxed upper bound:
-    - still does **not** touch `40+/45`
-- interpretation:
-  - under current frozen doctrine, the available version pool is capped well below `40+/45`
-  - formula relaxation alone does not fix that
-  - but the matrix already reveals one clean divide-and-conquer fact:
-    - `Forex` is keep-all feasible under the `% +ve / Ave P/L` gate
-    - `Equity Index` and `Fixed Income` are not
-
----
-
-## 1. Current Keep / Archive / Candidate Cleanup
-
-### Keep as current core
-
-Runtime:
-- `baseline_run.py`
-- `metrics.py`
-- `vol_scaling.py`
-- `config.py`
-- `data_loader.py`
-
-Current reference runners:
+1. baseline
 - `tests/run_structural_38.py`
-- `tests/run_legacy_41.py`
+- this is the true reproducible baseline
+- it locks the `structural_38` source overrides and exclusions
 
-Retained preset/config:
-- `frontier_presets.py`
+2. unified backtester
+- one portfolio/metric stack for baseline and DRL
+- all final metrics, including `MDD` and `Calmar`, come from the same simulated
+  portfolio path
 
-Current docs:
+3. DRL mainline
+- DQN uses the same `structural_38` data doctrine as the baseline
+- one current shared feature/state convention
+- no active `v0 / v2 / v2.1 / v3` story in the mainline
+
+Old versioned model families may remain on disk, but they are archive artifacts
+and are not part of the active default path.
+
+## 1. Baseline
+
+Primary commands:
+- `python baseline_run.py --table 3 --all-metrics --sigma 0.058`
+- `python tests/run_structural_38.py --table 3`
+- `python tests/run_structural_38.py --table both`
+- `python tests/run_structural_38.py --table 3 --with-path-metrics`
+
+Current interpretation:
+- the ideal paper/data world is useful reference only
+- the actual local baseline is the structural-38 line
+- DRL is judged relative to this baseline, not relative to an unattainable
+  ideal-data line
+
+## 2. DRL Mainline
+
+Current DRL structure:
+- `drl_shared/`
+  - shared feature/state construction
+- `drl/dqn/`
+  - DQN-only model/training/inference code
+- `run_strategy_backtest.py`
+  - the single public evaluation entrypoint
+
+Current feature/state convention:
+- `seq_len = 60`
+- `feature_dim = 8`
+- close feature:
+  - `(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))`
+- return features:
+  - `21 / 42 / 63 / 252`
+- MACD normalization:
+  - 63-day price volatility
+- action space:
+  - `{-1, 0, +1}`
+
+Current active artifact layout:
+- features:
+  - `drl/features/<ticker>/r<round>.npz`
+- DQN bundles:
+  - `drl/dqn/models/<ticker>/r<round>/<run_id>/`
+
+Archive-only artifact families:
+- `drl/dqn/models/walkforward/`
+- `drl/dqn/models/v2.1/`
+
+Do not treat archive artifacts as active truth in new code or docs.
+
+## 3. Eq.4 / Sleeve / Unified Path
+
+Do not collapse these three layers:
+
+- Eq.4 trade-return layer
+  - additive `r_t = p_t - p_{t-1}`
+  - volatility-scaled positions
+- sleeve/reporting wealth layer
+  - `capital0 = p0 * sigma_tgt / sigma0`
+  - not part of Eq.4 itself
+- current unified backtest layer
+  - one simulated portfolio path
+  - final `MDD / Calmar` come from that path
+
+## 4. Current References
+
 - `docs/data_issues.md`
 - `docs/paper_table_suspicious_cells.md`
-- `docs/structural38_trade_tables_paper_style_a4.png`
-- `docs/reproducibility_external_search.md`
 - `docs/drl_pipeline.md`
+- `drl/dqn/README.md`
+- `docs/structural38_trade_tables_paper_style_a4.png`
 
-Attribution base kept on purpose:
-- runner:
-  - `tests/er_attribution_analysis.py`
-- machine-readable base:
-  - `docs/contract_version_matrix_master.csv`
+## 5. Alignment Snapshot
 
-Teammate handoff:
-- for the current DRL architecture / commands / outputs, start with:
-  - `docs/drl_pipeline.md`
+Current retained structural-38 snapshot:
 
-### Keep as archived-but-retained
+- trade-world metrics only:
+  - `Table 3 <=10: 23/28`
+  - `Table 3 <=15: 28/28`
+  - `Table 2 <=10: 24/28`
+  - `Table 2 <=15: 25/28`
+- long-only with unified path metrics:
+  - trade metrics `28/28`
+  - total `30/36`
 
-- `archive/tests/frontier_40plus_enumeration.py`
-- `archive/docs/frontier_40plus_enumeration.md`
-- `archive/tests/run_legacy_40.py`
-- `archive/tests/table2_reporting_bridge_mode_probe.py`
-- `archive/docs/table2_reporting_bridge_mode_probe.md`
-- `archive/tests/equity_yf_rad_regen_probe.py`
-- `archive/docs/equity_yf_rad_regen_probe.md`
-- old attribution markdown outputs:
-  - `archive/docs/current_baseline_attribution.md`
-  - `archive/docs/er_attribution_report.md`
-  - `archive/docs/equity_contract_contribution_report.md`
-  - `archive/docs/all_row_contribution_report.md`
+Most suspicious paper-side cells still flagged:
+- `Equity Index / Table 2 / DD: 0.606`
+- `Equity Index / Table 2 / Sortino: 1.102`
+- `Fixed Income / Table 2 / Sortino: 1.180`
 
-### Candidate cleanup list
+## 6. 41/45 Status
 
-Removed during cleanup; conclusions retained here only:
-- `tests/historical_36x_rebuild_search.py`
-- `docs/historical_36x_rebuild_search.md`
-- `tests/calmar_alignment_iteration.py`
-- `docs/calmar_alignment_iteration.md`
-- `tests/current_baseline_search_v2.py`
-- `docs/current_baseline_search_v2.md`
-- `docs/current_baseline_search_v2_results.csv`
-- `tests/contract_version_matrix_audit.py`
-- `tests/contract_version_optimization.py`
-- `docs/contract_version_matrix_audit.md`
-- `docs/contract_version_optimization.md`
-- `docs/contract_version_optimization_results.csv`
-- `docs/contract_version_upper_bounds.csv`
+`41/45` remains only as an experimental upper-bound reproducer:
+- `python tests/run_legacy_41.py`
 
----
+It is not part of the active baseline or the active DRL mainline.
 
-## 2. Data / Formula Conclusions
+## 7. Archive Notes
 
-### 2.1 Negative-price `REV` is not economically safe as an active source
+Past searches, compatibility lanes, and older versioned DRL interpretations were
+useful during diagnosis, but they are no longer the active mainline story.
 
-Under the paper-aligned Eq. 4 implementation:
-
-\[
-R_t = A_{t-1}\frac{\sigma_{tgt}}{\sigma_{t-1}}r_t - bp \cdot p_{t-1}\cdot |\Delta scaled\_pos|
-\]
-
-If `p_{t-1}` is negative:
-- transaction cost becomes economically invalid
-- reporting capital anchor also becomes invalid
-
-Therefore the repo no longer treats negative-price-sensitive `REV` series as clean active search candidates.
-
-Problem contracts:
-- `CC`
-- `LB`
-- `JO`
-- `ZH`
-- `ZO`
-
-Allowed-source policy currently retained:
-- `CC`: `RAD_REGEN`, `NON_FWD_ANCHORED`
-- `LB`: `RAD`, `NON_FWD_ANCHORED`, `RAD_REGEN`
-- `JO`: `RAD_REGEN`
-- `ZH`: `RAD_REGEN`
-- `ZO`: `RAD`, `RAD_REGEN`, `NON_FWD_ANCHORED`
-
-`REV` on these is reference-only.
-
-### 2.2 Yahoo Finance behaves like `NON`
-
-Retained conclusion:
-- Yahoo ≈ `CLC NON`
-- Yahoo is not a substitute for `RAD`
-- Yahoo is not a substitute for negative-price `REV`
-
-For the recent Equity probe:
-- `ES ↔ ES=F`
-- `EN ↔ NQ=F`
-
-And even after building Yahoo-based `YF_RAD_REGEN` proxies, putting `EN/ES` back still does not recover `40+/45`.
-
-See:
-- `archive/docs/equity_yf_rad_regen_probe.md`
-
-### 2.3 Current reporting diagnosis
-
-The latest retained reporting-world diagnosis is:
-- **`MDD aligned, numerator wrong`**
-
-This came after the archived Commodity cleanup loop.
-The implementation/report files were removed during cleanup, but the retained
-conclusion remains recorded here.
-
-That loop established:
-- dominant Commodity distortion contracts:
-  - `SB`
-  - `KC`
-  - `ZL`
-  - `NR`
-  - `ZC`
-- best cleanup move in the frozen framework:
-  - drop `SB`
-  - drop `KC`
-  - drop `ZL`
-  - `NR: RAD -> NON`
-  - `ZC: RAD -> NON`
-
-Important:
-- those last two switches were useful in that reporting-world iteration
-- but they violate the later no-direct-NON rule you imposed
-- so that line is now treated as an archived diagnostic result, not an active promoted frontier
-
-After that cleaning step:
-- there is a global same-path numerator winner
-- best retained candidate:
-  - `annual_mean_simple`
-- best same-path extraction remained:
-  - `contract_equal_path + annual_mean_simple`
-
-Important nuance:
-- this improves reporting annual return alignment
-- it does **not** magically produce a clean `40+/45`
-
-Additional retained clarification:
-- the project previously had a **split-world Table 2 bug**
-  - trade metrics used the bridged trade-lane additive return series
-  - but `MDD/Calmar` stayed on the old `RISK_PRICE_SIGMA0` reporting path
-- that bug is now treated as **legacy only**
-  - `baseline_run.py` now defaults Table 2 reporting to `same_as_port_contract`
-  - this preserves contract / position information by pushing the portfolio bridge
-    multipliers back into contract Eq.4 rewards before rebuilding the reporting path
-- `split_world` is still available only as a diagnostic / legacy comparison mode
-- the project still distinguishes:
-  - `legacy split_world`
-  - `same_as_port_contract` default runtime
-  - deeper reporting / Calmar audit lines
-
-### 2.4 Divide-and-conquer status by asset class
-
-Using `baseline_50` only, and requiring for each contract that there exists a promotable version with:
-- Table 3 `% +ve gap <= 2%`
-- Table 3 `Ave P/L gap <= 2%`
-- Table 2 `% +ve gap <= 2%`
-- Table 2 `Ave P/L gap <= 2%`
-
-Current status:
-
-- **Forex**
-  - all 9 contracts satisfy this keep-all test
-  - therefore Forex is the cleanest asset class to isolate first
-  - current issue in FX is not exclusion pressure; it is mainly:
-    - Table 2 `E(R)`
-    - reporting `MDD`
-    - reporting `Calmar`
-
-### 2.5 Table 2 bridge consistency
-
-The paper and references support an **additional portfolio-level volatility scaling**
-layer for Table 2, but they do **not** identify the exact bridge or justify the
-local fitted target `0.97`.
-
-Current retained implementation status:
-
-- `vol_scaling.py` is now the single home for portfolio bridges
-  - `constant_posthoc`
-  - `ewma60_lagged`
-  - `rolling252_lagged`
-- bridge application and bridge multipliers were deduplicated so the trade lane
-  and reporting lane use the **same bridge family implementation**
-- Table 2 reporting default in `baseline_run.py` is now:
-  - `report_bridge_mode = same_as_port_contract`
-- this is a real bug fix over the previous split-world default
-- there was a second bug in the first `same_as_port_contract` attempt:
-  - it pushed bridge multipliers directly into additive contract rewards
-  - this could drive reporting NAV negative and produce absurd `MDD > 1`
-  - Commodity under Table 2 `constant_posthoc` reached `MDD ≈ 1.50`, which is not financially meaningful
-- the current `same_as_port_contract` implementation was corrected to:
-  - preserve contract information
-  - apply bridge multipliers to sleeve simple returns
-  - rebuild sleeve wealth multiplicatively
-  - this removes the negative-NAV blow-up
-
-Retained evidence from the explicit probe:
-- `Forex`
-  - `constant_posthoc + split_world`: `<=15 6/9`
-  - `constant_posthoc + same_as_port_contract`: `<=15 6/9`
-  - `rolling252_lagged + split_world`: `<=15 8/9`
-  - `rolling252_lagged + same_as_port_contract`: `<=15 8/9`
-- `Commodity`
-  - `constant_posthoc + same_as_port_contract`: `MDD ≈ 0.849` (fixed from the broken `~1.50+`)
-  - `rolling252_lagged + same_as_port_contract`: `MDD ≈ 0.847`
-- across the four asset rows, the corrected `same_as_port_contract` is a *consistency fix*, not yet a higher-scoring global bridge
-- all explicit bridge tables are preserved in:
-  - `archive/docs/table2_reporting_bridge_mode_probe.md`
-
-- **Equity Index**
-  - no contract currently clears the keep-all distribution gate in both tables
-  - the binding failure is not `% +ve`; it is mainly:
-    - Table 2 `Ave P/L` at roughly `~3%`
-  - deeper misses then remain in:
-    - `E(R)`
-    - `MDD`
-    - `Calmar`
-
-- **Fixed Income**
-  - no contract currently clears the keep-all distribution gate
-  - this class fails earlier and more clearly than Equity:
-    - `% +ve`
-    - `Ave P/L`
-  - and then also misses:
-    - `E(R)`
-    - `MDD`
-    - `Calmar`
-
-- **Commodity**
-  - still the messiest class overall
-  - mixed source problems, path distortion, and structural exclusion pressure
-
-### 2.5 Table 2 bridge reference trace and quick bridge probe
-
-Main-paper evidence now retained:
-- `references/DRL_main.pdf`, p.7:
-  - “an additional layer of portfolio-level volatility scaling”
-  - “This brings the volatility of different methods to a same target”
-- `references/DRL_main.pdf`, p.16 / Appendix B:
-  - “Table 3 presents the performance metrics for portfolios without additional layer of volatility scaling.”
-
-Reference-chain evidence retained:
-- `references/DRL_27.pdf`, p.8:
-  - “portfolios with an additional layer of volatility scaling”
-  - “brings overall strategy returns to match the 15% volatility target”
-- `references/DRL_4.pdf`, p.12:
-  - “computed the ex-ante volatility of each of the portfolios”
-  - “scaled their allocations for an annualized volatility of 15% per portfolio”
-
-Interpretation:
-- the literature supports **an extra portfolio-level scaling layer**
-- but it does **not** identify the exact bridge formula used in the DRL paper
-- in particular, the retained repo has no direct citation supporting the specific numeric target `0.97`
-- therefore `0.97` is currently treated as a fitting parameter / local bridge assumption, not a paper-grounded constant
-
-Quick bridge probe retained at `sigma=0.058`, comparing Table 2 candidates against paper Table 2 using the current live trade lane:
-- bridges tested:
-  - `constant_posthoc_0.97`
-  - `ewma60_lagged_0.97`
-  - `rolling252_lagged_0.97`
-
-Key result by asset class:
-- `Forex`
-  - `rolling252_lagged_0.97` is the best trade-side match
-  - four-asset trade-style errors:
-    - `E(R)` `6.4%`
-    - `std(R)` `0.7%`
-    - `DD` `8.9%`
-    - `Sharpe` `5.7%`
-    - `Sortino` `2.4%`
-    - `% +ve` `0.2%`
-    - `Ave P/L` `0.2%`
-  - but `MDD` and especially `Calmar` still remain far off
-- `Commodity`
-  - `rolling252_lagged_0.97` is slightly better than `constant_posthoc_0.97` on the trade-style metrics
-- `Equity Index`
-  - `constant_posthoc_0.97` and `rolling252_lagged_0.97` are close; no decisive rolling advantage
-- `Fixed Income`
-  - `constant_posthoc_0.97` and `rolling252_lagged_0.97` are also close
-- `All`
-  - no tested bridge explains `All` well; `Calmar` remains unusable for bridge identification
-
-Four-asset (`Commodity`, `Equity Index`, `Fixed Income`, `Forex`) alignment counts against paper Table 2 with `sigma=0.058`:
-- `constant_posthoc_0.97`
-  - `<=10`: `19/36`
-  - `<=15`: `20/36`
-  - mean percent error over 36 cells: `110.9%`
-- `rolling252_lagged_0.97`
-  - `<=10`: `19/36`
-  - `<=15`: `22/36`
-  - mean percent error over 36 cells: `110.3%`
-
-Interpretation:
-- `rolling252_lagged_0.97` improves the four-asset `<=15` count by `+2` versus `constant_posthoc_0.97`
-- but it is **not** a universal winner across all asset classes
-- the most defensible retained statement is:
-  - the paper is consistent with **some** portfolio-level volatility scaling beyond Table 3
-  - `Forex` most strongly suggests a time-varying bridge such as rolling scaling
-  - the current evidence still does **not** uniquely identify one global Table 2 bridge
-
----
-
-## 3. Session Record (Condensed)
-
-### Session A — Historical `36/40` rebuild under cleaned doctrine
-
-Script status:
-- removed from working tree during cleanup
-
-What it established:
-- the old `36/40` skeleton still reruns under the old source structure
-- once rebuilt under the cleaner source doctrine, it drops
-- no source-only or source+exclusion candidate could satisfy the strict per-asset `% +ve <= 2%` and `Ave P/L <= 2%` rule
-
-This was the formal trigger for separating the reporting / Calmar explanation line from the trade/source line.
-
-### Session B — Reporting-world self-iteration
-
-Script status:
-- removed from working tree during cleanup
-
-What it established:
-- Commodity distortions were the main remaining contract-driven problem
-- after cleaning them, the diagnosis changes from
-  - `contract-driven distortion`
-  to
-  - `MDD aligned, numerator wrong`
-
-This is the current best explanation line.
-
-### Session C — Unified frontier enumeration
-
-Script:
-- `archive/tests/frontier_40plus_enumeration.py`
-
-What it established:
-- clean same-rule max: `34/45`
-- under current cleaner doctrine, coherent override / structural-heavy top out at `38/45`
-- only legacy experimental upper-bound family reaches `40+`
-- representative current upper bound reaches `41/45`
-
-This is the retained scorecard separating:
-- clean main interpretation
-- experimental upper bound
-
-### Session D — Equity Yahoo probe
-
-Script:
-- `archive/tests/equity_yf_rad_regen_probe.py`
-
-What it established:
-- Yahoo for `ES` and `EN` is almost exactly `NON`
-- replacing `EN/ES` with Yahoo-based `YF_NON` or `YF_RAD_REGEN` does **not** recover the lost score when they are put back
-
-Key result:
-- legacy upper bound with `EN/ES` excluded:
-  - `41/45`
-- put `EN/ES` back with current CLC:
-  - `38/45`
-- put `EN/ES` back with `YF_NON`:
-  - `38/45`
-- put `EN/ES` back with `YF_RAD_REGEN`:
-  - `37/45`
-
-Conclusion:
-- Yahoo does not solve the Equity re-entry problem
-
----
-
-## 4. What To Trust
-
-### Trust as main reference
-- live baseline (`31/45`)
-- trade-world structural reference (`tests/run_structural_38.py`)
-- data issues note (`docs/data_issues.md`)
-- reporting diagnosis (retained in memory):
-  - `MDD aligned, numerator wrong`
-
-### Trust as experimental upper bound only
-- legacy `41/45` family
-
-It is useful for review and comparison, but do **not** silently treat it as the promoted model because it depends on:
-- `EN/ES` exclusion
-- Equity-only reporting `risk_price_non`
-
----
-
-## 5. Current Recommendation
-
-If you resume later:
-
-1. run the live baseline
-2. run `tests/run_structural_38.py`
-3. read `docs/data_issues.md`
-4. use `tests/run_legacy_41.py` only if you explicitly want the retained experimental upper bound
-
-If the goal is:
-- **clean interpretation**: stay on the same-rule line
-- **upper-bound score**: use the experimental `41/45` family explicitly labeled as such
-
----
-
-## 6. One-Sentence Summary
-
-The repo currently supports:
-- one safe all-contract baseline,
-- one clean-but-sub-40 same-rule interpretation,
-- and one explicit experimental `41/45` upper bound;
-the main unresolved issue is no longer `MDD`, but the reporting annual-return / `Calmar` definition and Equity-sensitive upper-bound structure.
-
----
-
-## 7. DRL v2 Infrastructure Lock
-
-As of 2026-04-23, the active DRL implementation is versioned v2 infrastructure:
-
-- `feature 0` is no longer full-sample close-price z-score
-- active close feature:
-  - `(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))`
-- active state spec:
-  - `v2_ewma60_close_deviation`
-- feature artifacts live under:
-  - `drl/features/v2/<ticker>/r<round>.npz`
-- new DQN training writes versioned bundles:
-  - `drl/dqn/models/v2/<ticker>/r<round>/<run_id>/`
-- each bundle must carry:
-  - `checkpoint.pt`
-  - `manifest.json`
-  - `train_config.json`
-  - `feature_spec.json`
-  - `episode_metrics.csv`
-  - `train.log`
-- DQN backtesting is bundle/spec driven and emits positions only
-- final metrics remain owned by the unified baseline/backtest stack
-- old Forex checkpoints under `drl/dqn/models/walkforward/` are `v0` compatibility artifacts, not v2 evidence
-
-Future agents should not compare old `v0` checkpoint results against new v2
-features without retraining, because the state input distribution changed.
+If a future task explicitly asks for archive behavior:
+- treat it as archive work
+- do not silently reintroduce version selectors into the active CLI
+- do not make old `walkforward` or `models/v2.1` directories the default again

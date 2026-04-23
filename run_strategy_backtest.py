@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 
 from baseline_run import EWMA_SPAN
-from config import BP, METRIC_NAMES
-from drl.dqn.backtest.engine import dqn_position_provider
+from config import ASSET_CLASSES, BP, METRIC_NAMES
+from drl.dqn.backtest.engine import current_dqn_policy, portfolio_metrics as dqn_portfolio_metrics
 from strategy_backtester import backtest_strategy_metrics, contract_count, paper_table3_reference
 
 STRATEGIES = ("Long", "Sign(R)", "MACD", "DQN")
@@ -50,8 +50,7 @@ def main():
     parser.add_argument("--sigma", type=float, default=None)
     parser.add_argument("--round", type=int, default=None, help="Only for DQN. If omitted, stitch all rounds.")
     parser.add_argument("--checkpoint", default=None, help="Only for DQN; optional explicit checkpoint path.")
-    parser.add_argument("--checkpoint-bundle", default=None, help="Only for DQN; explicit versioned bundle directory.")
-    parser.add_argument("--model-version", default="v2", help="Only for DQN; versioned model bundle namespace.")
+    parser.add_argument("--checkpoint-bundle", default=None, help="Only for DQN; explicit bundle directory.")
     parser.add_argument("--run-id", default="latest", help='Only for DQN; bundle run id or "latest".')
     parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto", help="Only for DQN; torch inference device.")
     parser.add_argument("--progress", action="store_true", help="Only for DQN; show inference progress bars with ETA.")
@@ -66,33 +65,40 @@ def main():
     if effective_sigma is None:
         effective_sigma = 0.058
 
-    provider = None
     if args.strategy == "DQN":
-        provider = dqn_position_provider(
+        if excluded:
+            raise ValueError("Mainline DQN uses fixed structural_38 exclusions; remove --exclude-contracts.")
+        resolved_overrides, resolved_excluded = current_dqn_policy()
+        metrics_raw = dqn_portfolio_metrics(
+            asset_name=args.asset,
+            strategy=args.strategy,
             round_num=args.round,
             checkpoint=args.checkpoint,
             checkpoint_bundle=args.checkpoint_bundle,
-            model_version=args.model_version,
             run_id=args.run_id,
             device=args.device,
             progress=args.progress,
             batch_size=args.batch_size,
-            expected_sigma_tgt=effective_sigma,
+            sigma_tgt=effective_sigma,
+            excluded_contracts=resolved_excluded,
+            source_overrides=resolved_overrides,
         )
-
-    metrics_raw = backtest_strategy_metrics(
-        asset_name=args.asset,
-        strategy=args.strategy,
-        sigma_tgt=effective_sigma,
-        position_provider=provider,
-        excluded_contracts=excluded,
-        round_output=False,
-    )
+        excluded = list(resolved_excluded or [])
+        n_contracts = contract_count(args.asset, excluded_contracts=excluded, source_overrides=resolved_overrides)
+    else:
+        metrics_raw = backtest_strategy_metrics(
+            asset_name=args.asset,
+            strategy=args.strategy,
+            sigma_tgt=effective_sigma,
+            excluded_contracts=excluded,
+            round_output=False,
+        )
+        n_contracts = contract_count(args.asset, excluded_contracts=excluded)
     metrics = {k: round(v, 3) for k, v in metrics_raw.items()}
     paper = paper_table3_reference(args.asset, args.strategy)
-    n_contracts = contract_count(args.asset, excluded_contracts=excluded)
     metric_names = list(METRIC_NAMES)
-    excluded_str = ",".join(excluded) if excluded else "none"
+    relevant_excluded = [tk for tk in excluded if tk in ASSET_CLASSES.get(args.asset, [])]
+    excluded_str = ",".join(relevant_excluded) if relevant_excluded else "none"
 
     print(f"\n{'=' * 90}")
     print(f"  Table 3 — {args.asset} ({n_contracts} contracts)")
@@ -122,7 +128,6 @@ def main():
             print(f"DQN round override: r{args.round}")
         else:
             print("DQN using stitched round schedule (r1 + r2)")
-        print(f"DQN model version: {args.model_version}")
         print(f"DQN run id: {args.run_id}")
 
 

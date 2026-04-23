@@ -19,17 +19,16 @@ if str(REPO_ROOT) not in sys.path:
 from drl.dqn.logging_utils import RunLogger, make_run_id
 from drl.dqn.model import DQNAgent
 from drl.dqn.spec import (
-    ACTIVE_MODEL_VERSION,
     EPISODES,
     MAX_STEPS_PER_EP,
     RETRAIN_ROUNDS,
     checkpoint_metadata,
     contract_data_path,
     checkpoint_path_for_bundle,
-    feature_spec,
     model_bundle_root,
     round_name,
 )
+from drl_shared.spec import current_source_policy, feature_spec
 from drl_shared.state_space import ContractArrays, ContractEnv
 
 
@@ -42,16 +41,16 @@ def _npz_scalar(data, key: str, default=None):
     return value
 
 
-def load_contract_round(ticker: str, round_num: int, model_version: str = ACTIVE_MODEL_VERSION) -> tuple[ContractArrays, dict]:
+def load_contract_round(ticker: str, round_num: int) -> tuple[ContractArrays, dict]:
     ticker = ticker.upper()
-    path = contract_data_path(round_num, ticker, model_version=model_version)
+    path = contract_data_path(round_num, ticker)
     if not path.exists():
         raise FileNotFoundError(
             f"No prepared shared feature data found at {path}. "
             "Run python drl_shared/prepare_features.py first."
         )
     data = np.load(path, allow_pickle=True)
-    expected = feature_spec(model_version)
+    expected = feature_spec()
     actual_state = _npz_scalar(data, "state_spec_version")
     if actual_state != expected["state_spec_version"]:
         raise ValueError(
@@ -63,7 +62,10 @@ def load_contract_round(ticker: str, round_num: int, model_version: str = ACTIVE
         "feature_artifact_path": str(path),
         "feature_spec": json.loads(str(_npz_scalar(data, "feature_spec", "{}"))),
         "state_spec_version": actual_state,
-        "model_version": str(_npz_scalar(data, "model_version", model_version)),
+        "feature_line": str(_npz_scalar(data, "feature_line", expected["feature_line"])),
+        "preset": _npz_scalar(data, "preset", None),
+        "source_overrides": json.loads(str(_npz_scalar(data, "source_overrides", "{}"))),
+        "excluded_contracts": json.loads(str(_npz_scalar(data, "excluded_contracts", "[]"))),
         "train_start": str(_npz_scalar(data, "train_start", "")),
         "train_end": str(_npz_scalar(data, "train_end", "")),
         "test_start": str(_npz_scalar(data, "test_start", "")),
@@ -86,10 +88,8 @@ def train_contract_round(
     round_num: int,
     episodes: int = EPISODES,
     early_stop_patience: int = 0,
-    model_version: str = ACTIVE_MODEL_VERSION,
     device: str | None = None,
     seed: int | None = None,
-    preset: str | None = None,
     sigma_tgt: float = 0.058,
 ) -> tuple[Path, Path]:
     ticker = ticker.upper()
@@ -97,17 +97,26 @@ def train_contract_round(
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
-    contract, feature_meta = load_contract_round(ticker, round_num, model_version=model_version)
-    env = ContractEnv(contract)
+    contract, feature_meta = load_contract_round(ticker, round_num)
+    expected_policy = current_source_policy()
+    resolved_preset = feature_meta.get("preset") or expected_policy["preset"]
+    if resolved_preset != expected_policy["preset"]:
+        raise ValueError(
+            f"Mainline DQN requires preset={expected_policy['preset']!r}, got {resolved_preset!r}"
+        )
+    if feature_meta.get("source_overrides") != expected_policy["source_overrides"]:
+        raise ValueError("Feature artifact source_overrides do not match structural_38")
+    if sorted(feature_meta.get("excluded_contracts", [])) != sorted(expected_policy["excluded_contracts"]):
+        raise ValueError("Feature artifact excluded_contracts do not match structural_38")
+    env = ContractEnv(contract, sigma_tgt=sigma_tgt)
     agent = DQNAgent(device=device)
     run_id = make_run_id()
-    bundle_dir = model_bundle_root(round_num, ticker, run_id=run_id, model_version=model_version)
+    bundle_dir = model_bundle_root(round_num, ticker, run_id=run_id)
     logger = RunLogger("dqn", ticker, round_num, run_id=run_id, base_dir=bundle_dir)
     metadata = checkpoint_metadata(
         round_num,
         ticker,
         algorithm="dqn",
-        model_version=model_version,
         extra={
             "run_id": logger.run_id,
             "episodes": episodes,
@@ -115,7 +124,7 @@ def train_contract_round(
             "log_dir": str(logger.dir),
             "bundle_dir": str(bundle_dir),
             "seed": seed,
-            "preset": preset,
+            "preset": resolved_preset,
             "sigma_tgt": sigma_tgt,
             **feature_meta,
         },
@@ -219,9 +228,9 @@ if __name__ == "__main__":
     parser.add_argument("--round", type=int, required=True, choices=sorted(RETRAIN_ROUNDS))
     parser.add_argument("--episodes", type=int, default=EPISODES)
     parser.add_argument("--early-stop", type=int, default=0, help="Early stopping patience (0=disabled)")
-    parser.add_argument("--model-version", default=ACTIVE_MODEL_VERSION)
     parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--sigma-tgt", type=float, default=0.058)
     args = parser.parse_args()
 
     train_contract_round(
@@ -229,7 +238,7 @@ if __name__ == "__main__":
         args.round,
         args.episodes,
         early_stop_patience=args.early_stop,
-        model_version=args.model_version,
         device=args.device,
         seed=args.seed,
+        sigma_tgt=args.sigma_tgt,
     )

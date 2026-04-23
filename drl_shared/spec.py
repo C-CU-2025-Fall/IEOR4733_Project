@@ -1,4 +1,4 @@
-"""Global shared DRL spec constants and paths."""
+"""Global shared DRL spec constants and paths for the active mainline."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,8 +12,10 @@ FEATURE_DIM = 8
 HORIZONS = (21, 42, 63, 252)
 RSI_WINDOW = 30
 WARMUP = 252
-STATE_SPEC_VERSION = "v2_ewma60_close_deviation"
-ACTIVE_FEATURE_VERSION = "v2.1"
+
+ACTIVE_FEATURE_LINE = "structural_38_mainline"
+ACTIVE_FEATURE_VERSION = ACTIVE_FEATURE_LINE  # Backward-compatible alias.
+STATE_SPEC_VERSION = "structural_38_ewma60_close_deviation"
 
 DISCRETE_ACTION_VALUES = (-1.0, 0.0, 1.0)
 CONTINUOUS_ACTION_RANGE = (-1.0, 1.0)
@@ -36,7 +38,6 @@ RETRAIN_ROUNDS = {
 }
 
 FEATURE_ROOT = REPO_ROOT / "drl" / "features"
-LEGACY_FEATURE_ROOT = FEATURE_ROOT / "contract_rounds"
 
 
 def ticker_asset_class(ticker: str) -> str:
@@ -68,42 +69,54 @@ def round_name(round_num: int) -> str:
     return f"r{round_num}"
 
 
-def feature_data_path(round_num: int, ticker: str, model_version: str = ACTIVE_FEATURE_VERSION) -> Path:
-    version = model_version.lower()
-    return FEATURE_ROOT / version / ticker_slug(ticker) / f"{round_name(round_num)}.npz"
+def feature_data_path(round_num: int, ticker: str) -> Path:
+    return FEATURE_ROOT / ticker_slug(ticker) / f"{round_name(round_num)}.npz"
 
 
-def legacy_feature_data_path(round_num: int, ticker: str) -> Path:
-    return LEGACY_FEATURE_ROOT / ticker_slug(ticker) / f"{round_name(round_num)}.npz"
+def resolve_feature_data_path(round_num: int, ticker: str) -> Path:
+    return feature_data_path(round_num, ticker)
 
 
-def resolve_feature_data_path(round_num: int, ticker: str, model_version: str = ACTIVE_FEATURE_VERSION) -> Path:
-    primary = feature_data_path(round_num, ticker, model_version=model_version)
-    if primary.exists():
-        return primary
-    if model_version.lower() == "v0":
-        legacy = legacy_feature_data_path(round_num, ticker)
-        if legacy.exists():
-            return legacy
-    return primary
+def normalize_model_version(model_version: str | None = None) -> str:
+    """Archive-only compatibility alias.
+
+    Mainline DRL no longer routes behavior by version. The active line is the
+    single structural-38-aligned feature spec.
+    """
+    if model_version in (None, "", "current", ACTIVE_FEATURE_LINE, ACTIVE_FEATURE_VERSION):
+        return ACTIVE_FEATURE_LINE
+    raise ValueError(
+        f"Versioned DRL lines are archive-only and unsupported in the mainline: {model_version}"
+    )
 
 
-def feature_spec(model_version: str = ACTIVE_FEATURE_VERSION) -> dict:
+def current_source_policy() -> dict:
+    from frontier_presets import STRUCTURAL_38_EXCLUDED, STRUCTURAL_38_OVERRIDES
+
     return {
-        "model_version": model_version.lower(),
-        "state_spec_version": (
-            STATE_SPEC_VERSION
-            if model_version.lower() not in ("v0", "v2")
-            else ("v0_full_sample_zscore" if model_version.lower() == "v0" else "v2_ewma60_close_deviation")
-        ),
+        "preset": "structural_38",
+        "source_overrides": dict(STRUCTURAL_38_OVERRIDES),
+        "excluded_contracts": sorted(STRUCTURAL_38_EXCLUDED),
+    }
+
+
+def preset_policy(model_version: str | None = None) -> dict:
+    _ = model_version
+    return current_source_policy()
+
+
+def feature_spec(model_version: str | None = None) -> dict:
+    _ = model_version
+    policy = current_source_policy()
+    return {
+        "feature_line": ACTIVE_FEATURE_LINE,
+        "state_spec_version": STATE_SPEC_VERSION,
         "seq_len": SEQ_LEN,
         "feature_dim": FEATURE_DIM,
         "close_feature": {
-            "name": "ewma60_price_deviation_annualized" if model_version.lower() not in ("v0", "v2") else ("full_sample_zscore" if model_version.lower() == "v0" else "ewma60_close_deviation"),
-            "formula": "(p_t - EMA60(p)_t) / (EWMA60_std(p)_t * sqrt(252))"
-            if model_version.lower() not in ("v0", "v2")
-            else ("(p_t - mean(p)) / std(p)" if model_version.lower() == "v0" else "(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))"),
-            "causal": model_version.lower() != "v0",
+            "name": "ewma60_close_deviation",
+            "formula": "(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))",
+            "causal": True,
         },
         "return_horizons": list(HORIZONS),
         "return_feature_formula": "(p_t - p_{t-H}) / (EWMA60(r)_t * sqrt(H))",
@@ -111,4 +124,5 @@ def feature_spec(model_version: str = ACTIVE_FEATURE_VERSION) -> dict:
         "macd_feature": "averaged MACD normalized by 63-day price volatility",
         "rsi_window": RSI_WINDOW,
         "volatility_feature": "EWMA60(r_t) / mean(EWMA60(r_t))",
+        "preset": policy["preset"],
     }

@@ -7,16 +7,15 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 
-from config import EXCLUDED_CONTRACTS, SOURCE_OVERRIDES
 from drl.dqn.model import DQNAgent
 from drl.dqn.spec import (
-    ACTIVE_MODEL_VERSION,
     RETRAIN_ROUNDS,
     SIGMA_TGT,
     WARMUP,
     maybe_load_manifest_for_checkpoint,
     resolve_checkpoint_path,
 )
+from drl_shared.spec import current_source_policy
 from drl_shared.state_space import action_id_to_position, build_feature_matrix, get_feature_window
 from strategy_backtester import backtest_strategy_metrics, paper_table3_reference
 
@@ -36,33 +35,35 @@ def canonical_strategy_name(strategy: str) -> str:
     return STRATEGY_LABELS[key]
 
 
+def current_dqn_policy() -> tuple[dict[str, str], list[str]]:
+    policy = current_source_policy()
+    return dict(policy["source_overrides"]), list(policy["excluded_contracts"])
+
+
 def _load_dqn_agent(
     round_num: int,
     ticker: str,
     checkpoint: str | None = None,
     checkpoint_bundle: str | None = None,
-    model_version: str = ACTIVE_MODEL_VERSION,
     run_id: str = "latest",
     device: str | None = None,
 ) -> tuple[DQNAgent, dict | None, Path]:
     ckpt_path = resolve_checkpoint_path(
         round_num,
         ticker,
-        model_version=model_version,
         run_id=run_id,
         checkpoint_bundle=checkpoint_bundle,
         checkpoint=checkpoint,
     )
     if not ckpt_path.exists():
-        raise FileNotFoundError(f"Missing DQN checkpoint for {ticker}: {ckpt_path}")
+        raise FileNotFoundError(
+            f"Missing DQN checkpoint for {ticker}: {ckpt_path}. "
+            "Mainline DQN does not fall back to archived walkforward/versioned checkpoints."
+        )
     agent = DQNAgent(device=device)
     checkpoint_meta = agent.load(ckpt_path)
     agent.q_net.eval()
     manifest = maybe_load_manifest_for_checkpoint(ckpt_path) or checkpoint_meta or None
-    if manifest and model_version.lower() != "v0":
-        actual_version = str(manifest.get("model_version", model_version)).lower()
-        if actual_version != model_version.lower():
-            raise ValueError(f"Model version mismatch for {ticker}: {actual_version} != {model_version}")
     return agent, manifest, ckpt_path
 
 
@@ -96,7 +97,6 @@ def dqn_position_provider(
     round_num: int | None = None,
     checkpoint: str | None = None,
     checkpoint_bundle: str | None = None,
-    model_version: str = ACTIVE_MODEL_VERSION,
     run_id: str = "latest",
     device: str | None = None,
     progress: bool = False,
@@ -112,12 +112,10 @@ def dqn_position_provider(
         ticker = rd["tk"]
         prices = np.asarray(rd["prices"], dtype=float)
         returns = np.asarray(rd["rt"], dtype=float)
-        sigma = np.asarray(rd["sigma"], dtype=float)
         start, t1 = int(rd["start"]), int(rd["t1"])
         eval_dates = pd.to_datetime(rd["dates"])
         eval_len = min(len(eval_dates), max(0, t1 - start + 1))
 
-        features = build_feature_matrix(prices, returns, sigma, model_version=model_version)
         positions = np.zeros(len(prices), dtype=float)
         if eval_len <= 0:
             return positions
@@ -125,6 +123,9 @@ def dqn_position_provider(
         round_masks = _resolve_rounds_for_dates(eval_dates[:eval_len], round_num=round_num)
         if not round_masks:
             return positions
+
+        sigma = np.asarray(rd["sigma"], dtype=float)
+        features = build_feature_matrix(prices, returns, sigma)
 
         for mask, rn in round_masks:
             agent_key = (ticker, rn)
@@ -134,17 +135,11 @@ def dqn_position_provider(
                     ticker=ticker,
                     checkpoint=checkpoint if round_num is not None else None,
                     checkpoint_bundle=checkpoint_bundle if round_num is not None else None,
-                    model_version=model_version,
                     run_id=run_id,
                     device=device,
                 )
             agent, manifest, _ = cache[agent_key]
-            if manifest and model_version.lower() not in ("v0",):
-                from drl_shared.spec import feature_spec
-                expected_state = feature_spec(model_version)["state_spec_version"]
-                actual_state = manifest.get("state_spec_version")
-                if actual_state != expected_state:
-                    raise ValueError(f"State spec mismatch for {ticker} r{rn}: {actual_state} != {expected_state}")
+            if manifest:
                 manifest_sigma = manifest.get("sigma_tgt")
                 if expected_sigma_tgt is not None and manifest_sigma is not None and not np.isclose(float(manifest_sigma), expected_sigma_tgt):
                     raise ValueError(
@@ -175,7 +170,6 @@ def portfolio_metrics(
     round_num: int | None = None,
     checkpoint: str | None = None,
     checkpoint_bundle: str | None = None,
-    model_version: str = ACTIVE_MODEL_VERSION,
     run_id: str = "latest",
     device: str | None = None,
     progress: bool = False,
@@ -185,14 +179,16 @@ def portfolio_metrics(
     source_overrides: dict[str, str] | None = None,
 ) -> dict[str, float]:
     strategy_name = canonical_strategy_name(strategy)
-    excluded = EXCLUDED_CONTRACTS if excluded_contracts is None else excluded_contracts
-    overrides = SOURCE_OVERRIDES if source_overrides is None else source_overrides
+    if strategy_name == "DQN":
+        overrides, excluded = current_dqn_policy()
+    else:
+        overrides = source_overrides
+        excluded = excluded_contracts
     provider = (
         dqn_position_provider(
             round_num=round_num,
             checkpoint=checkpoint,
             checkpoint_bundle=checkpoint_bundle,
-            model_version=model_version,
             run_id=run_id,
             device=device,
             progress=progress,

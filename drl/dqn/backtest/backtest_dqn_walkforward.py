@@ -32,8 +32,7 @@ if __name__ == "__main__":
     parser.add_argument("--asset", default="Forex")
     parser.add_argument("--round", type=int, default=None, help="Only for DQN. If omitted, stitch all rounds.")
     parser.add_argument("--checkpoint", default=None, help="Optional explicit checkpoint path for DQN.")
-    parser.add_argument("--checkpoint-bundle", default=None, help="Optional explicit versioned bundle directory for DQN.")
-    parser.add_argument("--model-version", default="v2")
+    parser.add_argument("--checkpoint-bundle", default=None, help="Optional explicit bundle directory for DQN.")
     parser.add_argument("--run-id", default="latest")
     parser.add_argument("--sigma", type=float, default=None)
     parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto", help="Torch device for DQN inference.")
@@ -53,7 +52,6 @@ if __name__ == "__main__":
         round_num=args.round,
         checkpoint=args.checkpoint,
         checkpoint_bundle=args.checkpoint_bundle,
-        model_version=args.model_version,
         run_id=args.run_id,
         device=args.device,
         progress=args.progress,

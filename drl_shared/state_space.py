@@ -8,11 +8,12 @@ import pandas as pd
 
 from config import BP, EWMA_SPAN, MACD_PAIRS, MACD_VOL_WINDOW
 from drl_shared.spec import (
-    ACTIVE_FEATURE_VERSION,
+    ACTIVE_FEATURE_LINE,
     CONTINUOUS_ACTION_RANGE,
     DISCRETE_ACTION_VALUES,
     FEATURE_DIM,
     HORIZONS,
+    feature_spec as shared_feature_spec,
     RSI_WINDOW,
     SEQ_LEN,
     SIGMA_TGT_DEFAULT,
@@ -50,30 +51,29 @@ def build_feature_matrix(
     prices: np.ndarray,
     returns: np.ndarray,
     sigma: np.ndarray,
-    model_version: str = ACTIVE_FEATURE_VERSION,
+    feature_spec_override: dict | None = None,
 ) -> np.ndarray:
     """Build the shared 8-dimensional state matrix.
 
-    Locked v3 convention:
-    - close feature is causal EWMA60 price deviation, annualized via EWMA_std(p)
+    Locked mainline conventions:
+    - close feature uses EWMA60(r) * sqrt(60)
     - return features use EWMA(60) sigma of additive r_t
     - MACD feature keeps 63-window volatility normalization
     """
     n = len(prices)
     feats = np.zeros((n, FEATURE_DIM), dtype=np.float32)
 
-    if model_version.lower() == "v0":
-        p_mean = prices.mean()
-        p_std = prices.std() + 1e-10
-        feats[:, 0] = (prices - p_mean) / p_std
-    elif model_version.lower() == "v2":
+    active_feature_spec = feature_spec_override or shared_feature_spec()
+    close_feature = dict(active_feature_spec.get("close_feature", {}))
+    close_feature_name = close_feature.get("name")
+
+    if close_feature_name == "ewma60_close_deviation":
         ema_price = pd.Series(prices).ewm(span=EWMA_SPAN, adjust=False).mean().to_numpy(dtype=float)
         feats[:, 0] = (prices - ema_price) / (sigma * np.sqrt(EWMA_SPAN) + 1e-10)
-    else:
-        # v3+: causal EWMA60 price deviation, annualized via EWMA_std of prices
-        ema_price = pd.Series(prices).ewm(span=EWMA_SPAN, adjust=False).mean().to_numpy(dtype=float)
-        ewma_std_price = pd.Series(prices).ewm(span=EWMA_SPAN, adjust=False).std().to_numpy(dtype=float)
-        feats[:, 0] = (prices - ema_price) / (ewma_std_price * np.sqrt(252) + 1e-10)
+    else:  # pragma: no cover - guarded by feature_spec
+        raise ValueError(
+            f"Unsupported DRL close feature spec for {ACTIVE_FEATURE_LINE}: {close_feature_name or close_feature}"
+        )
 
     for idx, horizon in enumerate(HORIZONS):
         col = np.zeros(n, dtype=float)
@@ -162,11 +162,10 @@ def build_contract_arrays(
     prices: np.ndarray,
     dates: np.ndarray,
     source: str,
-    model_version: str = ACTIVE_FEATURE_VERSION,
 ) -> ContractArrays:
     returns = compute_additive_returns(prices)
     sigma = compute_ewma_sigma(returns)
-    features = build_feature_matrix(prices, returns, sigma, model_version=model_version)
+    features = build_feature_matrix(prices, returns, sigma)
     return ContractArrays(
         ticker=ticker,
         prices=np.asarray(prices, dtype=float),

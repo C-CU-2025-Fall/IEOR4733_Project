@@ -8,34 +8,79 @@ import numpy as np
 import pandas as pd
 
 import baseline_run
+import drl.dqn.backtest.engine as backtest_engine
 import drl.dqn.spec as dqn_spec
+import drl.dqn.train.train_dqn_walkforward as train_mod
 import drl_shared.spec as shared_spec
+from config import PAPER_TABLE3
 from drl.dqn.model import DQNAgent
 from drl.dqn.train.train_dqn_walkforward import train_contract_round
 from drl_shared.state_space import build_feature_matrix, compute_additive_returns, compute_ewma_sigma
 
 
-class DRLV2FeatureTests(unittest.TestCase):
-    def test_close_feature_is_causal_and_matches_formula(self):
+def _write_feature_npz(path: Path, prices: np.ndarray, source: str = "TEST"):
+    returns = compute_additive_returns(prices)
+    sigma = compute_ewma_sigma(returns)
+    features = build_feature_matrix(prices, returns, sigma)
+    f_spec = shared_spec.feature_spec()
+    policy = shared_spec.current_source_policy()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        path,
+        ticker=path.parent.name,
+        prices=prices,
+        returns=returns,
+        sigma=sigma,
+        features=features,
+        dates=np.array(pd.date_range("2005-01-03", periods=len(prices), freq="B")),
+        source=source,
+        round="r1",
+        feature_line=f_spec["feature_line"],
+        state_spec_version=f_spec["state_spec_version"],
+        feature_spec=json.dumps(f_spec, sort_keys=True),
+        preset=policy["preset"],
+        excluded_contracts=json.dumps(policy["excluded_contracts"]),
+        source_overrides=json.dumps(policy["source_overrides"]),
+        train_start="2005-01-01",
+        train_end="2010-12-31",
+        test_start="2011-01-01",
+        test_end="2015-12-31",
+    )
+    return returns, sigma, features
+
+
+class DRLMainlineFeatureTests(unittest.TestCase):
+    def test_feature_spec_is_single_mainline(self):
+        spec = shared_spec.feature_spec()
+        self.assertEqual(spec["feature_line"], shared_spec.ACTIVE_FEATURE_LINE)
+        self.assertEqual(spec["state_spec_version"], shared_spec.STATE_SPEC_VERSION)
+        self.assertEqual(spec["preset"], "structural_38")
+        self.assertEqual(spec["close_feature"]["name"], "ewma60_close_deviation")
+
+    def test_close_feature_matches_formula(self):
         prices = 100.0 + np.cumsum(np.sin(np.arange(360) / 9.0) + 0.1)
         returns = compute_additive_returns(prices)
         sigma = compute_ewma_sigma(returns)
+        ema_price = pd.Series(prices).ewm(span=60, adjust=False).mean().to_numpy(dtype=float)
 
+        feats = build_feature_matrix(prices, returns, sigma)
+        manual = (prices - ema_price) / (sigma * np.sqrt(60) + 1e-10)
+        manual = np.nan_to_num(manual, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
+
+        self.assertEqual(feats.shape[1], shared_spec.FEATURE_DIM)
+        np.testing.assert_allclose(feats[:, 0], manual, rtol=0, atol=1e-6)
+
+    def test_close_feature_is_causal(self):
+        prices = 100.0 + np.cumsum(np.sin(np.arange(360) / 9.0) + 0.1)
+        returns = compute_additive_returns(prices)
+        sigma = compute_ewma_sigma(returns)
         full = build_feature_matrix(prices, returns, sigma)
         trunc_n = 300
         truncated = build_feature_matrix(prices[:trunc_n], returns[:trunc_n], sigma[:trunc_n])
-
-        self.assertEqual(full.shape, (360, 8))
         np.testing.assert_allclose(full[:trunc_n], truncated, rtol=0, atol=1e-6)
 
-        ema_price = pd.Series(prices).ewm(span=60, adjust=False).mean().to_numpy(dtype=float)
-        manual = (prices - ema_price) / (sigma * np.sqrt(60) + 1e-10)
-        manual = np.nan_to_num(manual, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
-        np.testing.assert_allclose(full[:, 0], manual, rtol=0, atol=1e-6)
-        self.assertTrue(np.isfinite(full).all())
 
-
-class DRLV2BacktestTests(unittest.TestCase):
+class DRLMainlineBacktestTests(unittest.TestCase):
     def test_vectorized_eq4_matches_loop_reference(self):
         n = 320
         prices = 80.0 + np.cumsum(np.cos(np.arange(n) / 13.0) + 0.05)
@@ -43,21 +88,45 @@ class DRLV2BacktestTests(unittest.TestCase):
         sigma = compute_ewma_sigma(rt)
         sigma[:5] = np.nan
         positions = np.where(np.arange(n) % 3 == 0, 1.0, np.where(np.arange(n) % 3 == 1, -1.0, 0.0))
-        rd = {
-            "tk": "ZZ",
-            "prices": prices,
-            "rt": rt,
-            "sigma": sigma,
-        }
+        rd = {"tk": "ZZ", "prices": prices, "rt": rt, "sigma": sigma}
 
         loop = baseline_run.compute_contract_returns_from_positions_loop(rd, positions, 0.058, detail=True)
         fast = baseline_run.compute_contract_returns_from_positions(rd, positions, 0.058, detail=True)
         for key in ("Rt", "scaled_pos", "gross_pnl", "tc_cost"):
             np.testing.assert_allclose(fast[key], loop[key], rtol=0, atol=1e-12)
 
+    def test_current_dqn_policy_is_structural38(self):
+        overrides, excluded = backtest_engine.current_dqn_policy()
+        policy = shared_spec.current_source_policy()
+        self.assertEqual(overrides, policy["source_overrides"])
+        self.assertEqual(sorted(excluded), sorted(policy["excluded_contracts"]))
 
-class DRLV2BundleTests(unittest.TestCase):
-    def test_training_smoke_creates_versioned_bundle(self):
+    def test_portfolio_metrics_routes_dqn_through_structural38_policy(self):
+        captured = {}
+
+        def fake_backtest(**kwargs):
+            captured.update(kwargs)
+            return {name: 0.0 for name in ["E(R)", "std(R)", "DD", "Sharpe", "Sortino", "MDD", "Calmar", "% +ve", "Ave P/L"]}
+
+        with patch.object(backtest_engine, "backtest_strategy_metrics", side_effect=fake_backtest):
+            backtest_engine.portfolio_metrics(
+                asset_name="Forex",
+                strategy="DQN",
+                round_num=1,
+                checkpoint="/tmp/missing.pt",
+                sigma_tgt=0.058,
+            )
+
+        policy = shared_spec.current_source_policy()
+        self.assertEqual(captured["source_overrides"], policy["source_overrides"])
+        self.assertEqual(sorted(captured["excluded_contracts"]), sorted(policy["excluded_contracts"]))
+
+    def test_paper_reference_uses_dqn_row(self):
+        self.assertEqual(backtest_engine.paper_reference("Forex", "DQN"), PAPER_TABLE3["Forex"]["DQN"])
+
+
+class DRLMainlineBundleTests(unittest.TestCase):
+    def test_training_smoke_creates_flat_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             feature_root = tmp_path / "features"
@@ -65,38 +134,16 @@ class DRLV2BundleTests(unittest.TestCase):
 
             n = 270
             prices = 120.0 + np.cumsum(np.sin(np.arange(n) / 11.0) + 0.03)
-            returns = compute_additive_returns(prices)
-            sigma = compute_ewma_sigma(returns)
-            features = build_feature_matrix(prices, returns, sigma)
-            f_spec = shared_spec.feature_spec("v2")
 
             with patch.object(shared_spec, "FEATURE_ROOT", feature_root), patch.object(dqn_spec, "MODEL_ROOT", model_root):
-                feature_path = shared_spec.feature_data_path(1, "AN", model_version="v2")
-                feature_path.parent.mkdir(parents=True, exist_ok=True)
-                np.savez_compressed(
-                    feature_path,
-                    ticker="AN",
-                    prices=prices,
-                    returns=returns,
-                    sigma=sigma,
-                    features=features,
-                    dates=np.array(pd.date_range("2005-01-03", periods=n, freq="B")),
-                    source="TEST",
-                    round="r1",
-                    model_version="v2",
-                    state_spec_version=f_spec["state_spec_version"],
-                    feature_spec=json.dumps(f_spec, sort_keys=True),
-                    train_start="2005-01-01",
-                    train_end="2010-12-31",
-                    test_start="2011-01-01",
-                    test_end="2015-12-31",
-                )
+                feature_path = shared_spec.feature_data_path(1, "AN")
+                _write_feature_npz(feature_path, prices)
 
                 checkpoint, bundle = train_contract_round(
                     "AN",
                     1,
                     episodes=1,
-                    model_version="v2",
+                    sigma_tgt=0.058,
                     device="cpu",
                     seed=7,
                 )
@@ -107,19 +154,62 @@ class DRLV2BundleTests(unittest.TestCase):
                 self.assertTrue((bundle / "feature_spec.json").exists())
                 self.assertTrue((bundle / "episode_metrics.csv").exists())
                 self.assertTrue((bundle / "train.log").exists())
+                self.assertEqual(bundle.parent.name, "r1")
+                self.assertEqual(bundle.parent.parent.name, "AN")
 
                 with (bundle / "manifest.json").open("r", encoding="utf-8") as fh:
                     manifest = json.load(fh)
-                self.assertEqual(manifest["model_version"], "v2")
-                self.assertEqual(manifest["state_spec_version"], "v2_ewma60_close_deviation")
+                self.assertEqual(manifest["feature_line"], shared_spec.ACTIVE_FEATURE_LINE)
+                self.assertEqual(manifest["state_spec_version"], shared_spec.STATE_SPEC_VERSION)
+                self.assertEqual(manifest["preset"], "structural_38")
                 self.assertEqual(manifest["sigma_tgt"], 0.058)
 
-    def test_dqn_batch_predict_returns_valid_action_ids(self):
+    def test_train_contract_round_passes_sigma_tgt_to_env(self):
+        prices = 120.0 + np.cumsum(np.sin(np.arange(270) / 11.0) + 0.03)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            feature_root = tmp_path / "features"
+            model_root = tmp_path / "models"
+            feature_path = feature_root / "AN" / "r1.npz"
+            _write_feature_npz(feature_path, prices)
+
+            captured = {}
+
+            class FakeEnv:
+                def __init__(self, contract, sigma_tgt=0.058):
+                    captured["sigma_tgt"] = sigma_tgt
+                    self.max_idx = len(contract.prices) - 1
+
+                def reset(self):
+                    return np.zeros((shared_spec.SEQ_LEN, shared_spec.FEATURE_DIM), dtype=np.float32)
+
+                def step(self, action_id):
+                    _ = action_id
+                    return np.zeros((shared_spec.SEQ_LEN, shared_spec.FEATURE_DIM), dtype=np.float32), 0.0, True
+
+            with patch.object(shared_spec, "FEATURE_ROOT", feature_root), patch.object(dqn_spec, "MODEL_ROOT", model_root), patch.object(train_mod, "ContractEnv", FakeEnv):
+                train_contract_round("AN", 1, episodes=1, sigma_tgt=0.061, device="cpu", seed=11)
+
+            self.assertEqual(captured["sigma_tgt"], 0.061)
+
+    def test_default_checkpoint_resolution_does_not_fall_back_to_archive_dirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            model_root = tmp_path / "models"
+            (model_root / "v2.1" / "AN" / "r1" / "20260423T000000").mkdir(parents=True, exist_ok=True)
+            (model_root / "walkforward").mkdir(parents=True, exist_ok=True)
+            with patch.object(dqn_spec, "MODEL_ROOT", model_root):
+                resolved = dqn_spec.resolve_checkpoint_path(1, "AN")
+            self.assertEqual(resolved, model_root / "AN" / "r1" / "latest" / "checkpoint.pt")
+
+
+class DQNInferenceTests(unittest.TestCase):
+    def test_predict_action_ids_returns_valid_action_ids(self):
         agent = DQNAgent(device="cpu")
-        states = np.zeros((5, 60, 8), dtype=np.float32)
+        states = np.zeros((8, shared_spec.SEQ_LEN, shared_spec.FEATURE_DIM), dtype=np.float32)
         action_ids = agent.predict_action_ids(states)
-        self.assertEqual(action_ids.shape, (5,))
-        self.assertTrue(set(action_ids.tolist()).issubset({0, 1, 2}))
+        self.assertEqual(action_ids.shape, (8,))
+        self.assertTrue(np.isin(action_ids, [0, 1, 2]).all())
 
 
 if __name__ == "__main__":
