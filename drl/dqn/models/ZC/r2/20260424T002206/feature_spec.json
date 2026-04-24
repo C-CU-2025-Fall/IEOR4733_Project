@@ -1,0 +1,23 @@
+{
+  "close_feature": {
+    "causal": true,
+    "formula": "(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))",
+    "name": "ewma60_close_deviation"
+  },
+  "feature_dim": 8,
+  "feature_line": "structural_38_mainline",
+  "macd_feature": "averaged MACD normalized by 63-day price volatility",
+  "preset": "structural_38",
+  "return_feature_formula": "(p_t - p_{t-H}) / (EWMA60(r)_t * sqrt(H))",
+  "return_horizons": [
+    21,
+    42,
+    63,
+    252
+  ],
+  "rsi_window": 30,
+  "seq_len": 60,
+  "state_spec_version": "structural_38_ewma60_close_deviation",
+  "volatility_estimator": "EWMA(60) std of additive r_t",
+  "volatility_feature": "EWMA60(r_t) / mean(EWMA60(r_t))"
+}

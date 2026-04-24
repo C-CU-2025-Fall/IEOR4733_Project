@@ -1,0 +1,74 @@
+{
+  "note": "Patience=5 results from chat history. Models deleted before patience=20 retrain.",
+  "training": {
+    "episodes": 100,
+    "early_stop_patience": 5,
+    "workers": 8,
+    "device": "cuda",
+    "feature_line": "structural_38_mainline",
+    "feature_0_formula": "(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))",
+    "sigma_tgt": 0.058
+  },
+  "observation": "All 96 models early stopped (avg 10.9 ep, median 9 ep). Models did not train long enough.",
+  "Commodity": {
+    "patience": 5,
+    "contracts": 24,
+    "trade_ok": 1, "path_ok": 0, "total_ok": 1,
+    "ours_E(R)": -0.119, "paper_E(R)": 0.187, "err_E(R)": 163.6,
+    "ours_std(R)": 0.133, "paper_std(R)": 0.301, "err_std(R)": 55.8,
+    "ours_DD": 0.087, "paper_DD": 0.173, "err_DD": 49.7,
+    "ours_Sharpe": -0.891, "paper_Sharpe": 0.623, "err_Sharpe": 243.0,
+    "ours_Sortino": -1.356, "paper_Sortino": 1.085, "err_Sortino": 225.0,
+    "ours_% +ve": 0.491, "paper_% +ve": 0.498, "err_% +ve": 1.4,
+    "ours_Ave P/L": 0.895, "paper_Ave P/L": 1.119, "err_Ave P/L": 20.0,
+    "ours_MDD": 0.047, "paper_MDD": 0.039, "err_MDD": 20.5,
+    "ours_Calmar": -0.107, "paper_Calmar": 0.413, "err_Calmar": 125.9
+  },
+  "Equity Index": {
+    "patience": 5,
+    "contracts": 11,
+    "trade_ok": 2, "path_ok": 0, "total_ok": 2,
+    "ours_E(R)": -0.128, "paper_E(R)": 0.461, "err_E(R)": 127.8,
+    "ours_std(R)": 0.296, "paper_std(R)": 0.933, "err_std(R)": 68.3,
+    "ours_DD": 0.214, "paper_DD": 0.611, "err_DD": 65.0,
+    "ours_Sharpe": -0.434, "paper_Sharpe": 0.494, "err_Sharpe": 187.9,
+    "ours_Sortino": -0.600, "paper_Sortino": 0.754, "err_Sortino": 179.6,
+    "ours_% +ve": 0.465, "paper_% +ve": 0.541, "err_% +ve": 14.0,
+    "ours_Ave P/L": 1.060, "paper_Ave P/L": 0.922, "err_Ave P/L": 15.0,
+    "ours_MDD": 0.129, "paper_MDD": 0.170, "err_MDD": 24.1,
+    "ours_Calmar": -0.095, "paper_Calmar": 0.308, "err_Calmar": 130.8
+  },
+  "Fixed Income": {
+    "patience": 5,
+    "contracts": 4,
+    "trade_ok": 1, "path_ok": 0, "total_ok": 1,
+    "ours_E(R)": -0.522, "paper_E(R)": 0.734, "err_E(R)": 171.1,
+    "ours_std(R)": 0.420, "paper_std(R)": 0.862, "err_std(R)": 51.3,
+    "ours_DD": 0.358, "paper_DD": 0.508, "err_DD": 29.5,
+    "ours_Sharpe": -1.244, "paper_Sharpe": 0.851, "err_Sharpe": 246.2,
+    "ours_Sortino": -1.461, "paper_Sortino": 1.445, "err_Sortino": 201.1,
+    "ours_% +ve": 0.295, "paper_% +ve": 0.515, "err_% +ve": 42.7,
+    "ours_Ave P/L": 0.948, "paper_Ave P/L": 1.086, "err_Ave P/L": 12.7,
+    "ours_MDD": 1.351, "paper_MDD": 0.118, "err_MDD": 1044.9,
+    "ours_Calmar": 0.000, "paper_Calmar": 0.469, "err_Calmar": 100.0
+  },
+  "Forex": {
+    "patience": 5,
+    "contracts": 9,
+    "trade_ok": 2, "path_ok": 0, "total_ok": 2,
+    "ours_E(R)": -0.199, "paper_E(R)": 0.272, "err_E(R)": 173.2,
+    "ours_std(R)": 0.285, "paper_std(R)": 0.487, "err_std(R)": 41.5,
+    "ours_DD": 0.200, "paper_DD": 0.280, "err_DD": 28.6,
+    "ours_Sharpe": -0.699, "paper_Sharpe": 0.560, "err_Sharpe": 224.8,
+    "ours_Sortino": -0.995, "paper_Sortino": 0.972, "err_Sortino": 202.4,
+    "ours_% +ve": 0.467, "paper_% +ve": 0.510, "err_% +ve": 8.4,
+    "ours_Ave P/L": 0.977, "paper_Ave P/L": 1.058, "err_Ave P/L": 7.7,
+    "ours_MDD": 0.263, "paper_MDD": 0.085, "err_MDD": 209.4,
+    "ours_Calmar": -0.093, "paper_Calmar": 0.326, "err_Calmar": 128.5
+  },
+  "summary": {
+    "total_ok_5": 6,
+    "total_ok_36": "6/36",
+    "note": "E(R) all negative. std(R) 40-70% too small. Model learns 'do nothing is best'."
+  }
+}

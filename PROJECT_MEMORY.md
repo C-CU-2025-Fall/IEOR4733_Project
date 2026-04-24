@@ -1,5 +1,5 @@
 # PROJECT_MEMORY.md
-# Last updated: 2026-04-23
+# Last updated: 2026-04-24
 
 Read this first when resuming work on this repo.
 
@@ -120,7 +120,40 @@ Most suspicious paper-side cells still flagged:
 
 It is not part of the active baseline or the active DRL mainline.
 
-## 7. Archive Notes
+## 7. DQN Mainline Training Results (2026-04-24)
+
+Two full training runs with mainline code (structural_38, 100ep):
+
+### Patience=5
+- All 96 models early stopped (avg 10.9 ep, median 9 ep)
+- Models did not train long enough; best reward usually at ep 2-9
+- Backtest: **6/36** metrics ≤15%
+- Results: `docs/dqn_backtest_patience5.json`
+
+### Patience=20
+- 96/96 models trained successfully (avg ~40 ep before early stop)
+- Backtest: **6/36** metrics ≤15% — **same as patience=5**
+- Results: `docs/dqn_backtest_patience20.json`
+- Models: `drl/dqn/models/<ticker>/r<round>/<run_id>/`
+- Features: `drl/features/<ticker>/r<round>.npz`
+
+### Core Problem
+- E(R) **all negative** across all 4 asset classes (paper: all positive)
+- std(R) **40-70% too small** (DQN positions too conservative)
+- Model learns "do nothing is best" — avoids TC by not trading
+- Only % +ve and Ave P/L occasionally align (direction-insensitive metrics)
+- **Not a training duration issue** — patience 5 vs 20 gives identical results
+- Root cause likely: reward signal, architecture, or feature representation
+
+### Per-Asset (Patience=20)
+| Asset | Total | ✅ Metrics |
+|-------|-------|------------|
+| Commodity | 1/9 | % +ve |
+| Equity Index | 2/9 | % +ve, Ave P/L |
+| Fixed Income | 2/9 | Ave P/L, % +ve |
+| Forex | 1/9 | Ave P/L |
+
+## 8. Archive Notes
 
 Past searches, compatibility lanes, and older versioned DRL interpretations were
 useful during diagnosis, but they are no longer the active mainline story.
