@@ -30,8 +30,9 @@ python run_strategy_backtest.py --strategy DQN --asset Forex
 python run_strategy_backtest.py --strategy DQN --asset "Fixed Income"
 
 # DRL feature prep and training
-python drl_shared/prepare_features.py --ticker AN --round 1
-python drl/dqn/train/train_dqn_walkforward.py --ticker AN --round 1 --episodes 50 --device cpu
+python drl_shared/prepare_features.py --asset Forex
+python drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 50 --device cpu
+python scripts/train_dqn_asset_parallel.py --round both --parallel 4 --device cuda
 ```
 
 ## Current Baseline
@@ -59,8 +60,20 @@ DRL now follows the same baseline doctrine as the structural baseline:
 Current DRL paths:
 - features:
   - `drl/features/<ticker>/r<round>.npz`
+  - `drl/features/<asset_class>/r<round>/index.json`
 - DQN bundles:
-  - `drl/dqn/models/<ticker>/r<round>/<run_id>/`
+  - `drl/dqn/models/<asset_class>/r<round>/<run_id>/`
+
+Current DQN training unit:
+- one shared DQN model per asset class per retrain round
+- default training covers both `r1` and `r2`
+- each asset-class cycle visits every eligible contract once with a shared replay buffer
+- early stopping uses chronological 90/10 train/validation monitoring with default patience `20`
+
+DQN stabilizers retained from the paper:
+- `[49]` fixed Q-targets, hard target-network copy every `1000` learn steps
+- `[18]` Double DQN, online-net argmax with target-net evaluation
+- `[50]` Dueling DQN, value and advantage heads
 
 Old directories such as:
 - `drl/dqn/models/walkforward/`
@@ -83,7 +96,7 @@ Current shared state:
 - feature 6:
   - RSI(30)-style feature
 - feature 7:
-  - volatility ratio
+  - causal volatility ratio
 
 This shared state is meant for `DQN` now, and later `PG / A2C`.
 

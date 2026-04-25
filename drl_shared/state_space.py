@@ -103,8 +103,9 @@ def build_feature_matrix(
     loss = pd.Series(np.where(delta < 0, -delta, 0.0)).rolling(RSI_WINDOW, min_periods=1).mean().to_numpy(dtype=float) + 1e-10
     feats[:, 6] = (50.0 - 50.0 / (1.0 + gain / loss)) / 50.0
 
-    mean_sigma = np.nanmean(sigma) + 1e-10
-    feats[:, 7] = sigma / mean_sigma
+    sigma_series = pd.Series(sigma).replace([np.inf, -np.inf], np.nan)
+    expanding_mean_sigma = sigma_series.expanding(min_periods=1).mean().to_numpy(dtype=float)
+    feats[:, 7] = sigma / (expanding_mean_sigma + 1e-10)
     return np.nan_to_num(feats, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
 
 
@@ -185,22 +186,29 @@ def build_contract_arrays(
 class ContractEnv:
     """Single-contract environment using the shared state/reward pipeline."""
 
-    def __init__(self, contract: ContractArrays, sigma_tgt: float = SIGMA_TGT_DEFAULT):
+    def __init__(
+        self,
+        contract: ContractArrays,
+        sigma_tgt: float = SIGMA_TGT_DEFAULT,
+        start_idx: int = WARMUP,
+        max_idx: int | None = None,
+    ):
         self.contract = contract
         self.prices = contract.prices
         self.returns = contract.returns
         self.sigma = contract.sigma
         self.features = contract.features
         self.sigma_tgt = sigma_tgt
-        self.max_idx = len(self.prices) - 1
-        self.idx = WARMUP
+        self.start_idx = max(WARMUP, int(start_idx))
+        self.max_idx = min(len(self.prices) - 1, int(max_idx)) if max_idx is not None else len(self.prices) - 1
+        self.idx = self.start_idx
         self.last_position = 0.0
-        self.last_sigma = self.sigma[WARMUP - 1] if WARMUP >= 1 else self.sigma[0]
+        self.last_sigma = self.sigma[self.start_idx - 1] if self.start_idx >= 1 else self.sigma[0]
 
     def reset(self) -> np.ndarray:
-        self.idx = WARMUP
+        self.idx = self.start_idx
         self.last_position = 0.0
-        self.last_sigma = self.sigma[WARMUP - 1] if WARMUP >= 1 else self.sigma[0]
+        self.last_sigma = self.sigma[self.start_idx - 1] if self.start_idx >= 1 else self.sigma[0]
         return get_feature_window(self.features, self.idx)
 
     def step(self, action_id: int) -> tuple[np.ndarray, float, bool]:

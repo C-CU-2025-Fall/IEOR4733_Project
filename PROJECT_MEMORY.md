@@ -1,5 +1,5 @@
 # PROJECT_MEMORY.md
-# Last updated: 2026-04-24
+# Last updated: 2026-04-25
 
 Read this first when resuming work on this repo.
 
@@ -19,6 +19,7 @@ The repo now has one active interpretation:
 
 3. DRL mainline
 - DQN uses the same `structural_38` data doctrine as the baseline
+- DQN trains one shared model per asset class per retrain round
 - one current shared feature/state convention
 - no active `v0 / v2 / v2.1 / v3` story in the mainline
 
@@ -64,8 +65,19 @@ Current feature/state convention:
 Current active artifact layout:
 - features:
   - `drl/features/<ticker>/r<round>.npz`
+  - `drl/features/<asset_class>/r<round>/index.json`
 - DQN bundles:
-  - `drl/dqn/models/<ticker>/r<round>/<run_id>/`
+  - `drl/dqn/models/<asset_class>/r<round>/<run_id>/`
+
+Current DQN training scheme:
+- default training covers `r1` and `r2`
+- one shared `DQNAgent` per asset class and round
+- one `ContractEnv` per eligible contract
+- shuffled round-robin cycles over contracts
+- shared replay buffer within each asset class
+- chronological 90/10 train/validation split
+- early stopping default patience is `20` validation cycles
+- stabilizers are `[49]` fixed Q-targets, `[18]` Double DQN, and `[50]` Dueling DQN
 
 Archive-only artifact families:
 - `drl/dqn/models/walkforward/`
@@ -120,9 +132,12 @@ Most suspicious paper-side cells still flagged:
 
 It is not part of the active baseline or the active DRL mainline.
 
-## 7. DQN Mainline Training Results (2026-04-24)
+## 7. Archived Per-Contract DQN Training Results (2026-04-24)
 
-Two full training runs with mainline code (structural_38, 100ep):
+These runs used the older per-contract DQN training line. They are retained as
+diagnostic history only, not as the current paper-faithful mainline.
+
+Two full training runs with structural_38, 100ep:
 
 ### Patience=5
 - All 96 models early stopped (avg 10.9 ep, median 9 ep)

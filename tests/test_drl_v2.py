@@ -14,7 +14,7 @@ import drl.dqn.train.train_dqn_walkforward as train_mod
 import drl_shared.spec as shared_spec
 from config import PAPER_TABLE3
 from drl.dqn.model import DQNAgent
-from drl.dqn.train.train_dqn_walkforward import train_contract_round
+from drl.dqn.train.train_dqn_walkforward import parse_rounds, train_asset_round
 from drl_shared.state_space import build_feature_matrix, compute_additive_returns, compute_ewma_sigma
 
 
@@ -126,7 +126,7 @@ class DRLMainlineBacktestTests(unittest.TestCase):
 
 
 class DRLMainlineBundleTests(unittest.TestCase):
-    def test_training_smoke_creates_flat_bundle(self):
+    def test_training_smoke_creates_asset_class_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             feature_root = tmp_path / "features"
@@ -134,18 +134,33 @@ class DRLMainlineBundleTests(unittest.TestCase):
 
             n = 270
             prices = 120.0 + np.cumsum(np.sin(np.arange(n) / 11.0) + 0.03)
+            f_spec = shared_spec.feature_spec()
+            policy = shared_spec.current_source_policy()
 
             with patch.object(shared_spec, "FEATURE_ROOT", feature_root), patch.object(dqn_spec, "MODEL_ROOT", model_root):
-                feature_path = shared_spec.feature_data_path(1, "AN")
-                _write_feature_npz(feature_path, prices)
+                for ticker in ("AN", "BN"):
+                    feature_path = shared_spec.feature_data_path(1, ticker)
+                    _write_feature_npz(feature_path, prices)
+                index_path = shared_spec.asset_index_path("Forex", 1)
+                index_path.parent.mkdir(parents=True, exist_ok=True)
+                with index_path.open("w", encoding="utf-8") as fh:
+                    json.dump({
+                        "asset_class": "Forex",
+                        "round": "r1",
+                        "member_tickers": ["AN", "BN"],
+                        "excluded_contracts": policy["excluded_contracts"],
+                        "source_overrides": policy["source_overrides"],
+                        "state_spec_version": f_spec["state_spec_version"],
+                    }, fh)
 
-                checkpoint, bundle = train_contract_round(
-                    "AN",
+                checkpoint, bundle = train_asset_round(
+                    "Forex",
                     1,
                     episodes=1,
                     sigma_tgt=0.058,
                     device="cpu",
                     seed=7,
+                    no_early_stop=True,
                 )
 
                 self.assertTrue(checkpoint.exists())
@@ -153,9 +168,11 @@ class DRLMainlineBundleTests(unittest.TestCase):
                 self.assertTrue((bundle / "train_config.json").exists())
                 self.assertTrue((bundle / "feature_spec.json").exists())
                 self.assertTrue((bundle / "episode_metrics.csv").exists())
+                self.assertTrue((bundle / "contract_metrics.csv").exists())
+                self.assertTrue((bundle / "validation_metrics.csv").exists())
                 self.assertTrue((bundle / "train.log").exists())
                 self.assertEqual(bundle.parent.name, "r1")
-                self.assertEqual(bundle.parent.parent.name, "AN")
+                self.assertEqual(bundle.parent.parent.name, "Forex")
 
                 with (bundle / "manifest.json").open("r", encoding="utf-8") as fh:
                     manifest = json.load(fh)
@@ -163,8 +180,15 @@ class DRLMainlineBundleTests(unittest.TestCase):
                 self.assertEqual(manifest["state_spec_version"], shared_spec.STATE_SPEC_VERSION)
                 self.assertEqual(manifest["preset"], "structural_38")
                 self.assertEqual(manifest["sigma_tgt"], 0.058)
+                self.assertEqual(manifest["training_mode"], "asset_class_shared")
+                self.assertEqual(manifest["asset_class"], "Forex")
+                self.assertEqual(manifest["member_tickers"], ["AN", "BN"])
+                self.assertEqual(manifest["architecture"]["paper_reference_ids"], [49, 18, 50])
+                self.assertTrue(manifest["architecture"]["dueling_dqn"])
+                self.assertTrue(manifest["architecture"]["double_dqn"])
+                self.assertTrue(manifest["architecture"]["fixed_q_targets"])
 
-    def test_train_contract_round_passes_sigma_tgt_to_env(self):
+    def test_train_asset_round_passes_sigma_tgt_to_env(self):
         prices = 120.0 + np.cumsum(np.sin(np.arange(270) / 11.0) + 0.03)
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -172,11 +196,16 @@ class DRLMainlineBundleTests(unittest.TestCase):
             model_root = tmp_path / "models"
             feature_path = feature_root / "AN" / "r1.npz"
             _write_feature_npz(feature_path, prices)
+            index_path = feature_root / "Forex" / "r1" / "index.json"
+            index_path.parent.mkdir(parents=True, exist_ok=True)
+            with index_path.open("w", encoding="utf-8") as fh:
+                json.dump({"member_tickers": ["AN"]}, fh)
 
             captured = {}
 
             class FakeEnv:
-                def __init__(self, contract, sigma_tgt=0.058):
+                def __init__(self, contract, sigma_tgt=0.058, **kwargs):
+                    _ = kwargs
                     captured["sigma_tgt"] = sigma_tgt
                     self.max_idx = len(contract.prices) - 1
 
@@ -188,7 +217,7 @@ class DRLMainlineBundleTests(unittest.TestCase):
                     return np.zeros((shared_spec.SEQ_LEN, shared_spec.FEATURE_DIM), dtype=np.float32), 0.0, True
 
             with patch.object(shared_spec, "FEATURE_ROOT", feature_root), patch.object(dqn_spec, "MODEL_ROOT", model_root), patch.object(train_mod, "ContractEnv", FakeEnv):
-                train_contract_round("AN", 1, episodes=1, sigma_tgt=0.061, device="cpu", seed=11)
+                train_asset_round("Forex", 1, episodes=1, sigma_tgt=0.061, device="cpu", seed=11, no_early_stop=True)
 
             self.assertEqual(captured["sigma_tgt"], 0.061)
 
@@ -199,8 +228,13 @@ class DRLMainlineBundleTests(unittest.TestCase):
             (model_root / "v2.1" / "AN" / "r1" / "20260423T000000").mkdir(parents=True, exist_ok=True)
             (model_root / "walkforward").mkdir(parents=True, exist_ok=True)
             with patch.object(dqn_spec, "MODEL_ROOT", model_root):
-                resolved = dqn_spec.resolve_checkpoint_path(1, "AN")
-            self.assertEqual(resolved, model_root / "AN" / "r1" / "latest" / "checkpoint.pt")
+                resolved = dqn_spec.resolve_checkpoint_path(1, "Forex")
+            self.assertEqual(resolved, model_root / "Forex" / "r1" / "latest" / "checkpoint.pt")
+
+    def test_default_round_parser_trains_both_rounds(self):
+        self.assertEqual(parse_rounds(None), [1, 2])
+        self.assertEqual(parse_rounds("both"), [1, 2])
+        self.assertEqual(parse_rounds("1"), [1])
 
 
 class DQNInferenceTests(unittest.TestCase):
@@ -210,6 +244,18 @@ class DQNInferenceTests(unittest.TestCase):
         action_ids = agent.predict_action_ids(states)
         self.assertEqual(action_ids.shape, (8,))
         self.assertTrue(np.isin(action_ids, [0, 1, 2]).all())
+
+    def test_dqn_stabilizers_are_active(self):
+        agent = DQNAgent(device="cpu")
+        self.assertTrue(hasattr(agent.q_net, "value"))
+        self.assertTrue(hasattr(agent.q_net, "advantage"))
+        state = np.zeros((shared_spec.SEQ_LEN, shared_spec.FEATURE_DIM), dtype=np.float32)
+        for idx in range(dqn_spec.BATCH_SIZE):
+            agent.push(state, idx % 3, 0.01, state, 0.0)
+        agent.train_steps = dqn_spec.TAU - 1
+        loss = agent.learn()
+        self.assertGreaterEqual(loss, 0.0)
+        self.assertEqual(agent.target_updates, 1)
 
 
 if __name__ == "__main__":

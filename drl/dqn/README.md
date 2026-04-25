@@ -4,7 +4,7 @@ This folder contains the DQN-only part of the active DRL stack.
 
 The mainline is now intentionally simple:
 
-- one model per contract per retrain round
+- one model per asset class per retrain round
 - one shared state-space schema
 - one unified baseline/backtest stack
 - no active version ladder
@@ -32,10 +32,10 @@ DQN produces positions. The baseline/backtest stack evaluates them.
 
 ```bash
 # Prepare shared features
-python drl_shared/prepare_features.py --ticker AN --round 1
+python drl_shared/prepare_features.py --asset Forex
 
-# Train one contract model
-python drl/dqn/train/train_dqn_walkforward.py --ticker AN --round 1 --episodes 50 --device cpu
+# Train one asset-class model per round; default round is both r1 and r2
+python drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 50 --device cpu
 
 # Unified backtest
 python run_strategy_backtest.py --strategy DQN --asset Forex
@@ -64,7 +64,7 @@ Features:
 - feature 6:
   - RSI(30)-style feature
 - feature 7:
-  - volatility ratio
+  - causal volatility ratio
 
 Locked conventions:
 - return features use `EWMA(60)` sigma of additive `r_t`
@@ -78,17 +78,26 @@ There is one DQN trainer, not multiple DQN families.
 Current retained architecture:
 - LSTM `[64, 32]`
 - Leaky-ReLU
-- target network with periodic hard update
-- Double DQN target construction
-- dueling value / advantage heads
+- `[49]` fixed Q-targets with hard target-network copy every `1000` learn steps
+- `[18]` Double DQN target construction
+- `[50]` dueling value / advantage heads
+
+Training scheme:
+- one shared `DQNAgent` per asset class and retrain round
+- one `ContractEnv` per eligible contract
+- shuffled round-robin cycles over contracts
+- shared replay buffer within the asset class
+- chronological 90/10 train/validation split
+- early stopping default patience is `20` validation cycles
 
 ## Artifacts
 
 Prepared features:
 - `drl/features/<ticker>/r<round>.npz`
+- `drl/features/<asset_class>/r<round>/index.json`
 
 Active DQN bundles:
-- `drl/dqn/models/<ticker>/r<round>/<run_id>/`
+- `drl/dqn/models/<asset_class>/r<round>/<run_id>/`
 
 Bundle contents:
 - `checkpoint.pt`
@@ -97,6 +106,8 @@ Bundle contents:
 - `feature_spec.json`
 - `train.log`
 - `episode_metrics.csv`
+- `contract_metrics.csv`
+- `validation_metrics.csv`
 - `checkpoint_metadata.json`
 
 Archived directories such as `models/walkforward/` and `models/v2.1/` may still

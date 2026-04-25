@@ -56,7 +56,6 @@ def main():
     parser.add_argument("--progress", action="store_true", help="Only for DQN; show inference progress bars with ETA.")
     parser.add_argument("--batch-size", type=int, default=2048, help="Only for DQN; inference batch size.")
     parser.add_argument("--exclude-contracts", default=None, help="Comma-separated exclusions, e.g. FB,ZA")
-    parser.add_argument("--version", default=None, help="Feature version (e.g., v4)")
     args = parser.parse_args()
 
     excluded = _parse_exclusions(args.exclude_contracts)
@@ -83,7 +82,6 @@ def main():
             sigma_tgt=effective_sigma,
             excluded_contracts=resolved_excluded,
             source_overrides=resolved_overrides,
-            version=args.version,
         )
         excluded = list(resolved_excluded or [])
         n_contracts = contract_count(args.asset, excluded_contracts=excluded, source_overrides=resolved_overrides)

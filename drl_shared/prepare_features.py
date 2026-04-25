@@ -19,6 +19,7 @@ from config import SOURCE_OVERRIDES
 from data_loader import load_clc_full
 from drl_shared.spec import (
     RETRAIN_ROUNDS,
+    asset_index_path,
     current_source_policy,
     feature_data_path,
     feature_spec,
@@ -125,6 +126,8 @@ def prepare_round_features(
     policy = current_source_policy()
     excluded_set = excluded if excluded is not None else set(policy["excluded_contracts"])
     tickers = [t for t in universe_tickers(asset_name) if t.upper() not in excluded_set]
+    prepared_tickers = []
+    failed_tickers = []
     ok = fail = 0
     print(f"\n{'=' * 70}")
     print(f"Shared DRL Feature Preparation — {asset_name} — {round_name(round_num)} (version={version or 'mainline'})")
@@ -134,8 +137,40 @@ def prepare_round_features(
     for ticker in tqdm(tickers, desc=f"Features {asset_name} {round_name(round_num)}", unit="tk"):
         if prepare_contract_round_features(ticker, round_num, source_overrides=source_overrides, version=version):
             ok += 1
+            prepared_tickers.append(ticker)
         else:
             fail += 1
+            failed_tickers.append(ticker)
+    spec = feature_spec(version=version)
+    index_path = asset_index_path(asset_name, round_num, version=version)
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    with index_path.open("w", encoding="utf-8") as fh:
+        json.dump(
+            {
+                "asset_class": asset_name,
+                "round": round_name(round_num),
+                "round_num": round_num,
+                "member_tickers": prepared_tickers,
+                "failed_tickers": failed_tickers,
+                "expected_tickers": tickers,
+                "excluded_contracts": sorted(excluded_set),
+                "source_overrides": source_overrides or policy["source_overrides"] or SOURCE_OVERRIDES,
+                "preset": policy["preset"],
+                "train_start": RETRAIN_ROUNDS[round_num]["train_start"],
+                "train_end": RETRAIN_ROUNDS[round_num]["train_end"],
+                "test_start": RETRAIN_ROUNDS[round_num]["test_start"],
+                "test_end": RETRAIN_ROUNDS[round_num]["test_end"],
+                "feature_spec": spec,
+                "state_spec_version": spec["state_spec_version"],
+                "expected_count": len(tickers),
+                "loaded_count": ok,
+                "failed_count": fail,
+            },
+            fh,
+            indent=2,
+            sort_keys=True,
+        )
+    print(f"Asset index: {index_path}")
     print(f"Prepared features: {ok}/{len(tickers)}")
     return ok, fail
 
@@ -146,7 +181,6 @@ def main():
     parser.add_argument("--ticker", default=None, help="Optional single ticker override")
     parser.add_argument("--round", type=int, choices=sorted(RETRAIN_ROUNDS), default=None)
     parser.add_argument("--all-rounds", action="store_true")
-    parser.add_argument("--version", default=None, help="Feature version (e.g., v4)")
     args = parser.parse_args()
 
     policy = current_source_policy()
@@ -157,9 +191,9 @@ def main():
     rounds = sorted(RETRAIN_ROUNDS) if args.all_rounds or args.round is None else [args.round]
     for round_num in rounds:
         if args.ticker:
-            prepare_contract_round_features(args.ticker.upper(), round_num, source_overrides=overrides, version=args.version)
+            prepare_contract_round_features(args.ticker.upper(), round_num, source_overrides=overrides)
         else:
-            prepare_round_features(args.asset, round_num, excluded=excluded, source_overrides=overrides, version=args.version)
+            prepare_round_features(args.asset, round_num, excluded=excluded, source_overrides=overrides)
 
 
 if __name__ == "__main__":

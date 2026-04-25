@@ -16,7 +16,7 @@ from config import SOURCE_OVERRIDES
 from data_loader import load_clc_full
 from drl.dqn.model import DQNAgent
 from drl.dqn.spec import RETRAIN_ROUNDS, WARMUP, resolve_checkpoint_path, ticker_asset_class, universe_tickers
-from drl.dqn.train.train_dqn_walkforward import train_contract_round
+from drl.dqn.train.train_dqn_walkforward import train_asset_round
 from drl_shared.state_space import build_contract_arrays, get_feature_window
 
 
@@ -67,10 +67,11 @@ def strategy_dqn_positions(ticker: str, round_num: int = 1, source: str | None =
 def status(asset_name: str = "All", ticker: str | None = None):
     tickers = [ticker.upper()] if ticker else universe_tickers(asset_name)
     print(f"DQN status — {asset_name if not ticker else ticker} ({len(tickers)} contracts)")
-    for tk in tickers:
-        print(f"  {tk} [{ticker_asset_class(tk)}]")
+    assets = sorted({ticker_asset_class(tk) for tk in tickers})
+    for asset in assets:
+        print(f"  {asset}")
         for round_num in sorted(RETRAIN_ROUNDS):
-            checkpoint = resolve_checkpoint_path(round_num, tk)
+            checkpoint = resolve_checkpoint_path(round_num, asset)
             print(f"    r{round_num}: {'Y' if checkpoint.exists() else 'N'} {checkpoint}")
 
 
@@ -81,11 +82,12 @@ if __name__ == "__main__":
     parser.add_argument("--ticker", default=None)
     parser.add_argument("--round", type=int, choices=sorted(RETRAIN_ROUNDS), default=1)
     parser.add_argument("--episodes", type=int, default=200)
+    parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     args = parser.parse_args()
 
     if args.cmd == "status":
         status(args.asset, ticker=args.ticker)
     elif args.cmd == "train":
-        if not args.ticker:
-            raise ValueError("--ticker is required for single-contract training")
-        train_contract_round(args.ticker, args.round, args.episodes)
+        if args.ticker:
+            raise ValueError("Mainline DQN training is asset-class based; use --asset, not --ticker.")
+        train_asset_round(args.asset, args.round, episodes=args.episodes, device=args.device)

@@ -41,6 +41,12 @@ RETRAIN_ROUNDS = {
 FEATURE_ROOT = REPO_ROOT / "drl" / "features"
 
 
+def asset_slug(asset_name: str) -> str:
+    if asset_name not in ASSET_CLASSES:
+        raise ValueError(f"Unknown asset universe: {asset_name}")
+    return asset_name.replace(" ", "_")
+
+
 def ticker_asset_class(ticker: str) -> str:
     ticker = ticker.upper()
     for asset_name, tickers in ASSET_CLASSES.items():
@@ -74,6 +80,13 @@ def feature_data_path(round_num: int, ticker: str, version: str | None = None) -
     if version:
         return FEATURE_ROOT / version / ticker_slug(ticker) / f"{round_name(round_num)}.npz"
     return FEATURE_ROOT / ticker_slug(ticker) / f"{round_name(round_num)}.npz"
+
+
+def asset_index_path(asset_name: str, round_num: int, version: str | None = None) -> Path:
+    root = FEATURE_ROOT / asset_slug(asset_name) / round_name(round_num)
+    if version:
+        root = FEATURE_ROOT / version / asset_slug(asset_name) / round_name(round_num)
+    return root / "index.json"
 
 
 def resolve_feature_data_path(round_num: int, ticker: str, version: str | None = None) -> Path:

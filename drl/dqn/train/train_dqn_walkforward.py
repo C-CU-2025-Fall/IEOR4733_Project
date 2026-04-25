@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single-contract walk-forward DQN training."""
+"""Asset-class walk-forward DQN training."""
 from __future__ import annotations
 
 import argparse
@@ -7,15 +7,16 @@ import json
 import random
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
-
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from config import ASSET_CLASSES
 from drl.dqn.logging_utils import RunLogger, make_run_id
 from drl.dqn.model import DQNAgent
 from drl.dqn.spec import (
@@ -23,13 +24,29 @@ from drl.dqn.spec import (
     MAX_STEPS_PER_EP,
     RETRAIN_ROUNDS,
     checkpoint_metadata,
-    contract_data_path,
     checkpoint_path_for_bundle,
+    contract_data_path,
     model_bundle_root,
     round_name,
 )
-from drl_shared.spec import current_source_policy, feature_spec
-from drl_shared.state_space import ContractArrays, ContractEnv
+from drl_shared.spec import (
+    SIGMA_TGT_DEFAULT,
+    asset_index_path,
+    current_source_policy,
+    feature_spec,
+    universe_tickers,
+)
+from drl_shared.state_space import (
+    ContractArrays,
+    ContractEnv,
+    action_id_to_position,
+    compute_eq4_reward,
+    get_feature_window,
+)
+
+
+DEFAULT_EARLY_STOP_PATIENCE = 20
+VALIDATION_FRACTION = 0.10
 
 
 def _npz_scalar(data, key: str, default=None):
@@ -39,6 +56,15 @@ def _npz_scalar(data, key: str, default=None):
     if getattr(value, "shape", None) == ():
         return value.item()
     return value
+
+
+def parse_rounds(value: str | int | None) -> list[int]:
+    if value is None or value == "" or str(value).lower() == "both":
+        return sorted(RETRAIN_ROUNDS)
+    round_num = int(value)
+    if round_num not in RETRAIN_ROUNDS:
+        raise ValueError(f"Unknown retrain round: {value}")
+    return [round_num]
 
 
 def load_contract_round(ticker: str, round_num: int, version: str | None = None) -> tuple[ContractArrays, dict]:
@@ -83,22 +109,18 @@ def load_contract_round(ticker: str, round_num: int, version: str | None = None)
     return contract, meta
 
 
-def train_contract_round(
-    ticker: str,
-    round_num: int,
-    episodes: int = EPISODES,
-    early_stop_patience: int = 0,
-    device: str | None = None,
-    seed: int | None = None,
-    sigma_tgt: float = 0.058,
-    version: str | None = None,
-) -> tuple[Path, Path]:
-    ticker = ticker.upper()
-    round_info = RETRAIN_ROUNDS[round_num]
-    if seed is not None:
-        random.seed(seed)
-        np.random.seed(seed)
-    contract, feature_meta = load_contract_round(ticker, round_num, version=version)
+def _asset_tickers_from_index(asset_name: str, round_num: int, version: str | None = None) -> list[str]:
+    index_path = asset_index_path(asset_name, round_num, version=version)
+    if index_path.exists():
+        with index_path.open("r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+        return [str(t).upper() for t in payload.get("member_tickers", [])]
+    policy = current_source_policy()
+    excluded = set(policy["excluded_contracts"])
+    return [t for t in universe_tickers(asset_name) if t.upper() not in excluded]
+
+
+def _validate_feature_policy(feature_meta: dict, ticker: str):
     expected_policy = current_source_policy()
     resolved_preset = feature_meta.get("preset") or expected_policy["preset"]
     if resolved_preset != expected_policy["preset"]:
@@ -106,142 +128,340 @@ def train_contract_round(
             f"Mainline DQN requires preset={expected_policy['preset']!r}, got {resolved_preset!r}"
         )
     if feature_meta.get("source_overrides") != expected_policy["source_overrides"]:
-        raise ValueError("Feature artifact source_overrides do not match structural_38")
+        raise ValueError(f"Feature artifact source_overrides do not match structural_38 for {ticker}")
     if sorted(feature_meta.get("excluded_contracts", [])) != sorted(expected_policy["excluded_contracts"]):
-        raise ValueError("Feature artifact excluded_contracts do not match structural_38")
-    env = ContractEnv(contract, sigma_tgt=sigma_tgt)
+        raise ValueError(f"Feature artifact excluded_contracts do not match structural_38 for {ticker}")
+
+
+def _train_validation_split_index(contract: ContractArrays) -> int:
+    n = len(contract.prices)
+    split = int(np.floor(n * (1.0 - VALIDATION_FRACTION)))
+    return max(253, min(n - 2, split))
+
+
+def _run_training_episode(env: ContractEnv, agent: DQNAgent, global_step: int) -> tuple[float, int, list[float], int]:
+    state = env.reset()
+    total_reward = 0.0
+    losses: list[float] = []
+    done = False
+    steps = 0
+    while not done and steps < MAX_STEPS_PER_EP:
+        eps = agent.epsilon_for_step(global_step)
+        action_id = agent.act(state, eps)
+        next_state, reward, done = env.step(action_id)
+        agent.push(state, action_id, reward, next_state, float(done))
+        loss = agent.learn()
+        if loss > 0:
+            losses.append(loss)
+        state = next_state
+        total_reward += reward
+        steps += 1
+        global_step += 1
+    return float(total_reward), steps, losses, global_step
+
+
+def _validation_reward(contract: ContractArrays, agent: DQNAgent, val_start_idx: int, sigma_tgt: float) -> float:
+    start = max(252, val_start_idx)
+    if start >= len(contract.prices) - 2:
+        return 0.0
+    total_reward = 0.0
+    prev_position = 0.0
+    prev_sigma = contract.sigma[start - 1] if start >= 1 else contract.sigma[0]
+    for idx in range(start, len(contract.prices) - 1):
+        state = get_feature_window(contract.features, idx)
+        action_id = agent.predict_action_id(state)
+        position = action_id_to_position(action_id)
+        reward, _, _, _ = compute_eq4_reward(
+            contract.prices,
+            contract.returns,
+            contract.sigma,
+            idx + 1,
+            position,
+            prev_position,
+            sigma_tgt=sigma_tgt,
+            prev_sigma=prev_sigma,
+        )
+        prev_sigma = contract.sigma[idx]
+        prev_position = position
+        total_reward += reward
+    return float(total_reward)
+
+
+def train_asset_round(
+    asset_name: str,
+    round_num: int,
+    episodes: int = EPISODES,
+    early_stop_patience: int = DEFAULT_EARLY_STOP_PATIENCE,
+    no_early_stop: bool = False,
+    device: str | None = None,
+    seed: int | None = None,
+    sigma_tgt: float = SIGMA_TGT_DEFAULT,
+    version: str | None = None,
+) -> tuple[Path, Path]:
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed)
+
+    tickers = _asset_tickers_from_index(asset_name, round_num, version=version)
+    if not tickers:
+        raise ValueError(f"No eligible contracts found for {asset_name} {round_name(round_num)}")
+
+    contracts: dict[str, ContractArrays] = {}
+    envs: dict[str, ContractEnv] = {}
+    feature_meta_by_ticker: dict[str, dict] = {}
+    validation_starts: dict[str, int] = {}
+    skipped: list[str] = []
+
+    for ticker in tickers:
+        try:
+            contract, feature_meta = load_contract_round(ticker, round_num, version=version)
+            _validate_feature_policy(feature_meta, ticker)
+            val_start = _train_validation_split_index(contract)
+            contracts[ticker] = contract
+            feature_meta_by_ticker[ticker] = feature_meta
+            validation_starts[ticker] = val_start
+            envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, max_idx=val_start)
+        except Exception as exc:
+            skipped.append(f"{ticker}: {exc}")
+
+    if not contracts:
+        raise ValueError(f"No loadable contracts for {asset_name} {round_name(round_num)}")
+
     agent = DQNAgent(device=device)
     run_id = make_run_id()
-    bundle_dir = model_bundle_root(round_num, ticker, run_id=run_id, version=version)
-    logger = RunLogger("dqn", ticker, round_num, run_id=run_id, base_dir=bundle_dir)
+    bundle_dir = model_bundle_root(round_num, asset_name, run_id=run_id, version=version)
+    logger = RunLogger("dqn", asset_name, round_num, run_id=run_id, base_dir=bundle_dir)
+    round_info = RETRAIN_ROUNDS[round_num]
+    f_spec = feature_spec(version=version)
+    patience = 0 if no_early_stop else early_stop_patience
     metadata = checkpoint_metadata(
         round_num,
-        ticker,
+        asset_name,
         algorithm="dqn",
         extra={
             "run_id": logger.run_id,
-            "episodes": episodes,
+            "cycles": episodes,
+            "episodes_per_cycle": len(contracts),
+            "total_planned_contract_episodes": episodes * len(contracts),
             "device": agent.device,
             "log_dir": str(logger.dir),
             "bundle_dir": str(bundle_dir),
             "seed": seed,
-            "preset": resolved_preset,
             "sigma_tgt": sigma_tgt,
-            **feature_meta,
+            "member_tickers": list(contracts),
+            "loaded_contracts": list(contracts),
+            "skipped_contracts": skipped,
+            "asset_class_count": len(contracts),
+            "validation_fraction": VALIDATION_FRACTION,
+            "early_stop_patience": patience,
+            "early_stop_unit": "validation_cycle",
+            "feature_artifact_paths": {
+                ticker: meta["feature_artifact_path"] for ticker, meta in feature_meta_by_ticker.items()
+            },
+            "state_spec_version": f_spec["state_spec_version"],
         },
     )
     logger.write_json("manifest.json", metadata)
-    logger.write_json("train_config.json", metadata["hyperparameters"] | {"episodes": episodes, "seed": seed})
+    logger.write_json("train_config.json", metadata["hyperparameters"] | {
+        "cycles": episodes,
+        "seed": seed,
+        "early_stop_patience": patience,
+        "validation_fraction": VALIDATION_FRACTION,
+    })
     logger.write_json("feature_spec.json", metadata["feature_spec"])
+
+    logger.log(f"{'=' * 70}")
+    logger.log(f"DQN Asset-Class Training — {asset_name} — {round_name(round_num)}")
+    logger.log(f"Train: {round_info['train_start']} ~ {round_info['train_end']}")
+    logger.log(f"Test : {round_info['test_start']} ~ {round_info['test_end']}")
+    logger.log(f"Contracts: {len(contracts)}/{len(tickers)} loaded | Device: {agent.device}")
+    if skipped:
+        logger.log(f"Skipped: {skipped}")
+    logger.log(f"Model bundle: {bundle_dir}")
+    logger.log(f"State spec: {metadata['state_spec_version']}")
+    logger.log(
+        "DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, "
+        "Dueling DQN; target hard-copy every 1000 learn steps"
+    )
+    logger.log(f"Early Stop: {'disabled' if patience <= 0 else f'patience={patience} validation cycles'}")
+    logger.log(f"{'=' * 70}")
 
     t0 = time.time()
     report_interval = max(1, episodes // 10)
     global_step = 0
-    episode_rows = []
+    global_episode = 0
+    episode_rows: list[dict] = []
+    validation_rows: list[dict] = []
+    contract_stats = defaultdict(lambda: {
+        "episodes_seen": 0,
+        "transitions_added": 0,
+        "reward_sum": 0.0,
+        "loss_sum": 0.0,
+        "loss_count": 0,
+        "last_reward": 0.0,
+        "last_loss": 0.0,
+    })
 
-    # Early stopping state
-    best_avg = -np.inf
+    best_validation = -np.inf
     best_state = None
-    best_ep = 0
+    best_target = None
+    best_cycle = 0
     patience_counter = 0
+    ordered_tickers = list(contracts)
 
-    logger.log(f"{'=' * 70}")
-    logger.log(f"DQN Training — {ticker} — {round_name(round_num)}")
-    logger.log(f"Train: {round_info['train_start']} ~ {round_info['train_end']}")
-    logger.log(f"Test : {round_info['test_start']} ~ {round_info['test_end']}")
-    logger.log(f"Source: {contract.source} | Train days: {len(contract.prices)} | Device: {agent.device}")
-    logger.log(f"Model bundle: {bundle_dir}")
-    logger.log(f"State spec: {metadata['state_spec_version']}")
-    logger.log("Architecture: LSTM[64,32] + Leaky-ReLU + Fixed Q-targets + Double DQN + Dueling DQN")
-    if early_stop_patience > 0:
-        logger.log(f"Early Stop: patience={early_stop_patience}")
-    logger.log(f"{'=' * 70}")
+    for cycle in range(1, episodes + 1):
+        random.shuffle(ordered_tickers)
+        cycle_rewards = []
+        cycle_losses = []
+        for ticker in ordered_tickers:
+            global_episode += 1
+            reward, steps, losses, global_step = _run_training_episode(envs[ticker], agent, global_step)
+            mean_loss = float(np.mean(losses)) if losses else 0.0
+            last_loss = float(losses[-1]) if losses else 0.0
+            cycle_rewards.append(reward)
+            cycle_losses.extend(losses)
 
-    for ep in range(episodes):
-        state = env.reset()
-        total_reward = 0.0
-        last_loss = 0.0
-        done = False
-        steps = 0
-        while not done and steps < MAX_STEPS_PER_EP:
-            eps = agent.epsilon_for_step(global_step)
-            action_id = agent.act(state, eps)
-            next_state, reward, done = env.step(action_id)
-            agent.push(state, action_id, reward, next_state, float(done))
-            loss = agent.learn()
-            if loss > 0:
-                last_loss = loss
-            state = next_state
-            total_reward += reward
-            steps += 1
-            global_step += 1
+            stats = contract_stats[ticker]
+            stats["episodes_seen"] += 1
+            stats["transitions_added"] += steps
+            stats["reward_sum"] += reward
+            stats["loss_sum"] += sum(losses)
+            stats["loss_count"] += len(losses)
+            stats["last_reward"] = reward
+            stats["last_loss"] = last_loss
 
-        row = {
-            "episode": ep + 1,
-            "reward": round(total_reward, 6),
-            "steps": steps,
-            "epsilon_end": round(agent.epsilon_for_step(global_step), 6),
-            "last_loss": round(last_loss, 6),
+            row = {
+                "episode": global_episode,
+                "cycle": cycle,
+                "round": round_num,
+                "ticker": ticker,
+                "reward": round(reward, 6),
+                "steps": steps,
+                "epsilon_end": round(agent.epsilon_for_step(global_step), 6),
+                "mean_loss": round(mean_loss, 6),
+                "last_loss": round(last_loss, 6),
+                "learn_steps": agent.train_steps,
+                "target_updates": agent.target_updates,
+                "replay_size": len(agent.replay),
+            }
+            episode_rows.append(row)
+
+        validation_by_contract = {
+            ticker: _validation_reward(contracts[ticker], agent, validation_starts[ticker], sigma_tgt)
+            for ticker in contracts
         }
-        episode_rows.append(row)
+        validation_mean = float(np.mean(list(validation_by_contract.values()))) if validation_by_contract else 0.0
+        if validation_mean > best_validation:
+            best_validation = validation_mean
+            best_state = {k: v.detach().cpu().clone() for k, v in agent.q_net.state_dict().items()}
+            best_target = {k: v.detach().cpu().clone() for k, v in agent.target.state_dict().items()}
+            best_cycle = cycle
+            patience_counter = 0
+        else:
+            patience_counter += 1
 
-        # Early stopping: check every episode
-        if early_stop_patience > 0:
-            if total_reward > best_avg:
-                best_avg = total_reward
-                best_state = {k: v.clone() for k, v in agent.q_net.state_dict().items()}
-                best_ep = ep + 1
-                patience_counter = 0
-            else:
-                patience_counter += 1
-                if patience_counter >= early_stop_patience:
+        validation_rows.append({
+            "cycle": cycle,
+            "round": round_num,
+            "validation_reward_mean": round(validation_mean, 6),
+            "validation_reward_by_contract": json.dumps(
+                {k: round(v, 6) for k, v in validation_by_contract.items()},
+                sort_keys=True,
+            ),
+            "best_validation_reward": round(best_validation, 6),
+            "patience_counter": patience_counter,
+        })
 
-                    logger.log(f"Early stop @ ep{ep + 1} (best={best_avg:+.2f} @ ep{best_ep})")
-                    break
-
-
-        if (ep + 1) % report_interval == 0:
+        if cycle % report_interval == 0 or cycle == 1:
             elapsed = time.time() - t0
+            avg_loss = float(np.mean(cycle_losses)) if cycle_losses else 0.0
+            eta = (elapsed / cycle) * max(0, episodes - cycle) if cycle > 0 else 0.0
             logger.log(
-                f"ep {ep + 1}/{episodes} reward={total_reward:+.4f} "
-                f"steps={steps} epsilon={row['epsilon_end']:.4f} "
-                f"loss={last_loss:.6f} ({elapsed:.0f}s)"
+                f"cycle {cycle}/{episodes} reward_avg={np.mean(cycle_rewards):+.4f} "
+                f"val={validation_mean:+.4f} loss={avg_loss:.6f} "
+                f"epsilon={agent.epsilon_for_step(global_step):.4f} replay={len(agent.replay)} "
+                f"target_updates={agent.target_updates} coverage={len(contracts)}/{len(tickers)} "
+                f"elapsed={elapsed:.0f}s eta={eta:.0f}s"
             )
 
-    # Restore best model if early stopped
-    if best_state is not None and patience_counter >= early_stop_patience:
-        agent.q_net.load_state_dict(best_state)
-        agent.target.load_state_dict(best_state)
-        logger.log(f"Restored best model (ep={best_ep})")
+        if patience > 0 and patience_counter >= patience:
+            logger.log(
+                f"Early stop @ cycle {cycle} "
+                f"(best_validation={best_validation:+.4f} @ cycle {best_cycle})"
+            )
+            break
 
+    if best_state is not None and best_target is not None:
+        agent.q_net.load_state_dict(best_state)
+        agent.target.load_state_dict(best_target)
+        logger.log(f"Restored best validation model (cycle={best_cycle})")
+
+    contract_rows = []
+    for ticker, stats in sorted(contract_stats.items()):
+        loss_count = max(1, stats["loss_count"])
+        episodes_seen = max(1, stats["episodes_seen"])
+        contract_rows.append({
+            "ticker": ticker,
+            "round": round_num,
+            "episodes_seen": stats["episodes_seen"],
+            "transitions_added": stats["transitions_added"],
+            "avg_reward": round(stats["reward_sum"] / episodes_seen, 6),
+            "avg_loss": round(stats["loss_sum"] / loss_count, 6),
+            "last_reward": round(stats["last_reward"], 6),
+            "last_loss": round(stats["last_loss"], 6),
+        })
+
+    metadata["completed_cycles"] = validation_rows[-1]["cycle"] if validation_rows else 0
+    metadata["best_validation_reward"] = best_validation
+    metadata["best_validation_cycle"] = best_cycle
+    metadata["learn_steps"] = agent.train_steps
+    metadata["target_updates"] = agent.target_updates
     out_path = checkpoint_path_for_bundle(bundle_dir)
     agent.save(out_path, metadata=metadata)
     logger.write_csv("episode_metrics.csv", episode_rows)
+    logger.write_csv("validation_metrics.csv", validation_rows)
+    logger.write_csv("contract_metrics.csv", contract_rows)
     logger.write_json("checkpoint_metadata.json", metadata)
+    logger.write_json("manifest.json", metadata)
     logger.log(f"Saved checkpoint: {out_path}")
     logger.log(f"Saved logs: {logger.dir}")
     return out_path, logger.dir
 
 
-if __name__ == "__main__":
+def train_contract_round(*args, **kwargs):
+    raise RuntimeError(
+        "Mainline DQN training is asset-class based. "
+        "Use train_asset_round(asset_name, round_num, ...) or the CLI with --asset."
+    )
+
+
+def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ticker", required=True)
-    parser.add_argument("--round", type=int, required=True, choices=sorted(RETRAIN_ROUNDS))
-    parser.add_argument("--episodes", type=int, default=EPISODES)
-    parser.add_argument("--early-stop", type=int, default=0, help="Early stopping patience (0=disabled)")
+    parser.add_argument("--asset", default="Forex", help='Asset universe or "All"')
+    parser.add_argument("--round", default="both", help='1, 2, or "both" (default)')
+    parser.add_argument("--episodes", type=int, default=EPISODES, help="Training cycles; each cycle visits every contract once.")
+    parser.add_argument("--early-stop", type=int, default=DEFAULT_EARLY_STOP_PATIENCE, help="Validation-cycle patience.")
+    parser.add_argument("--no-early-stop", action="store_true")
     parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--sigma-tgt", type=float, default=0.058)
-    parser.add_argument("--version", default=None, help="Feature version (e.g., v4)")
+    parser.add_argument("--sigma-tgt", type=float, default=SIGMA_TGT_DEFAULT)
     args = parser.parse_args()
 
-    train_contract_round(
-        args.ticker,
-        args.round,
-        args.episodes,
-        early_stop_patience=args.early_stop,
-        device=args.device,
-        seed=args.seed,
-        sigma_tgt=args.sigma_tgt,
-        version=args.version,
-    )
+    rounds = parse_rounds(args.round)
+    assets = list(ASSET_CLASSES) if args.asset in (None, "", "All") else [args.asset]
+    for round_num in rounds:
+        for asset_name in assets:
+            train_asset_round(
+                asset_name,
+                round_num,
+                episodes=args.episodes,
+                early_stop_patience=args.early_stop,
+                no_early_stop=args.no_early_stop,
+                device=args.device,
+                seed=args.seed,
+                sigma_tgt=args.sigma_tgt,
+            )
+
+
+if __name__ == "__main__":
+    main()

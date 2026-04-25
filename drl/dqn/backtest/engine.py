@@ -42,7 +42,7 @@ def current_dqn_policy() -> tuple[dict[str, str], list[str]]:
 
 def _load_dqn_agent(
     round_num: int,
-    ticker: str,
+    asset_name: str,
     checkpoint: str | None = None,
     checkpoint_bundle: str | None = None,
     run_id: str = "latest",
@@ -50,15 +50,15 @@ def _load_dqn_agent(
 ) -> tuple[DQNAgent, dict | None, Path]:
     ckpt_path = resolve_checkpoint_path(
         round_num,
-        ticker,
+        asset_name,
         run_id=run_id,
         checkpoint_bundle=checkpoint_bundle,
         checkpoint=checkpoint,
     )
     if not ckpt_path.exists():
         raise FileNotFoundError(
-            f"Missing DQN checkpoint for {ticker}: {ckpt_path}. "
-            "Mainline DQN does not fall back to archived walkforward/versioned checkpoints."
+            f"Missing DQN checkpoint for {asset_name} r{round_num}: {ckpt_path}. "
+            "Mainline DQN expects one asset-class checkpoint per round."
         )
     agent = DQNAgent(device=device)
     checkpoint_meta = agent.load(ckpt_path)
@@ -94,6 +94,7 @@ def _resolve_rounds_for_dates(
 
 
 def dqn_position_provider(
+    asset_name: str,
     round_num: int | None = None,
     checkpoint: str | None = None,
     checkpoint_bundle: str | None = None,
@@ -102,12 +103,11 @@ def dqn_position_provider(
     progress: bool = False,
     batch_size: int = 2048,
     expected_sigma_tgt: float | None = None,
-    version: str | None = None,
 ):
     """Return a provider(rd)->positions for baseline_run.compute_strategy_metrics."""
     if (checkpoint or checkpoint_bundle) and round_num is None:
         raise ValueError("Explicit DQN checkpoint/checkpoint-bundle requires --round.")
-    cache: dict[tuple[str, int], tuple[DQNAgent, dict | None, Path]] = {}
+    cache: dict[int, tuple[DQNAgent, dict | None, Path]] = {}
 
     def provider(rd) -> np.ndarray:
         ticker = rd["tk"]
@@ -126,22 +126,26 @@ def dqn_position_provider(
             return positions
 
         sigma = np.asarray(rd["sigma"], dtype=float)
-        feat_spec = feature_spec(version=version) if version else None
-        features = build_feature_matrix(prices, returns, sigma, feature_spec_override=feat_spec)
+        features = build_feature_matrix(prices, returns, sigma, feature_spec_override=feature_spec())
 
         for mask, rn in round_masks:
-            agent_key = (ticker, rn)
-            if agent_key not in cache:
-                cache[agent_key] = _load_dqn_agent(
+            if rn not in cache:
+                cache[rn] = _load_dqn_agent(
                     rn,
-                    ticker=ticker,
+                    asset_name=asset_name,
                     checkpoint=checkpoint if round_num is not None else None,
                     checkpoint_bundle=checkpoint_bundle if round_num is not None else None,
                     run_id=run_id,
                     device=device,
                 )
-            agent, manifest, _ = cache[agent_key]
+            agent, manifest, _ = cache[rn]
             if manifest:
+                manifest_asset = manifest.get("asset_class")
+                if manifest_asset and manifest_asset != asset_name:
+                    raise ValueError(
+                        f"Asset-class checkpoint mismatch for r{rn}: manifest={manifest_asset!r}, "
+                        f"backtest={asset_name!r}"
+                    )
                 manifest_sigma = manifest.get("sigma_tgt")
                 if expected_sigma_tgt is not None and manifest_sigma is not None and not np.isclose(float(manifest_sigma), expected_sigma_tgt):
                     raise ValueError(
@@ -179,7 +183,6 @@ def portfolio_metrics(
     sigma_tgt: float = SIGMA_TGT,
     excluded_contracts: list[str] | None = None,
     source_overrides: dict[str, str] | None = None,
-    version: str | None = None,
 ) -> dict[str, float]:
     strategy_name = canonical_strategy_name(strategy)
     if strategy_name == "DQN":
@@ -189,6 +192,7 @@ def portfolio_metrics(
         excluded = excluded_contracts
     provider = (
         dqn_position_provider(
+            asset_name=asset_name,
             round_num=round_num,
             checkpoint=checkpoint,
             checkpoint_bundle=checkpoint_bundle,
@@ -197,7 +201,6 @@ def portfolio_metrics(
             progress=progress,
             batch_size=batch_size,
             expected_sigma_tgt=sigma_tgt,
-            version=version,
         )
         if strategy_name == "DQN"
         else None

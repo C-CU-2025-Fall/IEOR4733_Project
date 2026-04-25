@@ -151,6 +151,7 @@ class DQNAgent:
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=50, gamma=0.9)
         self.replay = ReplayBuffer(MEMORY_SIZE)
         self.train_steps = 0
+        self.target_updates = 0
 
     def epsilon_for_step(self, step: int) -> float:
         frac = min(max(step, 0) / EPS_DECAY_STEPS, 1.0)
@@ -202,6 +203,7 @@ class DQNAgent:
         self.train_steps += 1
         if self.train_steps % TAU == 0:
             self.target.load_state_dict(self.q_net.state_dict())
+            self.target_updates += 1
         return float(loss.item())
 
     def save(self, path: str | Path, metadata: dict | None = None):

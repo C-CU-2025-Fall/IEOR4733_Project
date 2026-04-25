@@ -31,20 +31,30 @@ Important:
 
 ```bash
 python drl_shared/prepare_features.py --asset Forex --round 1
-python drl_shared/prepare_features.py --ticker AN --round 1
 ```
 
 Output:
 - `drl/features/<ticker>/r<round>.npz`
+- `drl/features/<asset_class>/r<round>/index.json`
 
-### 2. Train one DQN model per contract
+### 2. Train one DQN model per asset class
 
 ```bash
-python drl/dqn/train/train_dqn_walkforward.py --ticker AN --round 1 --episodes 50 --device cpu
+python drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 50 --device cpu
+python scripts/train_dqn_asset_parallel.py --round both --parallel 4 --device cuda
 ```
 
 Output:
-- `drl/dqn/models/<ticker>/r<round>/<run_id>/`
+- `drl/dqn/models/<asset_class>/r<round>/<run_id>/`
+
+Training behavior:
+- no `--round` trains both `r1` and `r2`
+- one shared DQNAgent per asset class and round
+- one ContractEnv per eligible contract
+- shuffled round-robin cycles over contracts
+- shared replay buffer inside the asset class
+- chronological 90/10 validation split
+- early stopping default patience is `20` validation cycles
 
 ### 3. Run unified backtests
 
@@ -72,13 +82,18 @@ python run_strategy_backtest.py --strategy DQN --asset "Fixed Income"
   - `r2`: train through 2015, test 2016-2019
 - DQN action space:
   - `{-1, 0, +1}`
+- DQN training stabilizers:
+  - `[49]` fixed Q-targets
+  - `[18]` Double DQN
+  - `[50]` Dueling DQN
 
 ## Active Artifact Layout
 
 - features:
   - `drl/features/<ticker>/r<round>.npz`
+  - `drl/features/<asset_class>/r<round>/index.json`
 - DQN bundles:
-  - `drl/dqn/models/<ticker>/r<round>/<run_id>/`
+  - `drl/dqn/models/<asset_class>/r<round>/<run_id>/`
 
 Old directories like `drl/dqn/models/walkforward/` and `drl/dqn/models/v2.1/`
 are archive artifacts only.
