@@ -33,7 +33,6 @@ def prepare_contract_round_features(
     ticker: str,
     round_num: int,
     source_overrides: dict | None = None,
-    version: str | None = None,
 ) -> bool:
     ticker = ticker.upper()
     round_info = RETRAIN_ROUNDS[round_num]
@@ -58,7 +57,7 @@ def prepare_contract_round_features(
     # Compute features on full data (burn-in + train)
     df_train_full = df.loc[df["Date"] <= round_info["train_end"]].reset_index(drop=True)
 
-    spec = feature_spec(version=version)
+    spec = feature_spec()
     contract_full = build_contract_arrays(
         ticker=ticker,
         prices=df_train_full["Close"].to_numpy(dtype=float),
@@ -84,7 +83,7 @@ def prepare_contract_round_features(
         print(f"  {ticker}: train period too short after burn-in ({len(contract.prices)} days)")
         return False
 
-    out_path = feature_data_path(round_num, ticker, version=version)
+    out_path = feature_data_path(round_num, ticker)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         out_path,
@@ -109,7 +108,7 @@ def prepare_contract_round_features(
         burnin_days=BURNIN_DAYS,
     )
     print(
-        f"  {ticker}: prepared features (version={version or 'mainline'}) train={len(contract.prices)}d "
+        f"  {ticker}: prepared features train={len(contract.prices)}d "
         f"({round_info['train_start']}~{round_info['train_end']}, burnin={BURNIN_DAYS}d), source={source}, "
         f"state={spec['state_spec_version']}"
     )
@@ -121,7 +120,6 @@ def prepare_round_features(
     round_num: int,
     excluded: set[str] | None = None,
     source_overrides: dict | None = None,
-    version: str | None = None,
 ) -> tuple[int, int]:
     policy = current_source_policy()
     excluded_set = excluded if excluded is not None else set(policy["excluded_contracts"])
@@ -130,19 +128,19 @@ def prepare_round_features(
     failed_tickers = []
     ok = fail = 0
     print(f"\n{'=' * 70}")
-    print(f"Shared DRL Feature Preparation — {asset_name} — {round_name(round_num)} (version={version or 'mainline'})")
+    print(f"Shared DRL Feature Preparation — {asset_name} — {round_name(round_num)}")
     print(f"Train: {RETRAIN_ROUNDS[round_num]['train_start']} ~ {RETRAIN_ROUNDS[round_num]['train_end']}")
     print(f"Test : {RETRAIN_ROUNDS[round_num]['test_start']} ~ {RETRAIN_ROUNDS[round_num]['test_end']}")
     print(f"{'=' * 70}")
     for ticker in tqdm(tickers, desc=f"Features {asset_name} {round_name(round_num)}", unit="tk"):
-        if prepare_contract_round_features(ticker, round_num, source_overrides=source_overrides, version=version):
+        if prepare_contract_round_features(ticker, round_num, source_overrides=source_overrides):
             ok += 1
             prepared_tickers.append(ticker)
         else:
             fail += 1
             failed_tickers.append(ticker)
-    spec = feature_spec(version=version)
-    index_path = asset_index_path(asset_name, round_num, version=version)
+    spec = feature_spec()
+    index_path = asset_index_path(asset_name, round_num)
     index_path.parent.mkdir(parents=True, exist_ok=True)
     with index_path.open("w", encoding="utf-8") as fh:
         json.dump(

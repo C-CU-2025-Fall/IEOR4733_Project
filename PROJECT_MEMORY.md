@@ -54,7 +54,8 @@ Current feature/state convention:
 - `seq_len = 60`
 - `feature_dim = 8`
 - close feature:
-  - `(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))`
+  - `(p_t - EMA60(p)_t) / EWMA60(r)_t`
+  - this intentionally removes the previous unsupported `sqrt(60)` denominator
 - return features:
   - `21 / 42 / 63 / 252`
 - MACD normalization:

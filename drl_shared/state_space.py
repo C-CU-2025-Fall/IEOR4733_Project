@@ -56,7 +56,7 @@ def build_feature_matrix(
     """Build the shared 8-dimensional state matrix.
 
     Locked mainline conventions:
-    - close feature uses EWMA60(r) * sqrt(60)
+    - close feature uses causal EWMA60 price deviation scaled by EWMA60(r)
     - return features use EWMA(60) sigma of additive r_t
     - MACD feature keeps 63-window volatility normalization
     """
@@ -68,9 +68,6 @@ def build_feature_matrix(
     close_feature_name = close_feature.get("name")
 
     if close_feature_name == "ewma60_close_deviation":
-        ema_price = pd.Series(prices).ewm(span=EWMA_SPAN, adjust=False).mean().to_numpy(dtype=float)
-        feats[:, 0] = (prices - ema_price) / (sigma * np.sqrt(EWMA_SPAN) + 1e-10)
-    elif close_feature_name == "ewma60_close_deviation_v4":
         ema_price = pd.Series(prices).ewm(span=EWMA_SPAN, adjust=False).mean().to_numpy(dtype=float)
         feats[:, 0] = (prices - ema_price) / (sigma + 1e-10)
     else:  # pragma: no cover - guarded by feature_spec

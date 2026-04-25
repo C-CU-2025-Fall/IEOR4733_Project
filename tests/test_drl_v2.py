@@ -64,7 +64,7 @@ class DRLMainlineFeatureTests(unittest.TestCase):
         ema_price = pd.Series(prices).ewm(span=60, adjust=False).mean().to_numpy(dtype=float)
 
         feats = build_feature_matrix(prices, returns, sigma)
-        manual = (prices - ema_price) / (sigma * np.sqrt(60) + 1e-10)
+        manual = (prices - ema_price) / (sigma + 1e-10)
         manual = np.nan_to_num(manual, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
 
         self.assertEqual(feats.shape[1], shared_spec.FEATURE_DIM)

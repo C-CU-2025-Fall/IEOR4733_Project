@@ -67,16 +67,16 @@ def parse_rounds(value: str | int | None) -> list[int]:
     return [round_num]
 
 
-def load_contract_round(ticker: str, round_num: int, version: str | None = None) -> tuple[ContractArrays, dict]:
+def load_contract_round(ticker: str, round_num: int) -> tuple[ContractArrays, dict]:
     ticker = ticker.upper()
-    path = contract_data_path(round_num, ticker, version=version)
+    path = contract_data_path(round_num, ticker)
     if not path.exists():
         raise FileNotFoundError(
             f"No prepared shared feature data found at {path}. "
             "Run python drl_shared/prepare_features.py first."
         )
     data = np.load(path, allow_pickle=True)
-    expected = feature_spec(version=version)
+    expected = feature_spec()
     actual_state = _npz_scalar(data, "state_spec_version")
     if actual_state != expected["state_spec_version"]:
         raise ValueError(
@@ -109,8 +109,8 @@ def load_contract_round(ticker: str, round_num: int, version: str | None = None)
     return contract, meta
 
 
-def _asset_tickers_from_index(asset_name: str, round_num: int, version: str | None = None) -> list[str]:
-    index_path = asset_index_path(asset_name, round_num, version=version)
+def _asset_tickers_from_index(asset_name: str, round_num: int) -> list[str]:
+    index_path = asset_index_path(asset_name, round_num)
     if index_path.exists():
         with index_path.open("r", encoding="utf-8") as fh:
             payload = json.load(fh)
@@ -196,13 +196,12 @@ def train_asset_round(
     device: str | None = None,
     seed: int | None = None,
     sigma_tgt: float = SIGMA_TGT_DEFAULT,
-    version: str | None = None,
 ) -> tuple[Path, Path]:
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
 
-    tickers = _asset_tickers_from_index(asset_name, round_num, version=version)
+    tickers = _asset_tickers_from_index(asset_name, round_num)
     if not tickers:
         raise ValueError(f"No eligible contracts found for {asset_name} {round_name(round_num)}")
 
@@ -214,7 +213,7 @@ def train_asset_round(
 
     for ticker in tickers:
         try:
-            contract, feature_meta = load_contract_round(ticker, round_num, version=version)
+            contract, feature_meta = load_contract_round(ticker, round_num)
             _validate_feature_policy(feature_meta, ticker)
             val_start = _train_validation_split_index(contract)
             contracts[ticker] = contract
@@ -229,10 +228,10 @@ def train_asset_round(
 
     agent = DQNAgent(device=device)
     run_id = make_run_id()
-    bundle_dir = model_bundle_root(round_num, asset_name, run_id=run_id, version=version)
+    bundle_dir = model_bundle_root(round_num, asset_name, run_id=run_id)
     logger = RunLogger("dqn", asset_name, round_num, run_id=run_id, base_dir=bundle_dir)
     round_info = RETRAIN_ROUNDS[round_num]
-    f_spec = feature_spec(version=version)
+    f_spec = feature_spec()
     patience = 0 if no_early_stop else early_stop_patience
     metadata = checkpoint_metadata(
         round_num,

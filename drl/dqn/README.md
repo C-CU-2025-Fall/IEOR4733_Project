@@ -36,6 +36,7 @@ python drl_shared/prepare_features.py --asset Forex
 
 # Train one asset-class model per round; default round is both r1 and r2
 python drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 50 --device cpu
+python drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 1 --device mps
 
 # Unified backtest
 python run_strategy_backtest.py --strategy DQN --asset Forex
@@ -47,6 +48,7 @@ Important runtime notes:
 - DQN uses the same `structural_38` source policy as the baseline
 - missing checkpoints fail explicitly
 - the active path does not fall back to archived model directories
+- `--device auto` prefers CUDA, then Apple MPS, then CPU; `--device mps` fails clearly if MPS is unavailable
 
 ## Shared State Space
 
@@ -56,7 +58,7 @@ The shared state uses:
 
 Features:
 - feature 0:
-  - `(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))`
+  - `(p_t - EMA60(p)_t) / EWMA60(r)_t`
 - features 1-4:
   - vol-adjusted returns for `21 / 42 / 63 / 252`
 - feature 5:

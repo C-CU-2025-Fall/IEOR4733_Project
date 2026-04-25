@@ -1,0 +1,93 @@
+{
+  "asset_class": "Forex",
+  "excluded_contracts": [
+    "FB",
+    "ZA"
+  ],
+  "expected_count": 9,
+  "expected_tickers": [
+    "AN",
+    "BN",
+    "CN",
+    "DX",
+    "FN",
+    "JN",
+    "MP",
+    "NK",
+    "SN"
+  ],
+  "failed_count": 0,
+  "failed_tickers": [],
+  "feature_spec": {
+    "close_feature": {
+      "causal": true,
+      "formula": "(p_t - EMA60(p)_t) / EWMA60(r)_t",
+      "name": "ewma60_close_deviation"
+    },
+    "feature_dim": 8,
+    "feature_line": "structural_38_mainline",
+    "macd_feature": "averaged MACD normalized by 63-day price volatility",
+    "preset": "structural_38",
+    "return_feature_formula": "(p_t - p_{t-H}) / (EWMA60(r)_t * sqrt(H))",
+    "return_horizons": [
+      21,
+      42,
+      63,
+      252
+    ],
+    "rsi_window": 30,
+    "seq_len": 60,
+    "state_spec_version": "structural_38_ewma60_close_deviation_no_sqrt60",
+    "volatility_estimator": "EWMA(60) std of additive r_t",
+    "volatility_feature": "EWMA60(r_t) / mean(EWMA60(r_t))"
+  },
+  "loaded_count": 9,
+  "member_tickers": [
+    "AN",
+    "BN",
+    "CN",
+    "DX",
+    "FN",
+    "JN",
+    "MP",
+    "NK",
+    "SN"
+  ],
+  "preset": "structural_38",
+  "round": "r1",
+  "round_num": 1,
+  "source_overrides": {
+    "CC": "RAD_REGEN",
+    "DA": "RAD_REGEN",
+    "DT": "RAD",
+    "EN": "REV",
+    "ES": "RAD_REGEN",
+    "GI": "RAD_REGEN",
+    "JN": "REV",
+    "JO": "RAD_REGEN",
+    "KW": "REV",
+    "LB": "RAD",
+    "MP": "RAD_REGEN",
+    "NK": "RAD_REGEN",
+    "SC": "RAD_REGEN",
+    "SN": "REV",
+    "SP": "RAD_REGEN",
+    "ZA": "RAD_REGEN",
+    "ZF": "REV",
+    "ZG": "RAD_REGEN",
+    "ZH": "RAD_REGEN",
+    "ZI": "REV",
+    "ZK": "REV",
+    "ZN": "REV",
+    "ZO": "RAD_REGEN",
+    "ZR": "REV",
+    "ZT": "RAD_REGEN",
+    "ZU": "REV",
+    "ZW": "REV"
+  },
+  "state_spec_version": "structural_38_ewma60_close_deviation_no_sqrt60",
+  "test_end": "2015-12-31",
+  "test_start": "2011-01-01",
+  "train_end": "2010-12-31",
+  "train_start": "2005-01-01"
+}

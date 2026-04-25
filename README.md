@@ -32,6 +32,7 @@ python run_strategy_backtest.py --strategy DQN --asset "Fixed Income"
 # DRL feature prep and training
 python drl_shared/prepare_features.py --asset Forex
 python drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 50 --device cpu
+python drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 1 --device mps
 python scripts/train_dqn_asset_parallel.py --round both --parallel 4 --device cuda
 ```
 
@@ -88,7 +89,7 @@ Current shared state:
 - `seq_len = 60`
 - `feature_dim = 8`
 - feature 0:
-  - `(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))`
+  - `(p_t - EMA60(p)_t) / EWMA60(r)_t`
 - features 1-4:
   - vol-adjusted returns for `21 / 42 / 63 / 252`
 - feature 5:

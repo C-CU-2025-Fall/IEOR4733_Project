@@ -67,10 +67,11 @@ python run_strategy_backtest.py --strategy DQN --asset "Fixed Income"
 ## Locked Defaults
 
 - default `sigma_tgt = 0.058`
+- `--device auto` prefers CUDA, then Apple MPS, then CPU
 - state window: `60`
 - feature dimension: `8`
 - close-price feature:
-  - `(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))`
+  - `(p_t - EMA60(p)_t) / EWMA60(r)_t`
 - return horizons:
   - `21 / 42 / 63 / 252`
 - return-feature vol normalization:

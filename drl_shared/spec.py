@@ -14,9 +14,7 @@ RSI_WINDOW = 30
 WARMUP = 252
 
 ACTIVE_FEATURE_LINE = "structural_38_mainline"
-ACTIVE_FEATURE_VERSION = ACTIVE_FEATURE_LINE  # Backward-compatible alias.
-STATE_SPEC_VERSION = "structural_38_ewma60_close_deviation"
-STATE_SPEC_VERSION_V4 = "v4_ewma60_close_deviation"
+STATE_SPEC_VERSION = "structural_38_ewma60_close_deviation_no_sqrt60"
 
 DISCRETE_ACTION_VALUES = (-1.0, 0.0, 1.0)
 CONTINUOUS_ACTION_RANGE = (-1.0, 1.0)
@@ -76,34 +74,17 @@ def round_name(round_num: int) -> str:
     return f"r{round_num}"
 
 
-def feature_data_path(round_num: int, ticker: str, version: str | None = None) -> Path:
-    if version:
-        return FEATURE_ROOT / version / ticker_slug(ticker) / f"{round_name(round_num)}.npz"
+def feature_data_path(round_num: int, ticker: str) -> Path:
     return FEATURE_ROOT / ticker_slug(ticker) / f"{round_name(round_num)}.npz"
 
 
-def asset_index_path(asset_name: str, round_num: int, version: str | None = None) -> Path:
+def asset_index_path(asset_name: str, round_num: int) -> Path:
     root = FEATURE_ROOT / asset_slug(asset_name) / round_name(round_num)
-    if version:
-        root = FEATURE_ROOT / version / asset_slug(asset_name) / round_name(round_num)
     return root / "index.json"
 
 
-def resolve_feature_data_path(round_num: int, ticker: str, version: str | None = None) -> Path:
-    return feature_data_path(round_num, ticker, version=version)
-
-
-def normalize_model_version(model_version: str | None = None) -> str:
-    """Archive-only compatibility alias.
-
-    Mainline DRL no longer routes behavior by version. The active line is the
-    single structural-38-aligned feature spec.
-    """
-    if model_version in (None, "", "current", ACTIVE_FEATURE_LINE, ACTIVE_FEATURE_VERSION):
-        return ACTIVE_FEATURE_LINE
-    raise ValueError(
-        f"Versioned DRL lines are archive-only and unsupported in the mainline: {model_version}"
-    )
+def resolve_feature_data_path(round_num: int, ticker: str) -> Path:
+    return feature_data_path(round_num, ticker)
 
 
 def current_source_policy() -> dict:
@@ -116,32 +97,16 @@ def current_source_policy() -> dict:
     }
 
 
-def preset_policy(model_version: str | None = None) -> dict:
-    _ = model_version
-    return current_source_policy()
-
-
-def feature_spec(model_version: str | None = None, version: str | None = None) -> dict:
-    _ = model_version
+def feature_spec() -> dict:
     policy = current_source_policy()
-    ver = version or "mainline"
-    if ver == "v4":
-        close_feature = {
-            "name": "ewma60_close_deviation_v4",
-            "formula": "(p_t - EMA60(p)_t) / EWMA60(r)_t",
-            "causal": True,
-        }
-        state_spec = STATE_SPEC_VERSION_V4
-    else:
-        close_feature = {
-            "name": "ewma60_close_deviation",
-            "formula": "(p_t - EMA60(p)_t) / (EWMA60(r)_t * sqrt(60))",
-            "causal": True,
-        }
-        state_spec = STATE_SPEC_VERSION
+    close_feature = {
+        "name": "ewma60_close_deviation",
+        "formula": "(p_t - EMA60(p)_t) / EWMA60(r)_t",
+        "causal": True,
+    }
     return {
         "feature_line": ACTIVE_FEATURE_LINE,
-        "state_spec_version": state_spec,
+        "state_spec_version": STATE_SPEC_VERSION,
         "seq_len": SEQ_LEN,
         "feature_dim": FEATURE_DIM,
         "close_feature": close_feature,
