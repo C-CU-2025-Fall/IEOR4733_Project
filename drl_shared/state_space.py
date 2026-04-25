@@ -70,6 +70,9 @@ def build_feature_matrix(
     if close_feature_name == "ewma60_close_deviation":
         ema_price = pd.Series(prices).ewm(span=EWMA_SPAN, adjust=False).mean().to_numpy(dtype=float)
         feats[:, 0] = (prices - ema_price) / (sigma * np.sqrt(EWMA_SPAN) + 1e-10)
+    elif close_feature_name == "ewma60_close_deviation_v4":
+        ema_price = pd.Series(prices).ewm(span=EWMA_SPAN, adjust=False).mean().to_numpy(dtype=float)
+        feats[:, 0] = (prices - ema_price) / (sigma + 1e-10)
     else:  # pragma: no cover - guarded by feature_spec
         raise ValueError(
             f"Unsupported DRL close feature spec for {ACTIVE_FEATURE_LINE}: {close_feature_name or close_feature}"
@@ -100,7 +103,8 @@ def build_feature_matrix(
     loss = pd.Series(np.where(delta < 0, -delta, 0.0)).rolling(RSI_WINDOW, min_periods=1).mean().to_numpy(dtype=float) + 1e-10
     feats[:, 6] = (50.0 - 50.0 / (1.0 + gain / loss)) / 50.0
 
-    feats[:, 7] = sigma / (sigma.mean() + 1e-10)
+    mean_sigma = np.nanmean(sigma) + 1e-10
+    feats[:, 7] = sigma / mean_sigma
     return np.nan_to_num(feats, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
 
 
@@ -162,10 +166,11 @@ def build_contract_arrays(
     prices: np.ndarray,
     dates: np.ndarray,
     source: str,
+    feature_spec_override: dict | None = None,
 ) -> ContractArrays:
     returns = compute_additive_returns(prices)
     sigma = compute_ewma_sigma(returns)
-    features = build_feature_matrix(prices, returns, sigma)
+    features = build_feature_matrix(prices, returns, sigma, feature_spec_override=feature_spec_override)
     return ContractArrays(
         ticker=ticker,
         prices=np.asarray(prices, dtype=float),

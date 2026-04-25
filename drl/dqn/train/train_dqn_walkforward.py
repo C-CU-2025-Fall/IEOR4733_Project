@@ -41,16 +41,16 @@ def _npz_scalar(data, key: str, default=None):
     return value
 
 
-def load_contract_round(ticker: str, round_num: int) -> tuple[ContractArrays, dict]:
+def load_contract_round(ticker: str, round_num: int, version: str | None = None) -> tuple[ContractArrays, dict]:
     ticker = ticker.upper()
-    path = contract_data_path(round_num, ticker)
+    path = contract_data_path(round_num, ticker, version=version)
     if not path.exists():
         raise FileNotFoundError(
             f"No prepared shared feature data found at {path}. "
             "Run python drl_shared/prepare_features.py first."
         )
     data = np.load(path, allow_pickle=True)
-    expected = feature_spec()
+    expected = feature_spec(version=version)
     actual_state = _npz_scalar(data, "state_spec_version")
     if actual_state != expected["state_spec_version"]:
         raise ValueError(
@@ -91,13 +91,14 @@ def train_contract_round(
     device: str | None = None,
     seed: int | None = None,
     sigma_tgt: float = 0.058,
+    version: str | None = None,
 ) -> tuple[Path, Path]:
     ticker = ticker.upper()
     round_info = RETRAIN_ROUNDS[round_num]
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
-    contract, feature_meta = load_contract_round(ticker, round_num)
+    contract, feature_meta = load_contract_round(ticker, round_num, version=version)
     expected_policy = current_source_policy()
     resolved_preset = feature_meta.get("preset") or expected_policy["preset"]
     if resolved_preset != expected_policy["preset"]:
@@ -111,7 +112,7 @@ def train_contract_round(
     env = ContractEnv(contract, sigma_tgt=sigma_tgt)
     agent = DQNAgent(device=device)
     run_id = make_run_id()
-    bundle_dir = model_bundle_root(round_num, ticker, run_id=run_id)
+    bundle_dir = model_bundle_root(round_num, ticker, run_id=run_id, version=version)
     logger = RunLogger("dqn", ticker, round_num, run_id=run_id, base_dir=bundle_dir)
     metadata = checkpoint_metadata(
         round_num,
@@ -231,6 +232,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--sigma-tgt", type=float, default=0.058)
+    parser.add_argument("--version", default=None, help="Feature version (e.g., v4)")
     args = parser.parse_args()
 
     train_contract_round(
@@ -241,4 +243,5 @@ if __name__ == "__main__":
         device=args.device,
         seed=args.seed,
         sigma_tgt=args.sigma_tgt,
+        version=args.version,
     )

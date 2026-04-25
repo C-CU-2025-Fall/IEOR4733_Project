@@ -52,11 +52,13 @@ LSTM_HIDDEN_SIZES = (64, 32)
 WARMUP = 252
 
 
-def contract_data_path(round_num: int, ticker: str) -> Path:
-    return feature_data_path(round_num, ticker)
+def contract_data_path(round_num: int, ticker: str, version: str | None = None) -> Path:
+    return feature_data_path(round_num, ticker, version=version)
 
 
-def model_bundle_root(round_num: int, ticker: str, run_id: str) -> Path:
+def model_bundle_root(round_num: int, ticker: str, run_id: str, version: str | None = None) -> Path:
+    if version:
+        return MODEL_ROOT / version / ticker_slug(ticker) / round_name(round_num) / run_id
     return MODEL_ROOT / ticker_slug(ticker) / round_name(round_num) / run_id
 
 

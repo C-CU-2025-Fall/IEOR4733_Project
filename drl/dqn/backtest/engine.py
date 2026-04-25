@@ -15,7 +15,7 @@ from drl.dqn.spec import (
     maybe_load_manifest_for_checkpoint,
     resolve_checkpoint_path,
 )
-from drl_shared.spec import current_source_policy
+from drl_shared.spec import current_source_policy, feature_spec
 from drl_shared.state_space import action_id_to_position, build_feature_matrix, get_feature_window
 from strategy_backtester import backtest_strategy_metrics, paper_table3_reference
 
@@ -102,6 +102,7 @@ def dqn_position_provider(
     progress: bool = False,
     batch_size: int = 2048,
     expected_sigma_tgt: float | None = None,
+    version: str | None = None,
 ):
     """Return a provider(rd)->positions for baseline_run.compute_strategy_metrics."""
     if (checkpoint or checkpoint_bundle) and round_num is None:
@@ -125,7 +126,8 @@ def dqn_position_provider(
             return positions
 
         sigma = np.asarray(rd["sigma"], dtype=float)
-        features = build_feature_matrix(prices, returns, sigma)
+        feat_spec = feature_spec(version=version) if version else None
+        features = build_feature_matrix(prices, returns, sigma, feature_spec_override=feat_spec)
 
         for mask, rn in round_masks:
             agent_key = (ticker, rn)
@@ -177,6 +179,7 @@ def portfolio_metrics(
     sigma_tgt: float = SIGMA_TGT,
     excluded_contracts: list[str] | None = None,
     source_overrides: dict[str, str] | None = None,
+    version: str | None = None,
 ) -> dict[str, float]:
     strategy_name = canonical_strategy_name(strategy)
     if strategy_name == "DQN":
@@ -194,6 +197,7 @@ def portfolio_metrics(
             progress=progress,
             batch_size=batch_size,
             expected_sigma_tgt=sigma_tgt,
+            version=version,
         )
         if strategy_name == "DQN"
         else None
