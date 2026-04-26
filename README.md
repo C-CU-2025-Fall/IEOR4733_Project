@@ -69,7 +69,8 @@ Current DQN training unit:
 - one shared DQN model per asset class per retrain round
 - default training covers both `r1` and `r2`
 - each asset-class cycle visits every eligible contract once with a shared replay buffer
-- early stopping uses chronological 90/10 train/validation monitoring with default patience `20`
+- no early stopping — paper trains all episodes without validation split
+- resume: `--resume` restores weights, optimizer, replay buffer, and full RNG state (torch/numpy/python) for reproducible continuation
 
 DQN stabilizers retained from the paper:
 - `[49]` fixed Q-targets, hard target-network copy every `1000` learn steps
@@ -87,17 +88,15 @@ the active default path.
 
 Current shared state:
 - `seq_len = 60`
-- `feature_dim = 8`
+- `feature_dim = 7`
 - feature 0:
-  - `(p_t - EMA60(p)_t) / EWMA60(r)_t`
+  - normalized close price by 60-day rolling std
 - features 1-4:
   - vol-adjusted returns for `21 / 42 / 63 / 252`
 - feature 5:
   - averaged MACD normalized by 63-day price volatility
 - feature 6:
-  - RSI(30)-style feature
-- feature 7:
-  - causal volatility ratio
+  - RSI(30) normalized to [-1, 1]
 
 This shared state is meant for `DQN` now, and later `PG / A2C`.
 

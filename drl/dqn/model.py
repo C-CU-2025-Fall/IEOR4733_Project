@@ -148,7 +148,6 @@ class DQNAgent:
         self.target = DuelingDQNLSTM().to(self.device)
         self.target.load_state_dict(self.q_net.state_dict())
         self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=LR)
-        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=50, gamma=0.9)
         self.replay = ReplayBuffer(MEMORY_SIZE)
         self.train_steps = 0
         self.target_updates = 0
@@ -196,9 +195,7 @@ class DQNAgent:
 
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.q_net.parameters(), 0.5)
         self.optimizer.step()
-        self.scheduler.step()
 
         self.train_steps += 1
         if self.train_steps % TAU == 0:
@@ -206,18 +203,29 @@ class DQNAgent:
             self.target_updates += 1
         return float(loss.item())
 
-    def save(self, path: str | Path, metadata: dict | None = None):
+    def save(self, path: str | Path, metadata: dict | None = None, include_training_state: bool = False):
         payload = {
             "spec_version": DQN_SPEC_VERSION,
             "metadata": metadata or {},
             "q_net": self.q_net.state_dict(),
             "target_net": self.target.state_dict(),
         }
+        if include_training_state:
+            payload["training_state"] = {
+                "optimizer": self.optimizer.state_dict(),
+                "train_steps": self.train_steps,
+                "target_updates": self.target_updates,
+                "replay": self.replay.buffer.copy(),
+                "replay_position": self.replay.position,
+                "torch_rng": torch.random.get_rng_state(),
+                "numpy_rng": np.random.get_state(),
+                "python_rng": random.getstate(),
+            }
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(payload, path)
 
-    def load(self, path: str | Path):
+    def load(self, path: str | Path, resume: bool = False):
         checkpoint = torch.load(path, map_location=self.device, weights_only=False)
         if "q_net" in checkpoint and "target_net" in checkpoint:
             q_state = checkpoint["q_net"]
@@ -231,9 +239,22 @@ class DQNAgent:
             self.q_net = FCHeadDQNLSTM().to(self.device)
             self.target = FCHeadDQNLSTM().to(self.device)
             self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=LR)
-            self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=50, gamma=0.9)
         self.q_net.load_state_dict(q_state)
         self.target.load_state_dict(target_state)
+        if resume and "training_state" in checkpoint:
+            ts = checkpoint["training_state"]
+            self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=LR)
+            self.optimizer.load_state_dict(ts["optimizer"])
+            self.train_steps = ts["train_steps"]
+            self.target_updates = ts["target_updates"]
+            self.replay.buffer = ts["replay"].copy()
+            self.replay.position = ts["replay_position"]
+            if "torch_rng" in ts:
+                torch.random.set_rng_state(ts["torch_rng"])
+            if "numpy_rng" in ts:
+                np.random.set_state(ts["numpy_rng"])
+            if "python_rng" in ts:
+                random.setstate(ts["python_rng"])
         return checkpoint.get("metadata", {})
 
 

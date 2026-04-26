@@ -8,13 +8,13 @@ from config import ASSET_CLASSES
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 SEQ_LEN = 60
-FEATURE_DIM = 8
+FEATURE_DIM = 7
 HORIZONS = (21, 42, 63, 252)
 RSI_WINDOW = 30
 WARMUP = 252
 
 ACTIVE_FEATURE_LINE = "structural_38_mainline"
-STATE_SPEC_VERSION = "structural_38_ewma60_close_deviation_no_sqrt60"
+STATE_SPEC_VERSION = "structural_38_close_norm_7d"
 
 DISCRETE_ACTION_VALUES = (-1.0, 0.0, 1.0)
 CONTINUOUS_ACTION_RANGE = (-1.0, 1.0)
@@ -99,22 +99,16 @@ def current_source_policy() -> dict:
 
 def feature_spec() -> dict:
     policy = current_source_policy()
-    close_feature = {
-        "name": "ewma60_close_deviation",
-        "formula": "(p_t - EMA60(p)_t) / EWMA60(r)_t",
-        "causal": True,
-    }
     return {
         "feature_line": ACTIVE_FEATURE_LINE,
         "state_spec_version": STATE_SPEC_VERSION,
         "seq_len": SEQ_LEN,
         "feature_dim": FEATURE_DIM,
-        "close_feature": close_feature,
+        "close_feature": "normalized_close_price_60d_rolling_std",
         "return_horizons": list(HORIZONS),
-        "return_feature_formula": "(p_t - p_{t-H}) / (EWMA60(r)_t * sqrt(H))",
+        "return_feature_formula": "(p_t - p_{t-H}) / (sigma_t * sqrt(H))",
         "volatility_estimator": "EWMA(60) std of additive r_t",
         "macd_feature": "averaged MACD normalized by 63-day price volatility",
         "rsi_window": RSI_WINDOW,
-        "volatility_feature": "EWMA60(r_t) / mean(EWMA60(r_t))",
         "preset": policy["preset"],
     }

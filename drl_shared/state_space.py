@@ -8,12 +8,10 @@ import pandas as pd
 
 from config import BP, EWMA_SPAN, MACD_PAIRS, MACD_VOL_WINDOW
 from drl_shared.spec import (
-    ACTIVE_FEATURE_LINE,
     CONTINUOUS_ACTION_RANGE,
     DISCRETE_ACTION_VALUES,
     FEATURE_DIM,
     HORIZONS,
-    feature_spec as shared_feature_spec,
     RSI_WINDOW,
     SEQ_LEN,
     SIGMA_TGT_DEFAULT,
@@ -53,34 +51,31 @@ def build_feature_matrix(
     sigma: np.ndarray,
     feature_spec_override: dict | None = None,
 ) -> np.ndarray:
-    """Build the shared 8-dimensional state matrix.
+    """Build the shared 7-dimensional state matrix (paper Section 3.1).
 
-    Locked mainline conventions:
-    - close feature uses causal EWMA60 price deviation scaled by EWMA60(r)
-    - return features use EWMA(60) sigma of additive r_t
-    - MACD feature keeps 63-window volatility normalization
+    Features:
+    0: Normalized close price (60-day rolling std)
+    1-4: Returns over 21/42/63/252 days, normalized by sigma*sqrt(H)
+    5: MACD (averaged multi-scale) normalized by 63-day price volatility
+    6: RSI(30) normalized to [-1, 1]
     """
     n = len(prices)
     feats = np.zeros((n, FEATURE_DIM), dtype=np.float32)
 
-    active_feature_spec = feature_spec_override or shared_feature_spec()
-    close_feature = dict(active_feature_spec.get("close_feature", {}))
-    close_feature_name = close_feature.get("name")
+    # Feature 0: Normalized close price series
+    rolling_std = pd.Series(prices).rolling(window=60, min_periods=5).std().to_numpy(dtype=float)
+    feats[:, 0] = prices / (rolling_std + 1e-10)
 
-    if close_feature_name == "ewma60_close_deviation":
-        ema_price = pd.Series(prices).ewm(span=EWMA_SPAN, adjust=False).mean().to_numpy(dtype=float)
-        feats[:, 0] = (prices - ema_price) / (sigma + 1e-10)
-    else:  # pragma: no cover - guarded by feature_spec
-        raise ValueError(
-            f"Unsupported DRL close feature spec for {ACTIVE_FEATURE_LINE}: {close_feature_name or close_feature}"
-        )
-
+    # Features 1-4: Returns over horizons, normalized by sigma*sqrt(H)
     for idx, horizon in enumerate(HORIZONS):
         col = np.zeros(n, dtype=float)
         for i in range(horizon, n):
             col[i] = (prices[i] - prices[i - horizon]) / (sigma[i] * np.sqrt(horizon) + 1e-10)
         feats[:, idx + 1] = col
 
+    # Feature 5: MACD (averaged multi-scale, Eq.3)
+    # Inner: q_t = (m(S) - m(L)) / std(p_{t-63:t})
+    # Outer: MACD_t = q_t / std(q_{t-252:t})
     macd_total = np.zeros(n, dtype=float)
     for short_span, long_span in MACD_PAIRS:
         ema_s = pd.Series(prices).ewm(span=short_span, adjust=False).mean().to_numpy(dtype=float)
@@ -93,16 +88,18 @@ def build_feature_matrix(
         .std()
         .to_numpy(dtype=float)
     )
-    feats[:, 5] = macd_raw / (macd_vol + 1e-10)
+    q_t = macd_raw / (macd_vol + 1e-10)
+    q_std_252 = pd.Series(q_t).rolling(window=252, min_periods=21).std().to_numpy(dtype=float)
+    feats[:, 5] = q_t / (q_std_252 + 1e-10)
 
+    # Feature 6: RSI(30) — Wilder smoothing (α=1/n EMA), normalized to [-1, 1]
     delta = np.diff(prices, prepend=prices[0])
-    gain = pd.Series(np.where(delta > 0, delta, 0.0)).rolling(RSI_WINDOW, min_periods=1).mean().to_numpy(dtype=float)
-    loss = pd.Series(np.where(delta < 0, -delta, 0.0)).rolling(RSI_WINDOW, min_periods=1).mean().to_numpy(dtype=float) + 1e-10
-    feats[:, 6] = (50.0 - 50.0 / (1.0 + gain / loss)) / 50.0
+    alpha = 1.0 / RSI_WINDOW
+    gain = pd.Series(np.where(delta > 0, delta, 0.0)).ewm(alpha=alpha, adjust=False).mean().to_numpy(dtype=float)
+    loss = pd.Series(np.where(delta < 0, -delta, 0.0)).ewm(alpha=alpha, adjust=False).mean().to_numpy(dtype=float) + 1e-10
+    rsi = 100.0 - 100.0 / (1.0 + gain / loss)
+    feats[:, 6] = (rsi - 50.0) / 50.0
 
-    sigma_series = pd.Series(sigma).replace([np.inf, -np.inf], np.nan)
-    expanding_mean_sigma = sigma_series.expanding(min_periods=1).mean().to_numpy(dtype=float)
-    feats[:, 7] = sigma / (expanding_mean_sigma + 1e-10)
     return np.nan_to_num(feats, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
 
 

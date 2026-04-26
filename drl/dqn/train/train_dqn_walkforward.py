@@ -22,7 +22,9 @@ from drl.dqn.model import DQNAgent
 from drl.dqn.spec import (
     EPISODES,
     MAX_STEPS_PER_EP,
+    MODEL_ROOT,
     RETRAIN_ROUNDS,
+    asset_slug,
     checkpoint_metadata,
     checkpoint_path_for_bundle,
     contract_data_path,
@@ -45,8 +47,7 @@ from drl_shared.state_space import (
 )
 
 
-DEFAULT_EARLY_STOP_PATIENCE = 20
-VALIDATION_FRACTION = 0.10
+# Early stop and validation removed — paper trains all episodes without validation split
 
 
 def _npz_scalar(data, key: str, default=None):
@@ -133,10 +134,7 @@ def _validate_feature_policy(feature_meta: dict, ticker: str):
         raise ValueError(f"Feature artifact excluded_contracts do not match structural_38 for {ticker}")
 
 
-def _train_validation_split_index(contract: ContractArrays) -> int:
-    n = len(contract.prices)
-    split = int(np.floor(n * (1.0 - VALIDATION_FRACTION)))
-    return max(253, min(n - 2, split))
+# (validation split removed)
 
 
 def _run_training_episode(env: ContractEnv, agent: DQNAgent, global_step: int) -> tuple[float, int, list[float], int]:
@@ -160,42 +158,17 @@ def _run_training_episode(env: ContractEnv, agent: DQNAgent, global_step: int) -
     return float(total_reward), steps, losses, global_step
 
 
-def _validation_reward(contract: ContractArrays, agent: DQNAgent, val_start_idx: int, sigma_tgt: float) -> float:
-    start = max(252, val_start_idx)
-    if start >= len(contract.prices) - 2:
-        return 0.0
-    total_reward = 0.0
-    prev_position = 0.0
-    prev_sigma = contract.sigma[start - 1] if start >= 1 else contract.sigma[0]
-    for idx in range(start, len(contract.prices) - 1):
-        state = get_feature_window(contract.features, idx)
-        action_id = agent.predict_action_id(state)
-        position = action_id_to_position(action_id)
-        reward, _, _, _ = compute_eq4_reward(
-            contract.prices,
-            contract.returns,
-            contract.sigma,
-            idx + 1,
-            position,
-            prev_position,
-            sigma_tgt=sigma_tgt,
-            prev_sigma=prev_sigma,
-        )
-        prev_sigma = contract.sigma[idx]
-        prev_position = position
-        total_reward += reward
-    return float(total_reward)
+# (_validation_reward removed — no validation in paper)
 
 
 def train_asset_round(
     asset_name: str,
     round_num: int,
     episodes: int = EPISODES,
-    early_stop_patience: int = DEFAULT_EARLY_STOP_PATIENCE,
-    no_early_stop: bool = False,
     device: str | None = None,
     seed: int | None = None,
     sigma_tgt: float = SIGMA_TGT_DEFAULT,
+    resume: bool = False,
 ) -> tuple[Path, Path]:
     if seed is not None:
         random.seed(seed)
@@ -208,18 +181,15 @@ def train_asset_round(
     contracts: dict[str, ContractArrays] = {}
     envs: dict[str, ContractEnv] = {}
     feature_meta_by_ticker: dict[str, dict] = {}
-    validation_starts: dict[str, int] = {}
     skipped: list[str] = []
 
     for ticker in tickers:
         try:
             contract, feature_meta = load_contract_round(ticker, round_num)
             _validate_feature_policy(feature_meta, ticker)
-            val_start = _train_validation_split_index(contract)
             contracts[ticker] = contract
             feature_meta_by_ticker[ticker] = feature_meta
-            validation_starts[ticker] = val_start
-            envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, max_idx=val_start)
+            envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt)
         except Exception as exc:
             skipped.append(f"{ticker}: {exc}")
 
@@ -227,12 +197,24 @@ def train_asset_round(
         raise ValueError(f"No loadable contracts for {asset_name} {round_name(round_num)}")
 
     agent = DQNAgent(device=device)
+    if resume:
+        # Find latest checkpoint for this asset+round (look in parent dir of bundles)
+        asset_model_dir = Path(MODEL_ROOT) / asset_slug(asset_name) / round_name(round_num)
+        if asset_model_dir.exists():
+            existing_bundles = sorted(
+                [d for d in asset_model_dir.iterdir() if d.is_dir() and (d / "checkpoint.pt").exists()],
+                key=lambda d: d.name, reverse=True,
+            )
+            for prev_bundle in existing_bundles:
+                ckpt_path = prev_bundle / "checkpoint.pt"
+                agent.load(ckpt_path, resume=True)
+                print(f"Resumed from {ckpt_path} (train_steps={agent.train_steps}, replay={len(agent.replay)})")
+                break
     run_id = make_run_id()
     bundle_dir = model_bundle_root(round_num, asset_name, run_id=run_id)
     logger = RunLogger("dqn", asset_name, round_num, run_id=run_id, base_dir=bundle_dir)
     round_info = RETRAIN_ROUNDS[round_num]
     f_spec = feature_spec()
-    patience = 0 if no_early_stop else early_stop_patience
     metadata = checkpoint_metadata(
         round_num,
         asset_name,
@@ -251,9 +233,6 @@ def train_asset_round(
             "loaded_contracts": list(contracts),
             "skipped_contracts": skipped,
             "asset_class_count": len(contracts),
-            "validation_fraction": VALIDATION_FRACTION,
-            "early_stop_patience": patience,
-            "early_stop_unit": "validation_cycle",
             "feature_artifact_paths": {
                 ticker: meta["feature_artifact_path"] for ticker, meta in feature_meta_by_ticker.items()
             },
@@ -264,8 +243,6 @@ def train_asset_round(
     logger.write_json("train_config.json", metadata["hyperparameters"] | {
         "cycles": episodes,
         "seed": seed,
-        "early_stop_patience": patience,
-        "validation_fraction": VALIDATION_FRACTION,
     })
     logger.write_json("feature_spec.json", metadata["feature_spec"])
 
@@ -282,15 +259,14 @@ def train_asset_round(
         "DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, "
         "Dueling DQN; target hard-copy every 1000 learn steps"
     )
-    logger.log(f"Early Stop: {'disabled' if patience <= 0 else f'patience={patience} validation cycles'}")
     logger.log(f"{'=' * 70}")
 
     t0 = time.time()
     report_interval = max(1, episodes // 10)
-    global_step = 0
+    global_step = agent.train_steps if resume else 0
     global_episode = 0
+    start_cycle = 1
     episode_rows: list[dict] = []
-    validation_rows: list[dict] = []
     contract_stats = defaultdict(lambda: {
         "episodes_seen": 0,
         "transitions_added": 0,
@@ -301,11 +277,6 @@ def train_asset_round(
         "last_loss": 0.0,
     })
 
-    best_validation = -np.inf
-    best_state = None
-    best_target = None
-    best_cycle = 0
-    patience_counter = 0
     ordered_tickers = list(contracts)
 
     for cycle in range(1, episodes + 1):
@@ -345,55 +316,17 @@ def train_asset_round(
             }
             episode_rows.append(row)
 
-        validation_by_contract = {
-            ticker: _validation_reward(contracts[ticker], agent, validation_starts[ticker], sigma_tgt)
-            for ticker in contracts
-        }
-        validation_mean = float(np.mean(list(validation_by_contract.values()))) if validation_by_contract else 0.0
-        if validation_mean > best_validation:
-            best_validation = validation_mean
-            best_state = {k: v.detach().cpu().clone() for k, v in agent.q_net.state_dict().items()}
-            best_target = {k: v.detach().cpu().clone() for k, v in agent.target.state_dict().items()}
-            best_cycle = cycle
-            patience_counter = 0
-        else:
-            patience_counter += 1
-
-        validation_rows.append({
-            "cycle": cycle,
-            "round": round_num,
-            "validation_reward_mean": round(validation_mean, 6),
-            "validation_reward_by_contract": json.dumps(
-                {k: round(v, 6) for k, v in validation_by_contract.items()},
-                sort_keys=True,
-            ),
-            "best_validation_reward": round(best_validation, 6),
-            "patience_counter": patience_counter,
-        })
-
         if cycle % report_interval == 0 or cycle == 1:
             elapsed = time.time() - t0
             avg_loss = float(np.mean(cycle_losses)) if cycle_losses else 0.0
             eta = (elapsed / cycle) * max(0, episodes - cycle) if cycle > 0 else 0.0
             logger.log(
                 f"cycle {cycle}/{episodes} reward_avg={np.mean(cycle_rewards):+.4f} "
-                f"val={validation_mean:+.4f} loss={avg_loss:.6f} "
+                f"loss={avg_loss:.6f} "
                 f"epsilon={agent.epsilon_for_step(global_step):.4f} replay={len(agent.replay)} "
                 f"target_updates={agent.target_updates} coverage={len(contracts)}/{len(tickers)} "
                 f"elapsed={elapsed:.0f}s eta={eta:.0f}s"
             )
-
-        if patience > 0 and patience_counter >= patience:
-            logger.log(
-                f"Early stop @ cycle {cycle} "
-                f"(best_validation={best_validation:+.4f} @ cycle {best_cycle})"
-            )
-            break
-
-    if best_state is not None and best_target is not None:
-        agent.q_net.load_state_dict(best_state)
-        agent.target.load_state_dict(best_target)
-        logger.log(f"Restored best validation model (cycle={best_cycle})")
 
     contract_rows = []
     for ticker, stats in sorted(contract_stats.items()):
@@ -410,15 +343,12 @@ def train_asset_round(
             "last_loss": round(stats["last_loss"], 6),
         })
 
-    metadata["completed_cycles"] = validation_rows[-1]["cycle"] if validation_rows else 0
-    metadata["best_validation_reward"] = best_validation
-    metadata["best_validation_cycle"] = best_cycle
+    metadata["completed_cycles"] = episodes
     metadata["learn_steps"] = agent.train_steps
     metadata["target_updates"] = agent.target_updates
     out_path = checkpoint_path_for_bundle(bundle_dir)
-    agent.save(out_path, metadata=metadata)
+    agent.save(out_path, metadata=metadata, include_training_state=True)
     logger.write_csv("episode_metrics.csv", episode_rows)
-    logger.write_csv("validation_metrics.csv", validation_rows)
     logger.write_csv("contract_metrics.csv", contract_rows)
     logger.write_json("checkpoint_metadata.json", metadata)
     logger.write_json("manifest.json", metadata)
@@ -439,11 +369,10 @@ def main():
     parser.add_argument("--asset", default="Forex", help='Asset universe or "All"')
     parser.add_argument("--round", default="both", help='1, 2, or "both" (default)')
     parser.add_argument("--episodes", type=int, default=EPISODES, help="Training cycles; each cycle visits every contract once.")
-    parser.add_argument("--early-stop", type=int, default=DEFAULT_EARLY_STOP_PATIENCE, help="Validation-cycle patience.")
-    parser.add_argument("--no-early-stop", action="store_true")
     parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--sigma-tgt", type=float, default=SIGMA_TGT_DEFAULT)
+    parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoint for each round")
     args = parser.parse_args()
 
     rounds = parse_rounds(args.round)
@@ -454,11 +383,10 @@ def main():
                 asset_name,
                 round_num,
                 episodes=args.episodes,
-                early_stop_patience=args.early_stop,
-                no_early_stop=args.no_early_stop,
                 device=args.device,
                 seed=args.seed,
                 sigma_tgt=args.sigma_tgt,
+                resume=args.resume,
             )
 
 
