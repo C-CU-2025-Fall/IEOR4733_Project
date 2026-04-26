@@ -19,9 +19,9 @@ PAPER_50 = [
 # -----------------------------
 def find_clcdata(root_path):
     for root, dirs, files in os.walk(root_path):
-        if os.path.basename(root).upper() == "CLCDATA":
+        if os.path.basename(root).upper() == "CLC":
             return root
-    raise FileNotFoundError("CLCDATA folder not found")
+    raise FileNotFoundError("CLC folder not found")
 # -----------------------------
 # 2️⃣ 读取单个 RAD 文件
 # -----------------------------
