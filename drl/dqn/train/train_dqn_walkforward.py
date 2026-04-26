@@ -34,13 +34,16 @@ from drl.dqn.spec import (
     round_name,
 )
 from drl_shared.spec import (
+    SEQ_LEN,
     SIGMA_TGT_DEFAULT,
     asset_index_path,
     current_source_policy,
     feature_spec,
     universe_tickers,
 )
+
 from drl_shared.state_space import (
+    WARMUP,
     ContractArrays,
     ContractEnv,
     action_id_to_position,
@@ -123,6 +126,201 @@ def _asset_tickers_from_index(asset_name: str, round_num: int) -> list[str]:
     return [t for t in universe_tickers(asset_name) if t.upper() not in excluded]
 
 
+def _sanity_check_contract(contract: ContractArrays, ticker: str) -> list[str]:
+    """Comprehensive data sanity checks. Returns list of warnings (empty = all OK)."""
+    warnings = []
+    n = len(contract.prices)
+    from drl.dqn.spec import FEATURE_DIM as FDIM
+
+    # --- Length checks ---
+    if n <= WARMUP:
+        warnings.append(f"data length {n} <= WARMUP {WARMUP}, env will have no usable steps")
+    for attr in ("prices", "returns", "sigma", "features", "dates"):
+        arr = getattr(contract, attr)
+        if len(arr) != n:
+            warnings.append(f"{attr} length {len(arr)} != prices length {n}")
+
+    # --- Shape check ---
+    if contract.features.ndim != 2:
+        warnings.append(f"features has {contract.features.ndim} dims, expected 2 (n, {FDIM})")
+    elif contract.features.shape[1] != FDIM:
+        warnings.append(f"features has {contract.features.shape[1]} cols, expected {FDIM}")
+
+    # --- NaN / Inf checks ---
+    for attr in ("prices", "returns", "sigma"):
+        arr = getattr(contract, attr)
+        if np.any(np.isnan(arr)):
+            warnings.append(f"{attr} has {np.isnan(arr).sum()} NaN values")
+        if np.any(np.isinf(arr)):
+            warnings.append(f"{attr} has {np.isinf(arr).sum()} Inf values")
+
+    if np.any(np.isnan(contract.features)):
+        warnings.append(f"features has {np.isnan(contract.features).sum()} NaN values")
+    if np.any(np.isinf(contract.features)):
+        warnings.append(f"features has {np.isinf(contract.features).sum()} Inf values")
+
+    # --- Sigma health (critical for reward scaling) ---
+    if np.all(contract.sigma == 0):
+        warnings.append("sigma is all zeros — division by zero in reward scaling")
+    else:
+        valid_sigma = contract.sigma[contract.sigma > 0]
+        if len(valid_sigma) > 0:
+            s_min, s_max, s_mean = valid_sigma.min(), valid_sigma.max(), valid_sigma.mean()
+            if s_min < 1e-8:
+                warnings.append(f"sigma min={s_min:.2e} — near-zero sigma will blow up reward scaling")
+            if s_max / max(s_mean, 1e-10) > 100:
+                warnings.append(f"sigma range extreme: min={s_min:.4f} max={s_max:.4f} mean={s_mean:.4f}")
+
+    # --- Returns distribution ---
+    if np.all(contract.returns == 0):
+        warnings.append("returns are all zeros")
+    else:
+        ret_abs_max = np.max(np.abs(contract.returns))
+        ret_std = np.std(contract.returns)
+        if ret_std > 0 and ret_abs_max / ret_std > 100:
+            warnings.append(f"returns have extreme outliers: max_abs={ret_abs_max:.4f} std={ret_std:.6f} ratio={ret_abs_max/ret_std:.0f}")
+
+    # --- Date ordering ---
+    if n > 1:
+        dates = contract.dates
+        # Handle both numeric and string dates
+        try:
+            if np.issubdtype(dates.dtype, np.number):
+                not_mono = np.sum(np.diff(dates) <= 0)
+            else:
+                not_mono = np.sum(np.array(dates[:-1] >= dates[1:]))
+            if not_mono > 0:
+                warnings.append(f"{not_mono} non-monotonic date transitions")
+        except TypeError:
+            pass  # non-comparable date format, skip
+
+    # --- Duplicate dates ---
+    if len(np.unique(contract.dates)) != n:
+        dupes = n - len(np.unique(contract.dates))
+        warnings.append(f"{dupes} duplicate dates")
+
+    return warnings
+
+
+def _preflight_check_envs(
+    train_envs: dict[str, ContractEnv],
+    val_envs: dict[str, ContractEnv],
+    contracts: dict[str, ContractArrays],
+    logger: RunLogger,
+) -> list[str]:
+    """Check envs can produce valid states/rewards before training starts."""
+    errors = []
+
+    for ticker, env in train_envs.items():
+        usable = env.max_idx - env.start_idx
+        if usable <= 0:
+            errors.append(f"{ticker} train_env: 0 usable steps (start={env.start_idx}, max={env.max_idx})")
+
+        # Verify first feature window is valid
+        try:
+            state = env.reset()
+            if np.any(np.isnan(state)) or np.any(np.isinf(state)):
+                errors.append(f"{ticker} train_env: initial state has NaN/Inf")
+            if state.shape != (SEQ_LEN, 7):
+                errors.append(f"{ticker} train_env: state shape {state.shape} != ({SEQ_LEN}, 7)")
+        except Exception as e:
+            errors.append(f"{ticker} train_env: reset() failed — {e}")
+
+        # Verify first step produces valid reward
+        try:
+            _, reward, done = env.step(1)  # long position
+            if np.isnan(reward) or np.isinf(reward):
+                errors.append(f"{ticker} train_env: first step reward is NaN/Inf ({reward})")
+            if abs(reward) > 1e6:
+                errors.append(f"{ticker} train_env: first step reward extreme ({reward:.2f})")
+        except Exception as e:
+            errors.append(f"{ticker} train_env: step() failed — {e}")
+
+    for ticker, env in val_envs.items():
+        usable = env.max_idx - env.start_idx
+        if usable <= 0:
+            errors.append(f"{ticker} val_env: 0 usable steps (start={env.start_idx}, max={env.max_idx})")
+
+    if errors:
+        logger.log("--- Preflight FAILED ---")
+        for e in errors:
+            logger.log(f"  ❌ {e}")
+    else:
+        logger.log("--- Preflight: all envs OK (reset + step + reward) ---")
+
+    return errors
+
+
+def _check_agent_health(agent: DQNAgent, logger: RunLogger) -> None:
+    """Log agent architecture info after construction."""
+    import torch
+    n_params = sum(p.numel() for p in agent.q_net.parameters())
+    trainable = sum(p.numel() for p in agent.q_net.parameters() if p.requires_grad)
+    logger.log(f"Agent: {agent.q_net.__class__.__name__} | params={n_params:,} (trainable={trainable:,})")
+    logger.log(f"Device: {agent.device} | CUDA available: {torch.cuda.is_available()}")
+    if agent.device == "cuda" and torch.cuda.is_available():
+        logger.log(f"GPU: {torch.cuda.get_device_name(0)} | mem={torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}GB")
+
+
+def _check_training_health(
+    cycle: int,
+    cycle_rewards: list[float],
+    cycle_losses: list[float],
+    agent: DQNAgent,
+    global_step: int,
+    logger: RunLogger,
+) -> list[str]:
+    """Per-cycle training health checks. Returns warnings."""
+    import torch
+    warnings = []
+
+    # --- Reward checks ---
+    if cycle_rewards:
+        r_max = max(abs(r) for r in cycle_rewards)
+        if r_max > 1e6:
+            warnings.append(f"cycle {cycle}: extreme reward |max|={r_max:.0f}")
+        if all(r == 0.0 for r in cycle_rewards):
+            warnings.append(f"cycle {cycle}: all rewards are exactly 0")
+
+    # --- Loss checks ---
+    if cycle_losses:
+        if any(np.isnan(l) for l in cycle_losses):
+            warnings.append(f"cycle {cycle}: NaN loss detected — training may be diverging")
+        if any(l > 1e4 for l in cycle_losses):
+            warnings.append(f"cycle {cycle}: extreme loss max={max(cycle_losses):.0f}")
+
+    # --- Q-value health (sample check) ---
+    try:
+        # Use a dummy state to check Q-value range
+        with torch.no_grad():
+            dummy = torch.randn(1, SEQ_LEN, 7).to(agent.device)
+            q_vals = agent.q_net(dummy)
+            q_min, q_max = float(q_vals.min()), float(q_vals.max())
+            if np.isnan(q_min) or np.isnan(q_max):
+                warnings.append(f"cycle {cycle}: Q-values are NaN")
+            elif abs(q_max) > 1e6 or abs(q_min) > 1e6:
+                warnings.append(f"cycle {cycle}: Q-values extreme [{q_min:.0f}, {q_max:.0f}]")
+    except Exception:
+        pass  # non-critical, don't crash training
+
+    # --- Epsilon sanity ---
+    eps = agent.epsilon_for_step(global_step)
+    if eps < 0.01 and cycle <= 2:
+        warnings.append(f"cycle {cycle}: epsilon already at {eps:.4f} (step={global_step}) — was this resumed?")
+
+    # --- Replay buffer ---
+    buf_size = len(agent.replay)
+    buf_cap = agent.replay.capacity
+    if buf_size >= buf_cap and cycle <= 1:
+        warnings.append(f"cycle {cycle}: replay buffer full ({buf_size}/{buf_cap}) in first cycle")
+
+    if warnings:
+        for w in warnings:
+            logger.log(f"  ⚠️  {w}")
+
+    return warnings
+
+
 def _validate_feature_policy(feature_meta: dict, ticker: str):
     expected_policy = current_source_policy()
     resolved_preset = feature_meta.get("preset") or expected_policy["preset"]
@@ -199,19 +397,41 @@ def train_asset_round(
     val_envs: dict[str, ContractEnv] = {}
     feature_meta_by_ticker: dict[str, dict] = {}
     skipped: list[str] = []
+    sanity_warnings: dict[str, list[str]] = {}
+    env_log_lines: list[str] = []  # collect before logger exists
 
     for ticker in tickers:
         try:
             contract, feature_meta = load_contract_round(ticker, round_num)
             _validate_feature_policy(feature_meta, ticker)
+
+            # Feature sanity check
+            warns = _sanity_check_contract(contract, ticker)
+            if warns:
+                sanity_warnings[ticker] = warns
+
             contracts[ticker] = contract
             feature_meta_by_ticker[ticker] = feature_meta
             n = len(contract.prices)
             split_idx = int(n * (1 - VALIDATION_SPLIT))
+
+            # Train env
             train_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, max_idx=split_idx)
-            val_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, start_idx=max(WARMUP, split_idx - SEQ_LEN))
+            env_log_lines.append(
+                f"  {ticker}: n={n} train=[{WARMUP}..{split_idx}] ({split_idx - WARMUP} steps)"
+            )
+
+            # Val env
+            val_start = max(WARMUP, split_idx - SEQ_LEN)
+            val_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, start_idx=val_start)
+            env_log_lines.append(
+                f"  {ticker}: val=[{val_start}..{n}] ({n - val_start} steps)"
+            )
         except Exception as exc:
             skipped.append(f"{ticker}: {exc}")
+            import traceback
+            env_log_lines.append(f"  {ticker}: FAILED — {exc}")
+            env_log_lines.append(f"    {traceback.format_exc().strip().splitlines()[-1]}")
 
     if not contracts:
         raise ValueError(f"No loadable contracts for {asset_name} {round_name(round_num)}")
@@ -273,6 +493,15 @@ def train_asset_round(
     logger.log(f"Contracts: {len(contracts)}/{len(tickers)} loaded | Device: {agent.device}")
     if skipped:
         logger.log(f"Skipped: {skipped}")
+    if val_envs:
+        logger.log(f"Val envs: {len(val_envs)}/{len(contracts)} contracts")
+    else:
+        logger.log("❌ Val envs: 0 — no validation environments constructed. Aborting.")
+        raise RuntimeError(
+            f"All {len(contracts)} contracts failed to construct val_envs. "
+            f"Check logs for errors (likely missing import like WARMUP/SEQ_LEN). "
+            f"Skipped: {skipped}"
+        )
     logger.log(f"Model bundle: {bundle_dir}")
     logger.log(f"State spec: {metadata['state_spec_version']}")
     logger.log(
@@ -280,6 +509,27 @@ def train_asset_round(
         "Dueling DQN; target hard-copy every 1000 learn steps; dropout 0.2"
     )
     logger.log(f"Validation: {VALIDATION_SPLIT*100:.0f}% split, early stopping patience={EARLY_STOPPING_PATIENCE}")
+
+    # Log env construction details
+    logger.log("--- Env construction ---")
+    for line in env_log_lines:
+        logger.log(line)
+    if sanity_warnings:
+        logger.log("--- Data sanity warnings ---")
+        for ticker, warns in sanity_warnings.items():
+            for w in warns:
+                logger.log(f"  ⚠️  {ticker}: {w}")
+    else:
+        logger.log("--- Data sanity: all contracts OK ---")
+
+    # Agent architecture & device info
+    _check_agent_health(agent, logger)
+
+    # Preflight: verify envs produce valid states and rewards
+    preflight_errors = _preflight_check_envs(train_envs, val_envs, contracts, logger)
+    if preflight_errors:
+        logger.log(f"⚠️  Preflight errors: {len(preflight_errors)} — training may fail or produce garbage results")
+
     logger.log(f"{'=' * 70}")
 
     t0 = time.time()
@@ -356,6 +606,8 @@ def train_asset_round(
                 f"target_updates={agent.target_updates} patience={patience_counter}/{EARLY_STOPPING_PATIENCE} "
                 f"elapsed={elapsed:.0f}s eta={eta:.0f}s"
             )
+            # Training health check
+            _check_training_health(cycle, cycle_rewards, cycle_losses, agent, global_step, logger)
             # Early stopping check
             if val_reward > best_val_reward:
                 best_val_reward = val_reward

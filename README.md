@@ -13,7 +13,11 @@ Historical search waves and abandoned branches live in:
 - [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md)
 
 Paper:
-- [arXiv PDF](https://arxiv.org/pdf/1911.10107)
+- [Published JFDS 2020](references/Deep-Reinforcement-Learning-for-Trading.pdf) — **canonical version**
+- [arXiv v1](https://arxiv.org/pdf/1911.10107) — working paper (superseded)
+
+> ⚠️ Use the published JFDS version. It adds dropout, cross-validation, early stopping,
+> and an explicit "Procedures for Controlling Overfitting" section not in the arXiv draft.
 
 ## Main Commands
 
@@ -73,7 +77,15 @@ Current DQN training unit:
 - dropout (0.2) after LSTM layers (published paper)
 - chronological 90/10 train/validation split per contract
 - early stopping with patience 20 on validation reward
+- validation envs crash-fast: if 0 val envs constructed, `RuntimeError` aborts training
 - resume: `--resume` restores weights, optimizer, replay buffer, and full RNG state (torch/numpy/python) for reproducible continuation
+
+Training pipeline checks (fail-fast):
+- **Data sanity**: NaN/Inf, length consistency, feature shape (n,7), sigma range, date monotonicity
+- **Env preflight**: usable steps >0, valid initial state, bounded first-step reward
+- **Agent health**: parameter count, device/GPU confirmation
+- **Cycle monitoring**: reward explosion, NaN loss, Q-value range, epsilon sanity, buffer overflow timing
+- **Unit tests**: 19 pipeline tests in `test_training_pipeline.py`
 
 DQN stabilizers retained from the paper:
 - `[49]` fixed Q-targets, hard target-network copy every `1000` learn steps
