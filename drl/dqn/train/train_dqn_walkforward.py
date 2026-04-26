@@ -438,15 +438,20 @@ def train_asset_round(
 
     agent = DQNAgent(device=device)
     if resume:
-        # Find latest checkpoint for this asset+round (look in parent dir of bundles)
+        # Find latest checkpoint for this asset+round
+        # Prefer latest_checkpoint.pt (full training state), fall back to checkpoint.pt (best)
         asset_model_dir = Path(MODEL_ROOT) / asset_slug(asset_name) / round_name(round_num)
         if asset_model_dir.exists():
             existing_bundles = sorted(
-                [d for d in asset_model_dir.iterdir() if d.is_dir() and (d / "checkpoint.pt").exists()],
+                [d for d in asset_model_dir.iterdir() if d.is_dir() and (
+                    (d / "latest_checkpoint.pt").exists() or (d / "checkpoint.pt").exists()
+                )],
                 key=lambda d: d.name, reverse=True,
             )
             for prev_bundle in existing_bundles:
-                ckpt_path = prev_bundle / "checkpoint.pt"
+                latest = prev_bundle / "latest_checkpoint.pt"
+                best = prev_bundle / "checkpoint.pt"
+                ckpt_path = latest if latest.exists() else best
                 agent.load(ckpt_path, resume=True)
                 print(f"Resumed from {ckpt_path} (train_steps={agent.train_steps}, replay={len(agent.replay)})")
                 break
@@ -551,6 +556,7 @@ def train_asset_round(
     ordered_tickers = list(contracts)
 
     best_val_reward = float("-inf")
+    _last_val_reward = 0.0
     patience_counter = 0
     best_bundle_dir = bundle_dir  # track best checkpoint dir
     early_stopped = False
@@ -596,11 +602,9 @@ def train_asset_round(
             elapsed = time.time() - t0
             avg_loss = float(np.mean(cycle_losses)) if cycle_losses else 0.0
             eta = (elapsed / cycle) * max(0, episodes - cycle) if cycle > 0 else 0.0
-            # Validation evaluation
-            val_reward = _validation_reward(val_envs, agent) if val_envs else 0.0
             logger.log(
                 f"cycle {cycle}/{episodes} reward_avg={np.mean(cycle_rewards):+.4f} "
-                f"val_reward={val_reward:+.4f} "
+                f"val_reward={_last_val_reward:+.4f} "
                 f"loss={avg_loss:.6f} "
                 f"epsilon={agent.epsilon_for_step(global_step):.4f} replay={len(agent.replay)} "
                 f"target_updates={agent.target_updates} patience={patience_counter}/{EARLY_STOPPING_PATIENCE} "
@@ -608,20 +612,27 @@ def train_asset_round(
             )
             # Training health check
             _check_training_health(cycle, cycle_rewards, cycle_losses, agent, global_step, logger)
-            # Early stopping check
-            if val_reward > best_val_reward:
-                best_val_reward = val_reward
-                patience_counter = 0
-                # Save best checkpoint
-                best_ckpt = checkpoint_path_for_bundle(bundle_dir)
-                agent.save(best_ckpt, metadata=metadata, include_training_state=True)
-                best_bundle_dir = bundle_dir
-            else:
-                patience_counter += 1
-                if patience_counter >= EARLY_STOPPING_PATIENCE:
-                    logger.log(f"Early stopping at cycle {cycle}: val_reward={val_reward:+.4f} best={best_val_reward:+.4f}")
-                    early_stopped = True
-                    break
+
+        # Early stopping: check EVERY cycle (paper: 20 epochs patience)
+        val_reward = _validation_reward(val_envs, agent) if val_envs else 0.0
+        _last_val_reward = val_reward
+        if val_reward > best_val_reward:
+            best_val_reward = val_reward
+            patience_counter = 0
+            best_ckpt = checkpoint_path_for_bundle(bundle_dir)
+            agent.save(best_ckpt, metadata=metadata, include_training_state=True)
+            best_bundle_dir = bundle_dir
+        else:
+            patience_counter += 1
+            if patience_counter >= EARLY_STOPPING_PATIENCE:
+                logger.log(f"Early stopping at cycle {cycle}: val_reward={val_reward:+.4f} best={best_val_reward:+.4f}")
+                early_stopped = True
+                break
+
+        # Save latest checkpoint every reporting interval for resume capability
+        if cycle % report_interval == 0:
+            latest_ckpt = bundle_dir / "latest_checkpoint.pt"
+            agent.save(latest_ckpt, metadata=metadata, include_training_state=True)
 
     contract_rows = []
     for ticker, stats in sorted(contract_stats.items()):

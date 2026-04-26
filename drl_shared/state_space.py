@@ -62,9 +62,10 @@ def build_feature_matrix(
     n = len(prices)
     feats = np.zeros((n, FEATURE_DIM), dtype=np.float32)
 
-    # Feature 0: Normalized close price series
+    # Feature 0: Normalized close price series (z-score)
+    rolling_mean = pd.Series(prices).rolling(window=60, min_periods=5).mean().to_numpy(dtype=float)
     rolling_std = pd.Series(prices).rolling(window=60, min_periods=5).std().to_numpy(dtype=float)
-    feats[:, 0] = prices / (rolling_std + 1e-10)
+    feats[:, 0] = (prices - rolling_mean) / (rolling_std + 1e-10)
 
     # Features 1-4: Returns over horizons, normalized by sigma*sqrt(H)
     for idx, horizon in enumerate(HORIZONS):
