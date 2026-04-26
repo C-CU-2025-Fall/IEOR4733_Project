@@ -50,6 +50,9 @@ MAX_STEPS_PER_EP = 1500
 SIGMA_TGT = SIGMA_TGT_DEFAULT
 LEAKY_RELU_SLOPE = 0.01
 LSTM_HIDDEN_SIZES = (64, 32)
+DROPOUT = 0.2
+VALIDATION_SPLIT = 0.1
+EARLY_STOPPING_PATIENCE = 20
 WARMUP = 252
 
 
@@ -181,6 +184,9 @@ def checkpoint_metadata(
             "max_steps_per_ep": MAX_STEPS_PER_EP,
             "lstm_hidden_sizes": list(LSTM_HIDDEN_SIZES),
             "leaky_relu_slope": LEAKY_RELU_SLOPE,
+            "dropout": DROPOUT,
+            "validation_split": VALIDATION_SPLIT,
+            "early_stopping_patience": EARLY_STOPPING_PATIENCE,
         },
         "reward_spec": {
             "name": "eq4_additive_price_difference",

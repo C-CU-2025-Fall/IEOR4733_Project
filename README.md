@@ -18,22 +18,23 @@ Paper:
 ## Main Commands
 
 ```bash
+# Prepare shared features
+python3 drl_shared/prepare_features.py --asset Forex
+
+# Train DQN (per asset class, per round)
+python3 drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 200 --device cuda
+python3 drl/dqn/train/train_dqn_walkforward.py --asset Forex --round 1 --episodes 200 --device cuda
+
+# Resume from latest checkpoint (reproducible)
+python3 drl/dqn/train/train_dqn_walkforward.py --asset Forex --round 1 --episodes 200 --resume --device cuda
+
+# Unified backtest
+python3 run_strategy_backtest.py --strategy DQN --asset Forex
+python3 run_strategy_backtest.py --strategy Long --asset Forex
+
 # Baseline references
-python baseline_run.py --table 3 --all-metrics --sigma 0.058
-python tests/run_structural_38.py --table 3
-python tests/run_structural_38.py --table both
-python tests/run_structural_38.py --table 3 --with-path-metrics
-
-# Unified backtester
-python run_strategy_backtest.py --strategy Long --asset Forex
-python run_strategy_backtest.py --strategy DQN --asset Forex
-python run_strategy_backtest.py --strategy DQN --asset "Fixed Income"
-
-# DRL feature prep and training
-python drl_shared/prepare_features.py --asset Forex
-python drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 50 --device cpu
-python drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 1 --device mps
-python scripts/train_dqn_asset_parallel.py --round both --parallel 4 --device cuda
+python3 tests/run_structural_38.py --table 3
+python3 tests/run_structural_38.py --table both
 ```
 
 ## Current Baseline
@@ -69,7 +70,9 @@ Current DQN training unit:
 - one shared DQN model per asset class per retrain round
 - default training covers both `r1` and `r2`
 - each asset-class cycle visits every eligible contract once with a shared replay buffer
-- no early stopping — paper trains all episodes without validation split
+- dropout (0.2) after LSTM layers (published paper)
+- chronological 90/10 train/validation split per contract
+- early stopping with patience 20 on validation reward
 - resume: `--resume` restores weights, optimizer, replay buffer, and full RNG state (torch/numpy/python) for reproducible continuation
 
 DQN stabilizers retained from the paper:

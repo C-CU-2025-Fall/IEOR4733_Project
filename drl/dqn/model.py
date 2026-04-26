@@ -27,6 +27,7 @@ from drl.dqn.spec import (
     BATCH_SIZE,
     DQN_SPEC_VERSION,
     DISCRETE_ACTION_DIM,
+    DROPOUT,
     EPS_DECAY_STEPS,
     EPS_END,
     EPS_START,
@@ -70,6 +71,7 @@ class DuelingDQNLSTM(nn.Module if nn is not None else object):
         h1, h2 = LSTM_HIDDEN_SIZES
         self.lstm1 = nn.LSTM(FEATURE_DIM, h1, batch_first=True)
         self.lstm2 = nn.LSTM(h1, h2, batch_first=True)
+        self.dropout = nn.Dropout(p=DROPOUT)
         self.value = nn.Linear(h2, 1)
         self.advantage = nn.Linear(h2, DISCRETE_ACTION_DIM)
 
@@ -86,6 +88,7 @@ class DuelingDQNLSTM(nn.Module if nn is not None else object):
         out = F.leaky_relu(out, LEAKY_RELU_SLOPE)
         out, _ = self.lstm2(out)
         out = F.leaky_relu(out, LEAKY_RELU_SLOPE)
+        out = self.dropout(out)
         last = out[:, -1, :]
         value = self.value(last)
         advantage = self.advantage(last)

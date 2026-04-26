@@ -20,10 +20,12 @@ from config import ASSET_CLASSES
 from drl.dqn.logging_utils import RunLogger, make_run_id
 from drl.dqn.model import DQNAgent
 from drl.dqn.spec import (
+    EARLY_STOPPING_PATIENCE,
     EPISODES,
     MAX_STEPS_PER_EP,
     MODEL_ROOT,
     RETRAIN_ROUNDS,
+    VALIDATION_SPLIT,
     asset_slug,
     checkpoint_metadata,
     checkpoint_path_for_bundle,
@@ -158,7 +160,21 @@ def _run_training_episode(env: ContractEnv, agent: DQNAgent, global_step: int) -
     return float(total_reward), steps, losses, global_step
 
 
-# (_validation_reward removed — no validation in paper)
+def _validation_reward(envs: dict[str, ContractEnv], agent: DQNAgent) -> float:
+    """Run one episode per contract with greedy policy, return avg reward."""
+    rewards = []
+    for ticker, env in envs.items():
+        state = env.reset()
+        total = 0.0
+        done = False
+        steps = 0
+        while not done and steps < MAX_STEPS_PER_EP:
+            action_id = agent.act(state, 0.0)  # greedy
+            state, reward, done = env.step(action_id)
+            total += reward
+            steps += 1
+        rewards.append(total)
+    return float(np.mean(rewards))
 
 
 def train_asset_round(
@@ -179,7 +195,8 @@ def train_asset_round(
         raise ValueError(f"No eligible contracts found for {asset_name} {round_name(round_num)}")
 
     contracts: dict[str, ContractArrays] = {}
-    envs: dict[str, ContractEnv] = {}
+    train_envs: dict[str, ContractEnv] = {}
+    val_envs: dict[str, ContractEnv] = {}
     feature_meta_by_ticker: dict[str, dict] = {}
     skipped: list[str] = []
 
@@ -189,7 +206,10 @@ def train_asset_round(
             _validate_feature_policy(feature_meta, ticker)
             contracts[ticker] = contract
             feature_meta_by_ticker[ticker] = feature_meta
-            envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt)
+            n = len(contract.prices)
+            split_idx = int(n * (1 - VALIDATION_SPLIT))
+            train_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, max_idx=split_idx)
+            val_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, start_idx=max(WARMUP, split_idx - SEQ_LEN))
         except Exception as exc:
             skipped.append(f"{ticker}: {exc}")
 
@@ -257,8 +277,9 @@ def train_asset_round(
     logger.log(f"State spec: {metadata['state_spec_version']}")
     logger.log(
         "DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, "
-        "Dueling DQN; target hard-copy every 1000 learn steps"
+        "Dueling DQN; target hard-copy every 1000 learn steps; dropout 0.2"
     )
+    logger.log(f"Validation: {VALIDATION_SPLIT*100:.0f}% split, early stopping patience={EARLY_STOPPING_PATIENCE}")
     logger.log(f"{'=' * 70}")
 
     t0 = time.time()
@@ -279,13 +300,18 @@ def train_asset_round(
 
     ordered_tickers = list(contracts)
 
+    best_val_reward = float("-inf")
+    patience_counter = 0
+    best_bundle_dir = bundle_dir  # track best checkpoint dir
+    early_stopped = False
+
     for cycle in range(1, episodes + 1):
         random.shuffle(ordered_tickers)
         cycle_rewards = []
         cycle_losses = []
         for ticker in ordered_tickers:
             global_episode += 1
-            reward, steps, losses, global_step = _run_training_episode(envs[ticker], agent, global_step)
+            reward, steps, losses, global_step = _run_training_episode(train_envs[ticker], agent, global_step)
             mean_loss = float(np.mean(losses)) if losses else 0.0
             last_loss = float(losses[-1]) if losses else 0.0
             cycle_rewards.append(reward)
@@ -320,13 +346,30 @@ def train_asset_round(
             elapsed = time.time() - t0
             avg_loss = float(np.mean(cycle_losses)) if cycle_losses else 0.0
             eta = (elapsed / cycle) * max(0, episodes - cycle) if cycle > 0 else 0.0
+            # Validation evaluation
+            val_reward = _validation_reward(val_envs, agent) if val_envs else 0.0
             logger.log(
                 f"cycle {cycle}/{episodes} reward_avg={np.mean(cycle_rewards):+.4f} "
+                f"val_reward={val_reward:+.4f} "
                 f"loss={avg_loss:.6f} "
                 f"epsilon={agent.epsilon_for_step(global_step):.4f} replay={len(agent.replay)} "
-                f"target_updates={agent.target_updates} coverage={len(contracts)}/{len(tickers)} "
+                f"target_updates={agent.target_updates} patience={patience_counter}/{EARLY_STOPPING_PATIENCE} "
                 f"elapsed={elapsed:.0f}s eta={eta:.0f}s"
             )
+            # Early stopping check
+            if val_reward > best_val_reward:
+                best_val_reward = val_reward
+                patience_counter = 0
+                # Save best checkpoint
+                best_ckpt = checkpoint_path_for_bundle(bundle_dir)
+                agent.save(best_ckpt, metadata=metadata, include_training_state=True)
+                best_bundle_dir = bundle_dir
+            else:
+                patience_counter += 1
+                if patience_counter >= EARLY_STOPPING_PATIENCE:
+                    logger.log(f"Early stopping at cycle {cycle}: val_reward={val_reward:+.4f} best={best_val_reward:+.4f}")
+                    early_stopped = True
+                    break
 
     contract_rows = []
     for ticker, stats in sorted(contract_stats.items()):
@@ -343,11 +386,17 @@ def train_asset_round(
             "last_loss": round(stats["last_loss"], 6),
         })
 
-    metadata["completed_cycles"] = episodes
+    metadata["completed_cycles"] = cycle if early_stopped else episodes
+    metadata["early_stopped"] = early_stopped
+    metadata["best_val_reward"] = best_val_reward
     metadata["learn_steps"] = agent.train_steps
     metadata["target_updates"] = agent.target_updates
-    out_path = checkpoint_path_for_bundle(bundle_dir)
-    agent.save(out_path, metadata=metadata, include_training_state=True)
+    out_path = checkpoint_path_for_bundle(best_bundle_dir)
+    if best_bundle_dir == bundle_dir:
+        # Already saved as best during training
+        pass
+    else:
+        agent.save(out_path, metadata=metadata, include_training_state=True)
     logger.write_csv("episode_metrics.csv", episode_rows)
     logger.write_csv("contract_metrics.csv", contract_rows)
     logger.write_json("checkpoint_metadata.json", metadata)
