@@ -19,16 +19,12 @@
   "failed_count": 0,
   "failed_tickers": [],
   "feature_spec": {
-    "close_feature": {
-      "causal": true,
-      "formula": "(p_t - EMA60(p)_t) / EWMA60(r)_t",
-      "name": "ewma60_close_deviation"
-    },
-    "feature_dim": 8,
+    "close_feature": "normalized_close_price_60d_rolling_std",
+    "feature_dim": 7,
     "feature_line": "structural_38_mainline",
     "macd_feature": "averaged MACD normalized by 63-day price volatility",
     "preset": "structural_38",
-    "return_feature_formula": "(p_t - p_{t-H}) / (EWMA60(r)_t * sqrt(H))",
+    "return_feature_formula": "(p_t - p_{t-H}) / (sigma_t * sqrt(H))",
     "return_horizons": [
       21,
       42,
@@ -37,9 +33,8 @@
     ],
     "rsi_window": 30,
     "seq_len": 60,
-    "state_spec_version": "structural_38_ewma60_close_deviation_no_sqrt60",
-    "volatility_estimator": "EWMA(60) std of additive r_t",
-    "volatility_feature": "EWMA60(r_t) / mean(EWMA60(r_t))"
+    "state_spec_version": "structural_38_close_norm_7d",
+    "volatility_estimator": "EWMA(60) std of additive r_t"
   },
   "loaded_count": 9,
   "member_tickers": [
@@ -85,7 +80,7 @@
     "ZU": "REV",
     "ZW": "REV"
   },
-  "state_spec_version": "structural_38_ewma60_close_deviation_no_sqrt60",
+  "state_spec_version": "structural_38_close_norm_7d",
   "test_end": "2015-12-31",
   "test_start": "2011-01-01",
   "train_end": "2010-12-31",
