@@ -100,8 +100,8 @@ graph TD
     
     A7 --> B1
     
-    style train fill:#000000,stroke:#000000,color:#FFFFFF
-    style test fill:#000000,stroke:#000000,color:#FFFFFF
+    style train fill:#FFFFFF,stroke:#000000,color:#000000
+    style test fill:#FFFFFF,stroke:#000000,color:#000000
     style A1 fill:#000000,stroke:#000000,color:#FFFFFF
     style A2 fill:#000000,stroke:#000000,color:#FFFFFF
     style A3 fill:#000000,stroke:#000000,color:#FFFFFF
