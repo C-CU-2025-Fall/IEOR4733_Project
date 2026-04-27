@@ -54,14 +54,14 @@ def prepare_contract_round_features(
         print(f"  {ticker}: no data (source={source})")
         return False
 
-    # Compute features on full data (burn-in + train)
-    df_train_full = df.loc[df["Date"] <= round_info["train_end"]].reset_index(drop=True)
+    # Compute features on full data (burn-in + train + test)
+    df_full = df.loc[df["Date"] <= round_info["test_end"]].reset_index(drop=True)
 
     spec = feature_spec()
     contract_full = build_contract_arrays(
         ticker=ticker,
-        prices=df_train_full["Close"].to_numpy(dtype=float),
-        dates=df_train_full["Date"].to_numpy(),
+        prices=df_full["Close"].to_numpy(dtype=float),
+        dates=df_full["Date"].to_numpy(),
         source=source,
         feature_spec_override=spec,
     )

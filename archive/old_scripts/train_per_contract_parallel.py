@@ -25,6 +25,7 @@ def _train_one(task: dict) -> dict:
     device = task["device"]
     sigma_tgt = task["sigma_tgt"]
     early_stop = task.get("early_stop", 0)
+    seeds = task.get("seeds", 5)
 
     script = REPO / "drl" / "dqn" / "train" / "_train_single_contract.py"
     cmd = [
@@ -32,13 +33,14 @@ def _train_one(task: dict) -> dict:
         "--ticker", ticker,
         "--round", str(round_num),
         "--episodes", str(episodes),
+        "--seeds", str(seeds),
         "--device", device,
         "--sigma-tgt", str(sigma_tgt),
     ]
     if early_stop > 0:
         cmd.extend(["--early-stop", str(early_stop)])
     t0 = time.time()
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(REPO), timeout=1200)
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(REPO), timeout=2400)
     elapsed = time.time() - t0
     return {
         "ticker": ticker,
@@ -59,6 +61,7 @@ def main():
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
     parser.add_argument("--sigma-tgt", type=float, default=None)
     parser.add_argument("--early-stop", type=int, default=0, help="Early stopping patience (0=disabled)")
+    parser.add_argument("--seeds", type=int, default=5, help="Number of seeds per contract")
     args = parser.parse_args()
 
     # Resolve tickers
@@ -83,11 +86,11 @@ def main():
     tickers = [t for t in tickers if t.upper() not in excluded]
 
     tasks = [
-        {"ticker": t, "round": r, "episodes": args.episodes, "device": args.device, "sigma_tgt": sigma_tgt, "early_stop": early_stop}
+        {"ticker": t, "round": r, "episodes": args.episodes, "device": args.device, "sigma_tgt": sigma_tgt, "early_stop": early_stop, "seeds": args.seeds}
         for t in tickers for r in rounds
     ]
 
-    print(f"Per-contract DQN: {len(tasks)} tasks | {len(tickers)} contracts × {len(rounds)} rounds")
+    print(f"Per-contract DQN: {len(tasks)} tasks | {len(tickers)} contracts × {len(rounds)} rounds × {args.seeds} seeds")
     print(f"  episodes={args.episodes} | parallel={args.parallel} | device={args.device}")
     print(f"  tickers: {tickers}")
     print()

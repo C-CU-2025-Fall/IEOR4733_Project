@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+"""Unified feature data loader for DQN training and backtest.
+
+Single source of truth for loading .npz feature artifacts:
+- TRAINING: slice to train period, split 90/10 for train/val
+- BACKTEST: slice to test period
+
+All date boundaries come from RETRAIN_ROUNDS in spec.
+Raises on mismatch — no silent data corruption.
+"""
+from __future__ import annotations
+
+import json
+import warnings
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from drl_shared.spec import (
+    FEATURE_DIM,
+    RETRAIN_ROUNDS,
+    WARMUP,
+    feature_spec,
+)
+from drl_shared.state_space import ContractArrays
+
+
+def _npz_scalar(data, key: str, default=None):
+    if key not in data:
+        return default
+    value = data[key]
+    if getattr(value, "shape", None) == ():
+        return value.item()
+    return value
+
+
+class DataSlice:
+    """A contiguous slice of a ContractArrays, with validation metadata."""
+    __slots__ = ("contract", "start_idx", "end_idx", "label")
+
+    def __init__(self, contract: ContractArrays, start_idx: int, end_idx: int, label: str):
+        self.contract = contract
+        self.start_idx = start_idx
+        self.end_idx = end_idx
+        self.label = label
+
+    @property
+    def usable_steps(self) -> int:
+        return max(0, self.end_idx - self.start_idx)
+
+    def __repr__(self):
+        return f"DataSlice({self.label}, steps={self.usable_steps})"
+
+
+def load_npz(ticker: str, round_num: int) -> tuple[np.lib.npyio.NpzFile, ContractArrays, dict]:
+    """Load raw npz, return (data, full_contract, meta).
+    
+    Validates: file exists, feature dim matches, state spec matches,
+    dates are monotonically increasing, no NaN/Inf, no duplicate dates,
+    train/test boundaries exist and fall within data range.
+    """
+    from drl.dqn.spec import contract_data_path
+    path = contract_data_path(round_num, ticker)
+    if not path.exists():
+        raise FileNotFoundError(f"No features for {ticker} r{round_num}: {path}")
+
+    data = np.load(path, allow_pickle=True)
+
+    # Build meta
+    expected = feature_spec()
+    actual_state = _npz_scalar(data, "state_spec_version")
+    if actual_state and actual_state != expected["state_spec_version"]:
+        raise ValueError(
+            f"Feature spec mismatch for {ticker} r{round_num}: "
+            f"npz={actual_state!r} != expected={expected['state_spec_version']!r}"
+        )
+
+    meta = {
+        "path": str(path),
+        "state_spec_version": actual_state,
+        "train_start": str(_npz_scalar(data, "train_start", "")),
+        "train_end": str(_npz_scalar(data, "train_end", "")),
+        "test_start": str(_npz_scalar(data, "test_start", "")),
+        "test_end": str(_npz_scalar(data, "test_end", "")),
+    }
+
+    # Build full contract
+    contract = ContractArrays(
+        ticker=ticker,
+        prices=data["prices"],
+        returns=data["returns"],
+        sigma=data["sigma"],
+        features=data["features"],
+        dates=data["dates"],
+        source=str(_npz_scalar(data, "source", "")),
+    )
+
+    # --- Validation ---
+    n = len(contract.prices)
+    assert n > 0, f"{ticker} r{round_num}: 0 rows"
+
+    # Feature dim
+    assert contract.features.shape == (n, FEATURE_DIM), (
+        f"{ticker} r{round_num}: features shape {contract.features.shape} != ({n}, {FEATURE_DIM})"
+    )
+
+    # No NaN/Inf in critical arrays
+    for attr in ("prices", "returns", "sigma"):
+        arr = getattr(contract, attr)
+        assert not np.any(np.isnan(arr)), f"{ticker} r{round_num}: {attr} has NaN"
+        assert not np.any(np.isinf(arr)), f"{ticker} r{round_num}: {attr} has Inf"
+
+    assert not np.any(np.isnan(contract.features)), f"{ticker} r{round_num}: features has NaN"
+    assert not np.any(np.isinf(contract.features)), f"{ticker} r{round_num}: features has Inf"
+
+    # No duplicate dates
+    dates = pd.to_datetime(contract.dates)
+    n_unique = len(dates.drop_duplicates())
+    assert n_unique == n, f"{ticker} r{round_num}: {n - n_unique} duplicate dates"
+
+    # Monotonic dates
+    assert (dates.diff()[1:] >= pd.Timedelta(0)).all(), (
+        f"{ticker} r{round_num}: dates not monotonically increasing"
+    )
+
+    # Train/test boundaries present
+    for key in ("train_start", "train_end", "test_start", "test_end"):
+        assert meta[key], f"{ticker} r{round_num}: missing {key} in npz"
+
+    # Train/test boundaries within data range
+    first_date, last_date = dates[0], dates[-1]
+    train_start = pd.Timestamp(meta["train_start"])
+    train_end = pd.Timestamp(meta["train_end"])
+    test_start = pd.Timestamp(meta["test_start"])
+    test_end = pd.Timestamp(meta["test_end"])
+
+    # Data should start near train_start (allow trading calendar offset)
+    assert first_date <= train_start + pd.Timedelta(days=7), (
+        f"{ticker} r{round_num}: data starts {first_date} too far after train_start {train_start}"
+    )
+    assert train_end < test_start, (
+        f"{ticker} r{round_num}: train_end {train_end} >= test_start {test_start}"
+    )
+    assert test_end <= last_date + pd.Timedelta(days=7), (
+        f"{ticker} r{round_num}: data ends {last_date} before test_end {test_end}"
+    )
+
+    return data, contract, meta
+
+
+def _slice_by_date(contract: ContractArrays, start_date: str, end_date: str, label: str) -> DataSlice:
+    """Slice contract by date range, return DataSlice with WARMUP offset."""
+    dates = pd.to_datetime(contract.dates)
+    ts = pd.Timestamp(start_date)
+    te = pd.Timestamp(end_date)
+
+    mask = (dates >= ts) & (dates <= te)
+    n_matching = mask.sum()
+    assert n_matching > 0, f"{label}: no dates in range [{start_date}, {end_date}]"
+
+    # Get the indices in the original array
+    indices = np.where(mask)[0]
+    start_idx = int(indices[0])
+    end_idx = int(indices[-1]) + 1  # exclusive
+
+    # Apply WARMUP: skip first WARMUP rows for feature burn-in
+    warmup_start = start_idx + WARMUP
+    if warmup_start >= end_idx:
+        raise ValueError(
+            f"{label}: after WARMUP={WARMUP}, no usable steps "
+            f"(range has {end_idx - start_idx} rows)"
+        )
+
+    return DataSlice(contract, start_idx=warmup_start, end_idx=end_idx, label=label)
+
+
+def get_train_slice(ticker: str, round_num: int) -> tuple[ContractArrays, DataSlice, DataSlice, dict]:
+    """Load npz, slice to train period, split 90/10 for train/val.
+    
+    Returns: (full_train_contract, train_slice, val_slice, meta)
+    - full_train_contract: ContractArrays sliced to train dates
+    - train_slice: DataSlice for training (90% of train period)
+    - val_slice: DataSlice for validation (last 10%, with SEQ_LEN overlap)
+    - meta: dict with metadata
+    """
+    from drl.dqn.spec import SEQ_LEN
+
+    data, full_contract, meta = load_npz(ticker, round_num)
+    train_end_str = meta["train_end"]
+
+    # Slice to train period
+    dates = pd.to_datetime(full_contract.dates)
+    train_end = pd.Timestamp(train_end_str)
+    n_train = int((dates <= train_end).sum())
+    assert n_train > WARMUP + 50, (
+        f"{ticker} r{round_num}: train period too short ({n_train} rows)"
+    )
+
+    train_contract = ContractArrays(
+        ticker=full_contract.ticker,
+        prices=full_contract.prices[:n_train],
+        returns=full_contract.returns[:n_train],
+        sigma=full_contract.sigma[:n_train],
+        features=full_contract.features[:n_train],
+        dates=full_contract.dates[:n_train],
+        source=full_contract.source,
+    )
+
+    n = len(train_contract.prices)
+    val_split = 0.10
+    split_idx = int(n * (1 - val_split))
+    val_start = max(WARMUP, split_idx - SEQ_LEN)
+
+    train_slice = DataSlice(train_contract, start_idx=WARMUP, end_idx=split_idx, label=f"{ticker} r{round_num} train")
+    val_slice = DataSlice(train_contract, start_idx=val_start, end_idx=n, label=f"{ticker} r{round_num} val")
+
+    assert train_slice.usable_steps > 0, f"{ticker} r{round_num}: 0 train steps"
+    assert val_slice.usable_steps > 0, f"{ticker} r{round_num}: 0 val steps"
+
+    meta["n_total"] = len(full_contract.prices)
+    meta["n_train_period"] = n_train
+    meta["n_train"] = split_idx
+    meta["n_val"] = n - val_start
+    meta["train_dates"] = f"{dates[0].date()} ~ {dates[n_train-1].date()}"
+
+    return train_contract, train_slice, val_slice, meta
+
+
+def get_test_slice(ticker: str, round_num: int) -> tuple[ContractArrays, int, dict]:
+    """Load npz, slice to test period.
+    
+    Returns: (test_contract, start_idx, meta)
+    - test_contract: ContractArrays sliced to test dates
+    - start_idx: WARMUP offset within test_contract
+    - meta: dict with metadata
+    """
+    data, full_contract, meta = load_npz(ticker, round_num)
+
+    dates = pd.to_datetime(full_contract.dates)
+    test_start = pd.Timestamp(meta["test_start"])
+    test_end = pd.Timestamp(meta["test_end"])
+
+    mask = (dates >= test_start) & (dates <= test_end)
+    n_test = mask.sum()
+    assert n_test > WARMUP + 10, (
+        f"{ticker} r{round_num}: test period too short ({n_test} rows)"
+    )
+
+    test_contract = ContractArrays(
+        ticker=full_contract.ticker,
+        prices=full_contract.prices[mask],
+        returns=full_contract.returns[mask],
+        sigma=full_contract.sigma[mask],
+        features=full_contract.features[mask],
+        dates=full_contract.dates[mask],
+        source=full_contract.source,
+    )
+
+    meta["n_test"] = len(test_contract.prices)
+    meta["test_dates"] = f"{dates[mask][0].date()} ~ {dates[mask][-1].date()}"
+
+    return test_contract, WARMUP, meta

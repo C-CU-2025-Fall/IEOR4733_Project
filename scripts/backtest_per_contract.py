@@ -16,15 +16,24 @@ from drl.dqn.model import DQNAgent
 from drl.dqn.spec import SEQ_LEN, SIGMA_TGT, MODEL_ROOT
 from drl_shared.spec import universe_tickers, current_source_policy
 from drl_shared.state_space import ContractArrays, ContractEnv, WARMUP
-from metrics import compute_portfolio_metrics
+from metrics import METRIC_NAMES
 from strategy_backtester import paper_table3_reference
 
 
-def find_latest_per_contract_model(ticker: str, round_num: int) -> Path | None:
-    """Find the latest per_* model directory for a given ticker and round."""
+def find_best_per_contract_model(ticker: str, round_num: int) -> Path | None:
+    """Find the best per-contract model via best_seed.json, fallback to latest per_* dir."""
     base = MODEL_ROOT / ticker / f"r{round_num}"
     if not base.exists():
         return None
+    # Prefer best_seed.json
+    best_json = base / "best_seed.json"
+    if best_json.exists():
+        with open(best_json) as f:
+            info = json.load(f)
+        best_dir = info.get("best_model_dir")
+        if best_dir and Path(best_dir).exists():
+            return Path(best_dir)
+    # Fallback: latest per_* dir
     per_dirs = sorted([d for d in base.iterdir() if d.is_dir() and d.name.startswith("per_")])
     return per_dirs[-1] if per_dirs else None
 
@@ -32,7 +41,7 @@ def find_latest_per_contract_model(ticker: str, round_num: int) -> Path | None:
 def backtest_single_contract(ticker: str, round_num: int, device: str = "auto") -> dict:
     """Run DQN backtest for one contract with its own model."""
     # Find model
-    model_dir = find_latest_per_contract_model(ticker, round_num)
+    model_dir = find_best_per_contract_model(ticker, round_num)
     if model_dir is None:
         return {"ticker": ticker, "round": round_num, "error": "no model found"}
 
@@ -47,11 +56,11 @@ def backtest_single_contract(ticker: str, round_num: int, device: str = "auto") 
         with open(manifest_path) as f:
             manifest = json.load(f)
 
-    sigma_tgt = manifest.get("sigma_tgt", 0.0063)
+    sigma_tgt = manifest.get("sigma_tgt", 0.058)
 
     # Load agent
     agent = DQNAgent(device=device)
-    agent.load(checkpoint_path, device=device)
+    agent.load(checkpoint_path)
 
     # Load features data
     from drl.dqn.spec import contract_data_path

@@ -22,6 +22,7 @@ from drl.dqn.model import DQNAgent
 from drl.dqn.spec import (
     EARLY_STOPPING_PATIENCE,
     EPISODES,
+    FEATURE_DIM,
     MAX_STEPS_PER_EP,
     MODEL_ROOT,
     RETRAIN_ROUNDS,
@@ -221,8 +222,8 @@ def _preflight_check_envs(
             state = env.reset()
             if np.any(np.isnan(state)) or np.any(np.isinf(state)):
                 errors.append(f"{ticker} train_env: initial state has NaN/Inf")
-            if state.shape != (SEQ_LEN, 7):
-                errors.append(f"{ticker} train_env: state shape {state.shape} != ({SEQ_LEN}, 7)")
+            if state.shape != (SEQ_LEN, FEATURE_DIM):
+                errors.append(f"{ticker} train_env: state shape {state.shape} != ({SEQ_LEN}, {FEATURE_DIM})")
         except Exception as e:
             errors.append(f"{ticker} train_env: reset() failed — {e}")
 
@@ -293,7 +294,7 @@ def _check_training_health(
     try:
         # Use a dummy state to check Q-value range
         with torch.no_grad():
-            dummy = torch.randn(1, SEQ_LEN, 7).to(agent.device)
+            dummy = torch.randn(1, SEQ_LEN, FEATURE_DIM).to(agent.device)
             q_vals = agent.q_net(dummy)
             q_min, q_max = float(q_vals.min()), float(q_vals.max())
             if np.isnan(q_min) or np.isnan(q_max):
@@ -360,6 +361,7 @@ def _run_training_episode(env: ContractEnv, agent: DQNAgent, global_step: int) -
 
 def _validation_reward(envs: dict[str, ContractEnv], agent: DQNAgent) -> float:
     """Run one episode per contract with greedy policy, return avg reward."""
+    agent.q_net.eval()  # eval mode: disable dropout
     rewards = []
     for ticker, env in envs.items():
         state = env.reset()
@@ -372,6 +374,7 @@ def _validation_reward(envs: dict[str, ContractEnv], agent: DQNAgent) -> float:
             total += reward
             steps += 1
         rewards.append(total)
+    agent.q_net.train()  # back to train mode
     return float(np.mean(rewards))
 
 
@@ -456,6 +459,8 @@ def train_asset_round(
                 print(f"Resumed from {ckpt_path} (train_steps={agent.train_steps}, replay={len(agent.replay)})")
                 break
     run_id = make_run_id()
+    if seed is not None:
+        run_id = f"{run_id}_s{seed}"
     bundle_dir = model_bundle_root(round_num, asset_name, run_id=run_id)
     logger = RunLogger("dqn", asset_name, round_num, run_id=run_id, base_dir=bundle_dir)
     round_info = RETRAIN_ROUNDS[round_num]
