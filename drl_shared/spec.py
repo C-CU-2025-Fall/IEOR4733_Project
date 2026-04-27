@@ -8,7 +8,7 @@ from config import ASSET_CLASSES
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 SEQ_LEN = 60
-FEATURE_DIM = 7
+FEATURE_DIM = 9  # 1(price norm) + 4(returns) + 3(MACD pairs) + 1(RSI)
 HORIZONS = (21, 42, 63, 252)
 RSI_WINDOW = 30
 WARMUP = 252

@@ -20,7 +20,7 @@
   "failed_tickers": [],
   "feature_spec": {
     "close_feature": "normalized_close_price_60d_rolling_std",
-    "feature_dim": 7,
+    "feature_dim": 9,
     "feature_line": "structural_38_mainline",
     "macd_feature": "averaged MACD normalized by 63-day price volatility",
     "preset": "structural_38",

@@ -62,10 +62,9 @@ def build_feature_matrix(
     n = len(prices)
     feats = np.zeros((n, FEATURE_DIM), dtype=np.float32)
 
-    # Feature 0: Normalized close price series (z-score)
-    rolling_mean = pd.Series(prices).rolling(window=60, min_periods=5).mean().to_numpy(dtype=float)
+    # Feature 0: p_t / rolling_std(p, 60) — low correlation with other features
     rolling_std = pd.Series(prices).rolling(window=60, min_periods=5).std().to_numpy(dtype=float)
-    feats[:, 0] = (prices - rolling_mean) / (rolling_std + 1e-10)
+    feats[:, 0] = prices / (rolling_std + 1e-10)
 
     # Features 1-4: Returns over horizons, normalized by sigma*sqrt(H)
     for idx, horizon in enumerate(HORIZONS):
@@ -74,32 +73,28 @@ def build_feature_matrix(
             col[i] = (prices[i] - prices[i - horizon]) / (sigma[i] * np.sqrt(horizon) + 1e-10)
         feats[:, idx + 1] = col
 
-    # Feature 5: MACD (averaged multi-scale, Eq.3)
-    # Inner: q_t = (m(S) - m(L)) / std(p_{t-63:t})
-    # Outer: MACD_t = q_t / std(q_{t-252:t})
-    macd_total = np.zeros(n, dtype=float)
-    for short_span, long_span in MACD_PAIRS:
-        ema_s = pd.Series(prices).ewm(span=short_span, adjust=False).mean().to_numpy(dtype=float)
-        ema_l = pd.Series(prices).ewm(span=long_span, adjust=False).mean().to_numpy(dtype=float)
-        macd_total += (ema_s - ema_l)
-    macd_raw = macd_total / max(len(MACD_PAIRS), 1)
+    # Features 5-7: MACD pairs (Eq.3), each independently normalized
+    # MACD_q = (m(S) - m(L)) / std(p_{t-63:t}), then / std(q, 252)
     macd_vol = (
         pd.Series(prices)
         .rolling(window=MACD_VOL_WINDOW, min_periods=5)
         .std()
         .to_numpy(dtype=float)
     )
-    q_t = macd_raw / (macd_vol + 1e-10)
-    q_std_252 = pd.Series(q_t).rolling(window=252, min_periods=21).std().to_numpy(dtype=float)
-    feats[:, 5] = q_t / (q_std_252 + 1e-10)
+    for macd_idx, (short_span, long_span) in enumerate(MACD_PAIRS):
+        ema_s = pd.Series(prices).ewm(span=short_span, adjust=False).mean().to_numpy(dtype=float)
+        ema_l = pd.Series(prices).ewm(span=long_span, adjust=False).mean().to_numpy(dtype=float)
+        q_t = (ema_s - ema_l) / (macd_vol + 1e-10)
+        q_std_252 = pd.Series(q_t).rolling(window=252, min_periods=21).std().to_numpy(dtype=float)
+        feats[:, 5 + macd_idx] = q_t / (q_std_252 + 1e-10)
 
-    # Feature 6: RSI(30) — Wilder smoothing (α=1/n EMA), normalized to [-1, 1]
+    # Feature 8: RSI(30) — Wilder smoothing (α=1/n EMA), normalized to [-1, 1]
     delta = np.diff(prices, prepend=prices[0])
     alpha = 1.0 / RSI_WINDOW
     gain = pd.Series(np.where(delta > 0, delta, 0.0)).ewm(alpha=alpha, adjust=False).mean().to_numpy(dtype=float)
     loss = pd.Series(np.where(delta < 0, -delta, 0.0)).ewm(alpha=alpha, adjust=False).mean().to_numpy(dtype=float) + 1e-10
     rsi = 100.0 - 100.0 / (1.0 + gain / loss)
-    feats[:, 6] = (rsi - 50.0) / 50.0
+    feats[:, 8] = (rsi - 50.0) / 50.0
 
     return np.nan_to_num(feats, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
 

@@ -162,6 +162,7 @@ class DQNAgent:
     def act(self, state: np.ndarray, eps: float) -> int:
         if np.random.random() < eps:
             return np.random.randint(DISCRETE_ACTION_DIM)
+        self.q_net.eval()
         with torch.no_grad():
             tensor = torch.from_numpy(np.asarray(state, dtype=np.float32)).unsqueeze(0).to(self.device)
             return int(self.q_net(tensor).argmax().item())
@@ -170,6 +171,7 @@ class DQNAgent:
         return int(self.predict_action_ids(np.asarray(state, dtype=np.float32)[None, ...])[0])
 
     def predict_action_ids(self, states: np.ndarray) -> np.ndarray:
+        self.q_net.eval()
         with torch.no_grad():
             tensor = torch.from_numpy(np.asarray(states, dtype=np.float32)).to(self.device)
             return self.q_net(tensor).argmax(dim=1).detach().cpu().numpy().astype(np.int64)
@@ -181,6 +183,7 @@ class DQNAgent:
         if len(self.replay) < BATCH_SIZE:
             return 0.0
 
+        self.q_net.train()
         states, actions, rewards, next_states, dones = self.replay.sample(BATCH_SIZE)
         states = torch.from_numpy(states).to(self.device)
         actions = torch.from_numpy(actions).to(self.device)

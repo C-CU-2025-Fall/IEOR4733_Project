@@ -103,15 +103,11 @@ the active default path.
 
 Current shared state:
 - `seq_len = 60`
-- `feature_dim = 7`
-- feature 0:
-  - normalized close price by 60-day rolling std
-- features 1-4:
-  - vol-adjusted returns for `21 / 42 / 63 / 252`
-- feature 5:
-  - averaged MACD normalized by 63-day price volatility
-- feature 6:
-  - RSI(30) normalized to [-1, 1]
+- `feature_dim = 9`
+- feature 0: `p_t / rolling_std(p, 60)` — lowest correlation with other features
+- features 1-4: vol-adjusted returns for `21 / 42 / 63 / 252` days, `(p_t - p_{t-H}) / (σ·√H)`
+- features 5-7: 3 MACD pairs, `(EMA_s - EMA_l) / σ_63(p)`, then `/ σ_252(q)`
+- feature 8: RSI(30) normalized to [-1, 1] via `(RSI - 50) / 50`
 
 This shared state is meant for `DQN` now, and later `PG / A2C`.
 

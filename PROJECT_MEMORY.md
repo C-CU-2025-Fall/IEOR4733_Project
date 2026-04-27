@@ -45,11 +45,11 @@ Primary commands:
 ## 2. DRL Mainline
 
 ### State Space (Paper Section 3.1)
-- `seq_len = 60`, `feature_dim = 7`
-- Feature 0: Normalized close price (`p_t / rolling_std(p, 60)`)
+- `seq_len = 60`, `feature_dim = 9`
+- Feature 0: `p_t / rolling_std(p, 60)` — lowest correlation with other features (validated across 50 contracts × 2 rounds)
 - Features 1-4: Returns over 21/42/63/252 days, normalized by `σ_t * √H`
-- Feature 5: Averaged MACD normalized by 63-day price volatility
-- Feature 6: RSI(30) normalized to [-1, 1]
+- Features 5-7: 3 MACD pairs, each `(EMA_s - EMA_l) / σ_63(p)`, then `/ σ_252(q)`
+- Feature 8: RSI(30) normalized to [-1, 1] via `(RSI - 50) / 50`
 
 ### DQN Architecture (Paper Table 1 + JFDS 2020 additions)
 - 2-layer LSTM [64, 32] + Leaky-ReLU
