@@ -116,30 +116,35 @@ class FCHeadDQNLSTM(nn.Module if nn is not None else object):
 
 
 class ReplayBuffer:
+    """Ring-buffer with pre-allocated numpy arrays for fast sampling."""
     def __init__(self, capacity: int = MEMORY_SIZE):
+        from drl.dqn.spec import SEQ_LEN, FEATURE_DIM
         self.capacity = capacity
-        self.buffer = []
-        self.position = 0
+        self.size = 0
+        self.pos = 0
+        self.states = np.empty((capacity, SEQ_LEN, FEATURE_DIM), dtype=np.float32)
+        self.actions = np.empty(capacity, dtype=np.int64)
+        self.rewards = np.empty(capacity, dtype=np.float32)
+        self.next_states = np.empty((capacity, SEQ_LEN, FEATURE_DIM), dtype=np.float32)
+        self.dones = np.empty(capacity, dtype=np.float32)
 
     def push(self, s, a, r, s2, d):
-        item = (np.asarray(s, dtype=np.float32), int(a), float(r), np.asarray(s2, dtype=np.float32), float(d))
-        if len(self.buffer) < self.capacity:
-            self.buffer.append(item)
-        else:
-            self.buffer[self.position] = item
-        self.position = (self.position + 1) % self.capacity
+        self.states[self.pos] = np.asarray(s, dtype=np.float32)
+        self.actions[self.pos] = int(a)
+        self.rewards[self.pos] = float(r)
+        self.next_states[self.pos] = np.asarray(s2, dtype=np.float32)
+        self.dones[self.pos] = float(d)
+        self.pos = (self.pos + 1) % self.capacity
+        if self.size < self.capacity:
+            self.size += 1
 
     def sample(self, batch_size: int = BATCH_SIZE):
-        batch = random.sample(self.buffer, batch_size)
-        states = np.stack([x[0] for x in batch])
-        actions = np.array([x[1] for x in batch], dtype=np.int64)
-        rewards = np.array([x[2] for x in batch], dtype=np.float32)
-        next_states = np.stack([x[3] for x in batch])
-        dones = np.array([x[4] for x in batch], dtype=np.float32)
-        return states, actions, rewards, next_states, dones
+        indices = np.random.randint(0, self.size, size=batch_size)
+        return (self.states[indices], self.actions[indices], self.rewards[indices],
+                self.next_states[indices], self.dones[indices])
 
     def __len__(self):
-        return len(self.buffer)
+        return self.size
 
 
 class DQNAgent:

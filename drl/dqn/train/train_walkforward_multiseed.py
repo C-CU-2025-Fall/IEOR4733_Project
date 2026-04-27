@@ -33,37 +33,59 @@ def compute_mdd(r):
 
 
 def train_seeds_parallel(asset_name: str, round_num: int, n_seeds: int, episodes: int, device: str, sigma_tgt: float, max_parallel: int = 4):
-    """Train n_seeds independent walkforward agents in parallel."""
+    """Train n_seeds independent walkforward agents in parallel via subprocess."""
     import subprocess
-    from concurrent.futures import ThreadPoolExecutor, as_completed
 
-    def _train_one_seed(seed):
-        t0 = time.time()
-        import random
-        random.seed(seed)
-        np.random.seed(seed)
-        ckpt_path, log_dir = train_asset_round(
-            asset_name=asset_name,
-            round_num=round_num,
-            episodes=episodes,
-            device=device,
-            seed=seed,
-            sigma_tgt=sigma_tgt,
-        )
-        elapsed = time.time() - t0
-        manifest_path = Path(log_dir) / "manifest.json"
-        val_reward = 0
-        if manifest_path.exists():
-            manifest = json.load(open(manifest_path))
-            val_reward = manifest.get("best_val_reward", 0)
-        print(f"  Seed {seed}: val={val_reward:.4f}, elapsed={elapsed:.0f}s", flush=True)
-        return {"seed": seed, "val_reward": val_reward, "checkpoint": str(ckpt_path), "log_dir": str(log_dir), "elapsed": elapsed}
-
+    # Launch seeds in batches of max_parallel
     results = []
-    with ThreadPoolExecutor(max_workers=max_parallel) as ex:
-        futs = {ex.submit(_train_one_seed, s): s for s in range(n_seeds)}
-        for f in as_completed(futs):
-            results.append(f.result())
+    pending = list(range(n_seeds))
+    while pending:
+        batch = pending[:max_parallel]
+        pending = pending[max_parallel:]
+        procs = {}
+        for seed in batch:
+            cmd = [
+                sys.executable, "-u", str(Path(__file__)),
+                "--asset", asset_name, "--round", str(round_num),
+                "--episodes", str(episodes), "--device", device,
+                "--sigma-tgt", str(sigma_tgt), "--seed", str(seed),
+                "--skip-train",  # no, this is wrong -- we need to train
+            ]
+            # Actually just call train_dqn_walkforward.py directly
+            cmd = [
+                sys.executable, "-u",
+                str(Path(__file__).parent / "train_dqn_walkforward.py"),
+                "--asset", asset_name, "--round", str(round_num),
+                "--episodes", str(episodes), "--device", device,
+                "--sigma-tgt", str(sigma_tgt), "--seed", str(seed),
+            ]
+            log_file = f"/tmp/wf_{asset_name}_r{round_num}_s{seed}.log"
+            p = subprocess.Popen(cmd, stdout=open(log_file, "w"), stderr=subprocess.STDOUT)
+            procs[seed] = (p, log_file)
+            print(f"  Launched seed {seed} (PID {p.pid})", flush=True)
+
+        # Wait for batch to finish
+        for seed, (p, log_file) in procs.items():
+            p.wait()
+            t0 = time.time()
+            # Find the run directory for this seed
+            run_dirs = sorted(Path(f"drl/dqn/models/{asset_name}/r{round_num}").glob(f"*_s{seed}"))
+            if run_dirs:
+                manifest_path = run_dirs[-1] / "manifest.json"
+                val_reward = 0
+                if manifest_path.exists():
+                    manifest = json.load(open(manifest_path))
+                    val_reward = manifest.get("best_val_reward", 0)
+                ckpt_path = run_dirs[-1] / "checkpoint.pt"
+                results.append({
+                    "seed": seed, "val_reward": val_reward,
+                    "checkpoint": str(ckpt_path), "log_dir": str(run_dirs[-1]),
+                    "exit_code": p.returncode,
+                })
+                print(f"  Seed {seed}: val={val_reward:+.4f} exit={p.returncode}", flush=True)
+            else:
+                print(f"  Seed {seed}: no run dir found", flush=True)
+                results.append({"seed": seed, "val_reward": -999, "error": "no run dir"})
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     summary_path = MODEL_ROOT / f"{asset_name}_r{round_num}_walkforward_seeds_{timestamp}.json"
