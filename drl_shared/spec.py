@@ -14,7 +14,7 @@ RSI_WINDOW = 30
 WARMUP = 252
 
 ACTIVE_FEATURE_LINE = "structural_38_mainline"
-STATE_SPEC_VERSION = "structural_38_close_norm_7d"
+STATE_SPEC_VERSION = "structural_38_close_norm_9d"
 
 DISCRETE_ACTION_VALUES = (-1.0, 0.0, 1.0)
 CONTINUOUS_ACTION_RANGE = (-1.0, 1.0)

@@ -13,6 +13,6 @@
   ],
   "rsi_window": 30,
   "seq_len": 60,
-  "state_spec_version": "structural_38_close_norm_7d",
+  "state_spec_version": "structural_38_close_norm_9d",
   "volatility_estimator": "EWMA(60) std of additive r_t"
 }

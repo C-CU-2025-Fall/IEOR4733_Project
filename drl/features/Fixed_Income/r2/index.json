@@ -28,7 +28,7 @@
     ],
     "rsi_window": 30,
     "seq_len": 60,
-    "state_spec_version": "structural_38_close_norm_7d",
+    "state_spec_version": "structural_38_close_norm_9d",
     "volatility_estimator": "EWMA(60) std of additive r_t"
   },
   "loaded_count": 4,
@@ -70,7 +70,7 @@
     "ZU": "REV",
     "ZW": "REV"
   },
-  "state_spec_version": "structural_38_close_norm_7d",
+  "state_spec_version": "structural_38_close_norm_9d",
   "test_end": "2019-12-31",
   "test_start": "2016-01-01",
   "train_end": "2015-12-31",
