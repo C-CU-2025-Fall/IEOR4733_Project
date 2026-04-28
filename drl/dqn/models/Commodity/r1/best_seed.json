@@ -1,0 +1,31 @@
+{
+  "best_model_dir": "drl/dqn/models/Commodity/r1/20260427T221408_s4",
+  "best_val_reward": 0.3325,
+  "all_seeds": [
+    {
+      "dir": "drl/dqn/models/Commodity/r1/20260427T221408_s4",
+      "seed": "20260427T221408_s4",
+      "val_reward": 0.3325
+    },
+    {
+      "dir": "drl/dqn/models/Commodity/r1/20260427T221408_s0",
+      "seed": "20260427T221408_s0",
+      "val_reward": 0.2671
+    },
+    {
+      "dir": "drl/dqn/models/Commodity/r1/20260427T221408_s2",
+      "seed": "20260427T221408_s2",
+      "val_reward": 0.2192
+    },
+    {
+      "dir": "drl/dqn/models/Commodity/r1/20260427T221409_s3",
+      "seed": "20260427T221409_s3",
+      "val_reward": 0.2139
+    },
+    {
+      "dir": "drl/dqn/models/Commodity/r1/20260427T221409_s1",
+      "seed": "20260427T221409_s1",
+      "val_reward": -0.0077
+    }
+  ]
+}

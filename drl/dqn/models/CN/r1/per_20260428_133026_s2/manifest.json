@@ -1,0 +1,10 @@
+{
+  "ticker": "CN",
+  "round": 1,
+  "seed": 2,
+  "episodes": 15,
+  "sigma_tgt": 0.058,
+  "asset_class": "Forex",
+  "val_reward": 1.14748552381935,
+  "learning_curve": {}
+}

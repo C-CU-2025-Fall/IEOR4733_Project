@@ -1,0 +1,10 @@
+{
+  "ticker": "FN",
+  "round": 1,
+  "seed": 3,
+  "episodes": 13,
+  "sigma_tgt": 0.058,
+  "asset_class": "Forex",
+  "val_reward": 1.0896516993614656,
+  "learning_curve": {}
+}

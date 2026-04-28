@@ -1,0 +1,31 @@
+{
+  "best_model_dir": "drl/dqn/models/Equity_Index/r1/20260427T221408_s3",
+  "best_val_reward": 2.4905,
+  "all_seeds": [
+    {
+      "dir": "drl/dqn/models/Equity_Index/r1/20260427T221408_s3",
+      "seed": "20260427T221408_s3",
+      "val_reward": 2.4905
+    },
+    {
+      "dir": "drl/dqn/models/Equity_Index/r1/20260427T221408_s0",
+      "seed": "20260427T221408_s0",
+      "val_reward": 2.3392
+    },
+    {
+      "dir": "drl/dqn/models/Equity_Index/r1/20260427T221408_s1",
+      "seed": "20260427T221408_s1",
+      "val_reward": 2.3275
+    },
+    {
+      "dir": "drl/dqn/models/Equity_Index/r1/20260427T221408_s4",
+      "seed": "20260427T221408_s4",
+      "val_reward": 2.0169
+    },
+    {
+      "dir": "drl/dqn/models/Equity_Index/r1/20260427T221408_s2",
+      "seed": "20260427T221408_s2",
+      "val_reward": 1.7486
+    }
+  ]
+}

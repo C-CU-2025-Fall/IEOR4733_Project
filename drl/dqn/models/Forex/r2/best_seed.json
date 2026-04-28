@@ -1,0 +1,31 @@
+{
+  "best_model_dir": "drl/dqn/models/Forex/r2/20260427T202658_s2",
+  "best_val_reward": -0.0139,
+  "all_seeds": [
+    {
+      "dir": "drl/dqn/models/Forex/r2/20260427T202658_s2",
+      "seed": "20260427T202658_s2",
+      "val_reward": -0.0139
+    },
+    {
+      "dir": "drl/dqn/models/Forex/r2/20260427T202658_s4",
+      "seed": "20260427T202658_s4",
+      "val_reward": -0.1047
+    },
+    {
+      "dir": "drl/dqn/models/Forex/r2/20260427T202658_s0",
+      "seed": "20260427T202658_s0",
+      "val_reward": -0.1938
+    },
+    {
+      "dir": "drl/dqn/models/Forex/r2/20260427T202658_s1",
+      "seed": "20260427T202658_s1",
+      "val_reward": -0.849
+    },
+    {
+      "dir": "drl/dqn/models/Forex/r2/20260427T202658_s3",
+      "seed": "20260427T202658_s3",
+      "val_reward": -1.0374
+    }
+  ]
+}

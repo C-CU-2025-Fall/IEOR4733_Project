@@ -1,0 +1,31 @@
+======================================================================
+DQN Asset-Class Training — Fixed Income — r2
+Train: 2005-01-01 ~ 2015-12-31
+Test : 2016-01-01 ~ 2019-12-31
+Contracts: 4/4 loaded | Device: cuda
+Val envs: 4/4 contracts
+Model bundle: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Fixed_Income/r2/20260428T110026_s2
+State spec: structural_38_close_norm_7d
+DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, Dueling DQN; target hard-copy every 1000 learn steps; dropout 0.2
+Validation: 10% split, early stopping patience=20
+--- Env construction ---
+  DT: train=[252..2520] (2268 steps)
+  DT: val=[2460..2801] (341 steps)
+  TY: train=[252..2493] (2241 steps)
+  TY: val=[2433..2770] (337 steps)
+  UB: train=[252..2520] (2268 steps)
+  UB: val=[2460..2801] (341 steps)
+  US: train=[252..2493] (2241 steps)
+  US: val=[2433..2770] (337 steps)
+--- Data sanity: all contracts OK ---
+Agent: DuelingDQNLSTM | params=31,876 (trainable=31,876)
+Device: cuda | CUDA available: True
+GPU: NVIDIA GB10 | mem=130.7GB
+--- Preflight: all envs OK (reset + step + reward) ---
+======================================================================
+cycle 1/200 reward_avg=-18.0784 val_reward=+0.0000 loss=0.001219 epsilon=0.2700 replay=5000 target_updates=5 patience=0/20 elapsed=59s eta=11766s
+  ⚠️  cycle 1: replay buffer full (5000/5000) in first cycle
+cycle 20/200 reward_avg=+4.3420 val_reward=-1.8949 loss=0.002500 epsilon=0.0500 replay=5000 target_updates=119 patience=9/20 elapsed=1366s eta=12296s
+Early stopping at cycle 30: val_reward=-2.0306 best=+0.0615
+Saved checkpoint: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Fixed_Income/r2/20260428T110026_s2/checkpoint.pt
+Saved logs: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Fixed_Income/r2/20260428T110026_s2

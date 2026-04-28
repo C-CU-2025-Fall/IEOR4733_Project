@@ -1,0 +1,10 @@
+{
+  "ticker": "DT",
+  "round": 1,
+  "seed": 4,
+  "episodes": 7,
+  "sigma_tgt": 0.058,
+  "asset_class": "Fixed Income",
+  "val_reward": -0.9691413179171132,
+  "learning_curve": {}
+}

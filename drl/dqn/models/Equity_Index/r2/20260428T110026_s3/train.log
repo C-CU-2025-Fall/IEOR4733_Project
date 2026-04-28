@@ -1,0 +1,45 @@
+======================================================================
+DQN Asset-Class Training — Equity Index — r2
+Train: 2005-01-01 ~ 2015-12-31
+Test : 2016-01-01 ~ 2019-12-31
+Contracts: 11/11 loaded | Device: cuda
+Val envs: 11/11 contracts
+Model bundle: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Equity_Index/r2/20260428T110026_s3
+State spec: structural_38_close_norm_7d
+DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, Dueling DQN; target hard-copy every 1000 learn steps; dropout 0.2
+Validation: 10% split, early stopping patience=20
+--- Env construction ---
+  CA: train=[252..2536] (2284 steps)
+  CA: val=[2476..2818] (342 steps)
+  EN: train=[252..2496] (2244 steps)
+  EN: val=[2436..2774] (338 steps)
+  ER: train=[252..2515] (2263 steps)
+  ER: val=[2455..2795] (340 steps)
+  ES: train=[252..2497] (2245 steps)
+  ES: val=[2437..2775] (338 steps)
+  LX: train=[252..2511] (2259 steps)
+  LX: val=[2451..2791] (340 steps)
+  MD: train=[252..2494] (2242 steps)
+  MD: val=[2434..2772] (338 steps)
+  SC: train=[252..2496] (2244 steps)
+  SC: val=[2436..2774] (338 steps)
+  SP: train=[252..2495] (2243 steps)
+  SP: val=[2435..2773] (338 steps)
+  XU: train=[252..2520] (2268 steps)
+  XU: val=[2460..2801] (341 steps)
+  XX: train=[252..2520] (2268 steps)
+  XX: val=[2460..2801] (341 steps)
+  YM: train=[252..2497] (2245 steps)
+  YM: val=[2437..2775] (338 steps)
+--- Data sanity: all contracts OK ---
+Agent: DuelingDQNLSTM | params=31,876 (trainable=31,876)
+Device: cuda | CUDA available: True
+GPU: NVIDIA GB10 | mem=130.7GB
+--- Preflight: all envs OK (reset + step + reward) ---
+======================================================================
+cycle 1/200 reward_avg=-5.6822 val_reward=+0.0000 loss=0.001356 epsilon=0.2175 replay=5000 target_updates=16 patience=0/20 elapsed=173s eta=34433s
+  ⚠️  cycle 1: replay buffer full (5000/5000) in first cycle
+cycle 20/200 reward_avg=+22.7759 val_reward=-1.3378 loss=0.002603 epsilon=0.0500 replay=5000 target_updates=329 patience=17/20 elapsed=3120s eta=28080s
+Early stopping at cycle 22: val_reward=-1.4689 best=+0.2899
+Saved checkpoint: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Equity_Index/r2/20260428T110026_s3/checkpoint.pt
+Saved logs: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Equity_Index/r2/20260428T110026_s3

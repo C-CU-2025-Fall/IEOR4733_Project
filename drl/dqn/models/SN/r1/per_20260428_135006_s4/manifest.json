@@ -1,0 +1,10 @@
+{
+  "ticker": "SN",
+  "round": 1,
+  "seed": 4,
+  "episodes": 18,
+  "sigma_tgt": 0.058,
+  "asset_class": "Forex",
+  "val_reward": 0.600460695961597,
+  "learning_curve": {}
+}

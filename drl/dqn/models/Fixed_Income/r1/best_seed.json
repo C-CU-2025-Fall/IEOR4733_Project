@@ -1,0 +1,31 @@
+{
+  "best_model_dir": "drl/dqn/models/Fixed_Income/r1/20260427T221408_s1",
+  "best_val_reward": 0.9228,
+  "all_seeds": [
+    {
+      "dir": "drl/dqn/models/Fixed_Income/r1/20260427T221408_s1",
+      "seed": "20260427T221408_s1",
+      "val_reward": 0.9228
+    },
+    {
+      "dir": "drl/dqn/models/Fixed_Income/r1/20260427T221408_s4",
+      "seed": "20260427T221408_s4",
+      "val_reward": 0.8183
+    },
+    {
+      "dir": "drl/dqn/models/Fixed_Income/r1/20260427T221408_s0",
+      "seed": "20260427T221408_s0",
+      "val_reward": 0.5443
+    },
+    {
+      "dir": "drl/dqn/models/Fixed_Income/r1/20260427T221408_s2",
+      "seed": "20260427T221408_s2",
+      "val_reward": 0.2018
+    },
+    {
+      "dir": "drl/dqn/models/Fixed_Income/r1/20260427T221408_s3",
+      "seed": "20260427T221408_s3",
+      "val_reward": 0.1205
+    }
+  ]
+}

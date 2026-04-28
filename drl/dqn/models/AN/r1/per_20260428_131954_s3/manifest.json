@@ -1,0 +1,10 @@
+{
+  "ticker": "AN",
+  "round": 1,
+  "seed": 3,
+  "episodes": 10,
+  "sigma_tgt": 0.058,
+  "asset_class": "Forex",
+  "val_reward": 1.7992914992825326,
+  "learning_curve": {}
+}

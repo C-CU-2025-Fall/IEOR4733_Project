@@ -1,0 +1,10 @@
+{
+  "ticker": "JN",
+  "round": 1,
+  "seed": 1,
+  "episodes": 19,
+  "sigma_tgt": 0.058,
+  "asset_class": "Forex",
+  "val_reward": 0.5449814924962266,
+  "learning_curve": {}
+}

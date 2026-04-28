@@ -1,0 +1,31 @@
+{
+  "best_model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Equity_Index/r2/20260428T094917_s2",
+  "best_val_reward": 0.4657,
+  "all_seeds": [
+    {
+      "dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Equity_Index/r2/20260428T094917_s2",
+      "seed": 2,
+      "val_reward": 0.4657
+    },
+    {
+      "dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Equity_Index/r2/20260428T110026_s3",
+      "seed": 3,
+      "val_reward": 0.2899
+    },
+    {
+      "dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Equity_Index/r2/20260428T094917_s0",
+      "seed": 0,
+      "val_reward": 0.14
+    },
+    {
+      "dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Equity_Index/r2/20260428T110026_s4",
+      "seed": 4,
+      "val_reward": 0.0467
+    },
+    {
+      "dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Equity_Index/r2/20260428T094917_s1",
+      "seed": 1,
+      "val_reward": -0.1774
+    }
+  ]
+}

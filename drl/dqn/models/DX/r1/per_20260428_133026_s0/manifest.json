@@ -1,0 +1,10 @@
+{
+  "ticker": "DX",
+  "round": 1,
+  "seed": 0,
+  "episodes": 12,
+  "sigma_tgt": 0.058,
+  "asset_class": "Forex",
+  "val_reward": 0.7103521203229335,
+  "learning_curve": {}
+}

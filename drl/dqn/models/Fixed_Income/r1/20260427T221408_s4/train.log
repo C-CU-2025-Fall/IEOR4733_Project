@@ -1,0 +1,31 @@
+======================================================================
+DQN Asset-Class Training — Fixed Income — r1
+Train: 2005-01-01 ~ 2010-12-31
+Test : 2011-01-01 ~ 2015-12-31
+Contracts: 4/4 loaded | Device: cuda
+Val envs: 4/4 contracts
+Model bundle: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Fixed_Income/r1/20260427T221408_s4
+State spec: structural_38_close_norm_7d
+DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, Dueling DQN; target hard-copy every 1000 learn steps; dropout 0.2
+Validation: 10% split, early stopping patience=20
+--- Env construction ---
+  DT: train=[252..1379] (1127 steps)
+  DT: val=[1319..1533] (214 steps)
+  TY: train=[252..1357] (1105 steps)
+  TY: val=[1297..1508] (211 steps)
+  UB: train=[252..1379] (1127 steps)
+  UB: val=[1319..1533] (214 steps)
+  US: train=[252..1357] (1105 steps)
+  US: val=[1297..1508] (211 steps)
+--- Data sanity: all contracts OK ---
+Agent: DuelingDQNLSTM | params=31,876 (trainable=31,876)
+Device: cuda | CUDA available: True
+GPU: NVIDIA GB10 | mem=130.7GB
+--- Preflight: all envs OK (reset + step + reward) ---
+======================================================================
+cycle 1/100 reward_avg=-21.4384 val_reward=+0.0000 loss=0.004384 epsilon=0.2777 replay=4460 target_updates=4 patience=0/20 elapsed=100s eta=9948s
+cycle 10/100 reward_avg=-1.9871 val_reward=+0.4863 loss=0.003452 epsilon=0.0770 replay=5000 target_updates=44 patience=6/20 elapsed=1076s eta=9687s
+cycle 20/100 reward_avg=+6.0177 val_reward=+0.4241 loss=0.003290 epsilon=0.0500 replay=5000 target_updates=89 patience=16/20 elapsed=2175s eta=8698s
+Early stopping at cycle 23: val_reward=+0.4267 best=+0.8183
+Saved checkpoint: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Fixed_Income/r1/20260427T221408_s4/checkpoint.pt
+Saved logs: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Fixed_Income/r1/20260427T221408_s4

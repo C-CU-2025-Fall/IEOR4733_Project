@@ -1,0 +1,10 @@
+{
+  "ticker": "US",
+  "round": 1,
+  "seed": 1,
+  "episodes": 8,
+  "sigma_tgt": 0.058,
+  "asset_class": "Fixed Income",
+  "val_reward": 0.16380509833925708,
+  "learning_curve": {}
+}

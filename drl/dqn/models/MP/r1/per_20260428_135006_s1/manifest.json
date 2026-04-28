@@ -1,0 +1,10 @@
+{
+  "ticker": "MP",
+  "round": 1,
+  "seed": 1,
+  "episodes": 13,
+  "sigma_tgt": 0.058,
+  "asset_class": "Forex",
+  "val_reward": 1.6423721335460661,
+  "learning_curve": {}
+}

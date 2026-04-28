@@ -1,0 +1,36 @@
+{
+  "ticker": "FN",
+  "round": 1,
+  "timestamp": "20260428_134057",
+  "n_seeds": 5,
+  "best_seed": 2,
+  "best_val_reward": 1.736307506753212,
+  "best_model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/FN/r1/per_20260428_134057_s2",
+  "all_seeds": [
+    {
+      "seed": 0,
+      "val_reward": 1.4036878832319994,
+      "dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/FN/r1/per_20260428_134057_s0"
+    },
+    {
+      "seed": 1,
+      "val_reward": 1.4888352242481147,
+      "dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/FN/r1/per_20260428_134057_s1"
+    },
+    {
+      "seed": 2,
+      "val_reward": 1.736307506753212,
+      "dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/FN/r1/per_20260428_134057_s2"
+    },
+    {
+      "seed": 3,
+      "val_reward": 1.0896516993614656,
+      "dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/FN/r1/per_20260428_134057_s3"
+    },
+    {
+      "seed": 4,
+      "val_reward": 1.5190671033825387,
+      "dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/FN/r1/per_20260428_134057_s4"
+    }
+  ]
+}

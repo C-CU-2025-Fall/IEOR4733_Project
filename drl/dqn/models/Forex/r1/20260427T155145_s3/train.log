@@ -1,0 +1,42 @@
+======================================================================
+DQN Asset-Class Training — Forex — r1
+Train: 2005-01-01 ~ 2010-12-31
+Test : 2011-01-01 ~ 2015-12-31
+Contracts: 9/9 loaded | Device: cuda
+Val envs: 9/9 contracts
+Model bundle: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Forex/r1/20260427T155145_s3
+State spec: structural_38_close_norm_7d
+DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, Dueling DQN; target hard-copy every 1000 learn steps; dropout 0.2
+Validation: 10% split, early stopping patience=20
+--- Env construction ---
+  AN: n=2779 train=[252..2501] (2249 steps)
+  AN: val=[2441..2779] (338 steps)
+  BN: n=2778 train=[252..2500] (2248 steps)
+  BN: val=[2440..2778] (338 steps)
+  CN: n=2770 train=[252..2493] (2241 steps)
+  CN: val=[2433..2770] (337 steps)
+  DX: n=2803 train=[252..2522] (2270 steps)
+  DX: val=[2462..2803] (341 steps)
+  FN: n=2770 train=[252..2493] (2241 steps)
+  FN: val=[2433..2770] (337 steps)
+  JN: n=2773 train=[252..2495] (2243 steps)
+  JN: val=[2435..2773] (338 steps)
+  MP: n=2762 train=[252..2485] (2233 steps)
+  MP: val=[2425..2762] (337 steps)
+  NK: n=2810 train=[252..2529] (2277 steps)
+  NK: val=[2469..2810] (341 steps)
+  SN: n=2773 train=[252..2495] (2243 steps)
+  SN: val=[2435..2773] (338 steps)
+--- Data sanity: all contracts OK ---
+Agent: DuelingDQNLSTM | params=31,876 (trainable=31,876)
+Device: cuda | CUDA available: True
+GPU: NVIDIA GB10 | mem=130.7GB
+--- Preflight: all envs OK (reset + step + reward) ---
+======================================================================
+cycle 1/100 reward_avg=-11.6622 val_reward=+0.0000 loss=0.002014 epsilon=0.2325 replay=5000 target_updates=13 patience=0/20 elapsed=106s eta=10497s
+  ⚠️  cycle 1: replay buffer full (5000/5000) in first cycle
+cycle 10/100 reward_avg=+1.7169 val_reward=-1.3598 loss=0.002202 epsilon=0.0500 replay=5000 target_updates=134 patience=5/20 elapsed=1114s eta=10027s
+cycle 20/100 reward_avg=+6.4179 val_reward=-2.0314 loss=0.002507 epsilon=0.0500 replay=5000 target_updates=269 patience=15/20 elapsed=2243s eta=8974s
+Early stopping at cycle 24: val_reward=-2.3508 best=-0.4282
+Saved checkpoint: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Forex/r1/20260427T155145_s3/checkpoint.pt
+Saved logs: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Forex/r1/20260427T155145_s3

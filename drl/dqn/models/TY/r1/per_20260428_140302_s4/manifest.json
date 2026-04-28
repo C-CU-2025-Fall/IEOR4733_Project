@@ -1,0 +1,10 @@
+{
+  "ticker": "TY",
+  "round": 1,
+  "seed": 4,
+  "episodes": 14,
+  "sigma_tgt": 0.058,
+  "asset_class": "Fixed Income",
+  "val_reward": -0.4029193980675949,
+  "learning_curve": {}
+}

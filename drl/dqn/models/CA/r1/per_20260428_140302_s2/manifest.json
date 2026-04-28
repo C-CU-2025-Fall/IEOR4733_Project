@@ -1,0 +1,10 @@
+{
+  "ticker": "CA",
+  "round": 1,
+  "seed": 2,
+  "episodes": 17,
+  "sigma_tgt": 0.058,
+  "asset_class": "Equity Index",
+  "val_reward": 1.591693335999736,
+  "learning_curve": {}
+}

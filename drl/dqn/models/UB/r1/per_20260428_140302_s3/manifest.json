@@ -1,0 +1,10 @@
+{
+  "ticker": "UB",
+  "round": 1,
+  "seed": 3,
+  "episodes": 6,
+  "sigma_tgt": 0.058,
+  "asset_class": "Fixed Income",
+  "val_reward": -1.238006494093174,
+  "learning_curve": {}
+}

@@ -1,0 +1,22 @@
+{
+  "batch_size": 64,
+  "cycles": 200,
+  "dropout": 0.2,
+  "early_stopping_patience": 20,
+  "episodes": 200,
+  "eps_decay_steps": 50000,
+  "eps_end": 0.05,
+  "eps_start": 0.3,
+  "gamma": 0.3,
+  "leaky_relu_slope": 0.01,
+  "lr": 0.0001,
+  "lstm_hidden_sizes": [
+    64,
+    32
+  ],
+  "max_steps_per_ep": 1500,
+  "memory_size": 5000,
+  "seed": 4,
+  "tau": 1000,
+  "validation_split": 0.1
+}

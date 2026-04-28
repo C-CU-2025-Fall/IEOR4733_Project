@@ -1,0 +1,10 @@
+{
+  "ticker": "NK",
+  "round": 1,
+  "seed": 3,
+  "episodes": 19,
+  "sigma_tgt": 0.058,
+  "asset_class": "Forex",
+  "val_reward": 1.1561314751017762,
+  "learning_curve": {}
+}

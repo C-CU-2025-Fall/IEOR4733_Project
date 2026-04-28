@@ -1,0 +1,10 @@
+{
+  "ticker": "BN",
+  "round": 1,
+  "seed": 3,
+  "episodes": 20,
+  "sigma_tgt": 0.058,
+  "asset_class": "Forex",
+  "val_reward": 0.9893815178596788,
+  "learning_curve": {}
+}

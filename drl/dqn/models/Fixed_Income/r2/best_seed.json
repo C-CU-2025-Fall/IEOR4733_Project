@@ -1,0 +1,21 @@
+{
+  "best_model_dir": "drl/dqn/models/Fixed_Income/r2/20260428T073614_s3",
+  "best_val_reward": 0.0332,
+  "all_seeds": [
+    {
+      "dir": "drl/dqn/models/Fixed_Income/r2/20260428T073614_s3",
+      "seed": "20260428T073614_s3",
+      "val_reward": 0.0332
+    },
+    {
+      "dir": "drl/dqn/models/Fixed_Income/r2/20260428T073615_s4",
+      "seed": "20260428T073615_s4",
+      "val_reward": 0.0196
+    },
+    {
+      "dir": "drl/dqn/models/Fixed_Income/r2/20260428T073614_s1",
+      "seed": "20260428T073614_s1",
+      "val_reward": 0.0132
+    }
+  ]
+}

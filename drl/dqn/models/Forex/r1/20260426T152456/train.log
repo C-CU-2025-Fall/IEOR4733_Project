@@ -1,0 +1,46 @@
+======================================================================
+DQN Asset-Class Training — Forex — r1
+Train: 2005-01-01 ~ 2010-12-31
+Test : 2011-01-01 ~ 2015-12-31
+Contracts: 9/9 loaded | Device: cuda
+Val envs: 9/9 contracts
+Model bundle: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Forex/r1/20260426T152456
+State spec: structural_38_close_norm_7d
+DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, Dueling DQN; target hard-copy every 1000 learn steps; dropout 0.2
+Validation: 10% split, early stopping patience=20
+--- Env construction ---
+  AN: n=1517 train=[252..1365] (1113 steps)
+  AN: val=[1305..1517] (212 steps)
+  BN: n=1516 train=[252..1364] (1112 steps)
+  BN: val=[1304..1516] (212 steps)
+  CN: n=1508 train=[252..1357] (1105 steps)
+  CN: val=[1297..1508] (211 steps)
+  DX: n=1520 train=[252..1368] (1116 steps)
+  DX: val=[1308..1520] (212 steps)
+  FN: n=1509 train=[252..1358] (1106 steps)
+  FN: val=[1298..1509] (211 steps)
+  JN: n=1511 train=[252..1359] (1107 steps)
+  JN: val=[1299..1511] (212 steps)
+  MP: n=1507 train=[252..1356] (1104 steps)
+  MP: val=[1296..1507] (211 steps)
+  NK: n=1520 train=[252..1368] (1116 steps)
+  NK: val=[1308..1520] (212 steps)
+  SN: n=1511 train=[252..1359] (1107 steps)
+  SN: val=[1299..1511] (212 steps)
+--- Data sanity: all contracts OK ---
+Agent: DuelingDQNLSTM | params=31,364 (trainable=31,364)
+Device: cuda | CUDA available: True
+GPU: NVIDIA GB10 | mem=130.7GB
+--- Preflight: all envs OK (reset + step + reward) ---
+======================================================================
+cycle 1/20 reward_avg=-10.4732 val_reward=+0.0000 loss=0.001458 epsilon=0.2501 replay=5000 target_updates=9 patience=0/20 elapsed=35s eta=659s
+  ⚠️  cycle 1: replay buffer full (5000/5000) in first cycle
+cycle 2/20 reward_avg=-8.1491 val_reward=-0.6616 loss=0.001282 epsilon=0.2002 replay=5000 target_updates=19 patience=0/20 elapsed=72s eta=648s
+cycle 4/20 reward_avg=-4.7613 val_reward=-0.3569 loss=0.001427 epsilon=0.1005 replay=5000 target_updates=39 patience=0/20 elapsed=147s eta=588s
+cycle 6/20 reward_avg=-1.7900 val_reward=-0.3445 loss=0.001507 epsilon=0.0500 replay=5000 target_updates=59 patience=1/20 elapsed=222s eta=518s
+cycle 8/20 reward_avg=-0.8483 val_reward=-0.3420 loss=0.001479 epsilon=0.0500 replay=5000 target_updates=79 patience=1/20 elapsed=316s eta=474s
+cycle 10/20 reward_avg=-0.6881 val_reward=-0.5687 loss=0.002396 epsilon=0.0500 replay=5000 target_updates=99 patience=3/20 elapsed=386s eta=386s
+cycle 12/20 reward_avg=+2.3643 val_reward=-0.4250 loss=0.002808 epsilon=0.0500 replay=5000 target_updates=119 patience=5/20 elapsed=457s eta=304s
+cycle 14/20 reward_avg=+3.3586 val_reward=-0.0848 loss=0.002859 epsilon=0.0500 replay=5000 target_updates=139 patience=1/20 elapsed=541s eta=232s
+cycle 16/20 reward_avg=+6.3873 val_reward=-0.1898 loss=0.002807 epsilon=0.0500 replay=5000 target_updates=159 patience=3/20 elapsed=602s eta=151s
+cycle 18/20 reward_avg=+7.0028 val_reward=-0.2225 loss=0.002712 epsilon=0.0500 replay=5000 target_updates=179 patience=5/20 elapsed=667s eta=74s
