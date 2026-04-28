@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from config import SOURCE_OVERRIDES
+from config import ASSET_CLASSES
 from data_loader import load_clc_full
 from drl_shared.spec import (
     RETRAIN_ROUNDS,
@@ -27,6 +28,43 @@ from drl_shared.spec import (
     universe_tickers,
 )
 from drl_shared.state_space import build_contract_arrays
+
+
+def _derive_round_split_indices(dates: np.ndarray, round_info: dict[str, str]) -> dict[str, int]:
+    dt = np.asarray(dates)
+    train_start = np.datetime64(round_info["train_start"])
+    train_end = np.datetime64(round_info["train_end"])
+    test_start = np.datetime64(round_info["test_start"])
+    test_end = np.datetime64(round_info["test_end"])
+
+    train_start_idx_arr = np.where(dt >= train_start)[0]
+    train_idx = np.where(dt <= train_end)[0]
+    test_idx = np.where((dt >= test_start) & (dt <= test_end))[0]
+    if len(train_start_idx_arr) == 0:
+        raise ValueError(f"No rows found on/after train_start={round_info['train_start']}")
+    if len(train_idx) == 0:
+        raise ValueError(f"No rows found on/before train_end={round_info['train_end']}")
+    if len(test_idx) == 0:
+        raise ValueError(f"No rows found in test window [{round_info['test_start']}, {round_info['test_end']}]")
+
+    train_start_idx = int(train_start_idx_arr[0])
+    train_end_idx = int(train_idx[-1])
+    test_start_idx = int(test_idx[0])
+    test_end_idx = int(test_idx[-1])
+    if train_start_idx > train_end_idx:
+        raise ValueError(
+            f"Invalid split: train_start_idx={train_start_idx} exceeds train_end_idx={train_end_idx}"
+        )
+    if train_end_idx >= test_start_idx:
+        raise ValueError(
+            f"Invalid split: train_end_idx={train_end_idx} overlaps test_start_idx={test_start_idx}"
+        )
+    return {
+        "train_start_idx": train_start_idx,
+        "train_end_idx": train_end_idx,
+        "test_start_idx": test_start_idx,
+        "test_end_idx": test_end_idx,
+    }
 
 
 def prepare_contract_round_features(
@@ -78,6 +116,7 @@ def prepare_contract_round_features(
         dates=contract_full.dates[n_burnin:],
         source=contract_full.source,
     )
+    split_meta = _derive_round_split_indices(contract.dates, round_info)
 
     if len(contract.prices) < 500:
         print(f"  {ticker}: train period too short after burn-in ({len(contract.prices)} days)")
@@ -106,9 +145,15 @@ def prepare_contract_round_features(
         test_end=round_info["test_end"],
         source_overrides=json.dumps(_overrides),
         burnin_days=BURNIN_DAYS,
+        train_start_idx=split_meta["train_start_idx"],
+        train_end_idx=split_meta["train_end_idx"],
+        test_start_idx=split_meta["test_start_idx"],
+        test_end_idx=split_meta["test_end_idx"],
     )
     print(
-        f"  {ticker}: prepared features train={len(contract.prices)}d "
+        f"  {ticker}: prepared features total={len(contract.prices)}d "
+        f"train_rows={split_meta['train_end_idx'] - split_meta['train_start_idx'] + 1} "
+        f"test_rows={split_meta['test_end_idx'] - split_meta['test_start_idx'] + 1} "
         f"({round_info['train_start']}~{round_info['train_end']}, burnin={BURNIN_DAYS}d), source={source}, "
         f"state={spec['state_spec_version']}"
     )
@@ -190,6 +235,9 @@ def main():
     for round_num in rounds:
         if args.ticker:
             prepare_contract_round_features(args.ticker.upper(), round_num, source_overrides=overrides)
+        elif args.asset == "All":
+            for asset_name in ASSET_CLASSES:
+                prepare_round_features(asset_name, round_num, excluded=excluded, source_overrides=overrides)
         else:
             prepare_round_features(args.asset, round_num, excluded=excluded, source_overrides=overrides)
 

@@ -81,7 +81,7 @@ Current DQN training unit:
 - resume: `--resume` restores weights, optimizer, replay buffer, and full RNG state (torch/numpy/python) for reproducible continuation
 
 Training pipeline checks (fail-fast):
-- **Data sanity**: NaN/Inf, length consistency, feature shape (n,7), sigma range, date monotonicity
+- **Data sanity**: NaN/Inf, length consistency, feature shape `(n,9)`, sigma range, date monotonicity
 - **Env preflight**: usable steps >0, valid initial state, bounded first-step reward
 - **Agent health**: parameter count, device/GPU confirmation
 - **Cycle monitoring**: reward explosion, NaN loss, Q-value range, epsilon sanity, buffer overflow timing

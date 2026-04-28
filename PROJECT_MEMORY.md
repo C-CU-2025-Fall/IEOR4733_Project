@@ -1,5 +1,5 @@
 # PROJECT_MEMORY.md
-# Last updated: 2026-04-26
+# Last updated: 2026-04-28
 
 Read this first when resuming work on this repo.
 
@@ -56,12 +56,21 @@ Primary commands:
 - Dropout 0.2 after LSTM layers (published paper addition)
 - Dueling DQN + Double DQN + Fixed Q-targets (τ=1000)
 - LR=0.0001, γ=0.3, bp=0.002, batch=64, memory=5000
-- ε: 0.3 → 0.05 over 50000 steps
+- ε: constant 0.3 during training; greedy 0.0 for validation/inference
 - 10% validation split, early stopping patience=20
 
 ### Training
 - 200 episodes per round (paper default)
 - 10% validation split, early stopping patience=20
+- no active 1500-step truncation; episodes run to natural env termination
+- 2026-04-28 leakage fix:
+  - prepared feature artifacts now persist explicit round boundaries:
+    - `train_start_idx`, `train_end_idx`, `test_start_idx`, `test_end_idx`
+  - training slices only the true train period, then takes the last 10% of that train segment as validation
+  - backtest/inference only uses the true round test period
+  - verified `Forex` windows after the fix:
+    - `r1` train ends `2010-12-31`, test starts `2011-01-03`, train env steps about `1104–1116`
+    - `r2` train ends `2015-12-31`, test starts `2016-01-04`, train env steps about `2233–2277`
 - Fail-fast: RuntimeError if 0 val envs constructed (catches missing imports)
 - Pipeline checks: data sanity, env preflight, agent health, cycle monitoring
 - Unit tests: `drl/dqn/train/test_training_pipeline.py` (19 tests)
@@ -78,6 +87,10 @@ python run_strategy_backtest.py --strategy DQN --asset Forex
 ### Artifacts
 - Features: `drl/features/<ticker>/r<round>.npz`
 - DQN bundles: `drl/dqn/models/<asset_class>/r<round>/<run_id>/`
+- On 2026-04-28, active prepared features were regenerated to the 9-feature mainline:
+  - `96` active `r1/r2` contract artifacts are now `9`-dimensional
+  - only excluded `FB` and `ZA` remain as old `8`-dimensional archive artifacts
+  - active state spec string is `structural_38_close_norm_9d`
 
 ## 3. Eq.4 Reward
 

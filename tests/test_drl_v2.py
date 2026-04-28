@@ -24,6 +24,11 @@ def _write_feature_npz(path: Path, prices: np.ndarray, source: str = "TEST"):
     features = build_feature_matrix(prices, returns, sigma)
     f_spec = shared_spec.feature_spec()
     policy = shared_spec.current_source_policy()
+    dates = np.array(pd.date_range("2005-01-03", periods=len(prices), freq="B"))
+    dt = pd.to_datetime(dates)
+    train_end_idx = int(np.where(dt <= pd.Timestamp("2010-12-31"))[0][-1])
+    test_start_idx = int(np.where(dt >= pd.Timestamp("2011-01-01"))[0][0])
+    test_end_idx = int(np.where(dt <= pd.Timestamp("2015-12-31"))[0][-1])
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         path,
@@ -32,7 +37,7 @@ def _write_feature_npz(path: Path, prices: np.ndarray, source: str = "TEST"):
         returns=returns,
         sigma=sigma,
         features=features,
-        dates=np.array(pd.date_range("2005-01-03", periods=len(prices), freq="B")),
+        dates=dates,
         source=source,
         round="r1",
         feature_line=f_spec["feature_line"],
@@ -45,6 +50,10 @@ def _write_feature_npz(path: Path, prices: np.ndarray, source: str = "TEST"):
         train_end="2010-12-31",
         test_start="2011-01-01",
         test_end="2015-12-31",
+        train_start_idx=0,
+        train_end_idx=train_end_idx,
+        test_start_idx=test_start_idx,
+        test_end_idx=test_end_idx,
     )
     return returns, sigma, features
 
@@ -55,16 +64,17 @@ class DRLMainlineFeatureTests(unittest.TestCase):
         self.assertEqual(spec["feature_line"], shared_spec.ACTIVE_FEATURE_LINE)
         self.assertEqual(spec["state_spec_version"], shared_spec.STATE_SPEC_VERSION)
         self.assertEqual(spec["preset"], "structural_38")
-        self.assertEqual(spec["close_feature"]["name"], "ewma60_close_deviation")
+        self.assertEqual(spec["close_feature"]["name"], "normalized_close_price_60d_rolling_std")
+        self.assertEqual(spec["feature_dim"], 9)
 
     def test_close_feature_matches_formula(self):
         prices = 100.0 + np.cumsum(np.sin(np.arange(360) / 9.0) + 0.1)
         returns = compute_additive_returns(prices)
         sigma = compute_ewma_sigma(returns)
-        ema_price = pd.Series(prices).ewm(span=60, adjust=False).mean().to_numpy(dtype=float)
+        rolling_std = pd.Series(prices).rolling(window=60, min_periods=5).std().to_numpy(dtype=float)
 
         feats = build_feature_matrix(prices, returns, sigma)
-        manual = (prices - ema_price) / (sigma + 1e-10)
+        manual = prices / (rolling_std + 1e-10)
         manual = np.nan_to_num(manual, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
 
         self.assertEqual(feats.shape[1], shared_spec.FEATURE_DIM)
@@ -126,13 +136,25 @@ class DRLMainlineBacktestTests(unittest.TestCase):
 
 
 class DRLMainlineBundleTests(unittest.TestCase):
+    def test_feature_artifact_persists_explicit_round_split_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "AN" / "r1.npz"
+            prices = 120.0 + np.cumsum(np.sin(np.arange(3200) / 17.0) + 0.02)
+            _write_feature_npz(path, prices)
+            data = np.load(path, allow_pickle=True)
+            self.assertEqual(int(data["train_start_idx"]), 0)
+            self.assertLess(int(data["train_end_idx"]), int(data["test_start_idx"]))
+            dates = pd.to_datetime(data["dates"])
+            self.assertLessEqual(dates[int(data["train_end_idx"])], pd.Timestamp("2010-12-31"))
+            self.assertGreaterEqual(dates[int(data["test_start_idx"])], pd.Timestamp("2011-01-01"))
+
     def test_training_smoke_creates_asset_class_bundle(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             feature_root = tmp_path / "features"
             model_root = tmp_path / "models"
 
-            n = 270
+            n = 3200
             prices = 120.0 + np.cumsum(np.sin(np.arange(n) / 11.0) + 0.03)
             f_spec = shared_spec.feature_spec()
             policy = shared_spec.current_source_policy()
@@ -153,15 +175,15 @@ class DRLMainlineBundleTests(unittest.TestCase):
                         "state_spec_version": f_spec["state_spec_version"],
                     }, fh)
 
-                checkpoint, bundle = train_asset_round(
-                    "Forex",
-                    1,
-                    episodes=1,
-                    sigma_tgt=0.058,
-                    device="cpu",
-                    seed=7,
-                    no_early_stop=True,
-                )
+                with patch.object(train_mod, "MODEL_ROOT", model_root):
+                    checkpoint, bundle = train_asset_round(
+                        "Forex",
+                        1,
+                        episodes=1,
+                        sigma_tgt=0.058,
+                        device="cpu",
+                        seed=7,
+                    )
 
                 self.assertTrue(checkpoint.exists())
                 self.assertTrue((bundle / "manifest.json").exists())
@@ -187,9 +209,19 @@ class DRLMainlineBundleTests(unittest.TestCase):
                 self.assertTrue(manifest["architecture"]["dueling_dqn"])
                 self.assertTrue(manifest["architecture"]["double_dqn"])
                 self.assertTrue(manifest["architecture"]["fixed_q_targets"])
+                self.assertEqual(manifest["hyperparameters"]["epsilon_mode"], "constant")
+                self.assertEqual(manifest["hyperparameters"]["eps_start"], 0.3)
+                self.assertEqual(manifest["hyperparameters"]["eps_end"], 0.3)
+                self.assertIsNone(manifest["hyperparameters"]["eps_decay_steps"])
+                self.assertGreater(manifest["hyperparameters"]["max_steps_per_ep"], 1500)
+                splits = manifest["contract_round_splits"]["AN"]
+                self.assertEqual(splits["train_start"], "2005-01-01")
+                self.assertEqual(splits["train_end"], "2010-12-31")
+                self.assertEqual(splits["test_start"], "2011-01-01")
+                self.assertEqual(splits["test_end"], "2015-12-31")
 
     def test_train_asset_round_passes_sigma_tgt_to_env(self):
-        prices = 120.0 + np.cumsum(np.sin(np.arange(270) / 11.0) + 0.03)
+        prices = 120.0 + np.cumsum(np.sin(np.arange(3200) / 11.0) + 0.03)
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             feature_root = tmp_path / "features"
@@ -207,6 +239,7 @@ class DRLMainlineBundleTests(unittest.TestCase):
                 def __init__(self, contract, sigma_tgt=0.058, **kwargs):
                     _ = kwargs
                     captured["sigma_tgt"] = sigma_tgt
+                    self.start_idx = 252
                     self.max_idx = len(contract.prices) - 1
 
                 def reset(self):
@@ -216,10 +249,47 @@ class DRLMainlineBundleTests(unittest.TestCase):
                     _ = action_id
                     return np.zeros((shared_spec.SEQ_LEN, shared_spec.FEATURE_DIM), dtype=np.float32), 0.0, True
 
-            with patch.object(shared_spec, "FEATURE_ROOT", feature_root), patch.object(dqn_spec, "MODEL_ROOT", model_root), patch.object(train_mod, "ContractEnv", FakeEnv):
-                train_asset_round("Forex", 1, episodes=1, sigma_tgt=0.061, device="cpu", seed=11, no_early_stop=True)
+            with patch.object(shared_spec, "FEATURE_ROOT", feature_root), patch.object(dqn_spec, "MODEL_ROOT", model_root), patch.object(train_mod, "MODEL_ROOT", model_root), patch.object(train_mod, "ContractEnv", FakeEnv):
+                train_asset_round("Forex", 1, episodes=1, sigma_tgt=0.061, device="cpu", seed=11)
 
             self.assertEqual(captured["sigma_tgt"], 0.061)
+
+    def test_train_loader_excludes_post_2010_rows_from_r1_train_contract(self):
+        prices = 120.0 + np.cumsum(np.sin(np.arange(3200) / 11.0) + 0.03)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            feature_root = tmp_path / "features"
+            model_root = tmp_path / "models"
+            feature_path = feature_root / "AN" / "r1.npz"
+            _write_feature_npz(feature_path, prices)
+            index_path = feature_root / "Forex" / "r1" / "index.json"
+            index_path.parent.mkdir(parents=True, exist_ok=True)
+            with index_path.open("w", encoding="utf-8") as fh:
+                json.dump({"member_tickers": ["AN"]}, fh)
+
+            captured = {}
+
+            class FakeEnv:
+                def __init__(self, contract, sigma_tgt=0.058, **kwargs):
+                    _ = sigma_tgt
+                    _ = kwargs
+                    captured["last_train_date"] = str(pd.to_datetime(contract.dates[-1]).date())
+                    captured["n_train_rows"] = len(contract.prices)
+                    self.start_idx = 252
+                    self.max_idx = len(contract.prices) - 1
+
+                def reset(self):
+                    return np.zeros((shared_spec.SEQ_LEN, shared_spec.FEATURE_DIM), dtype=np.float32)
+
+                def step(self, action_id):
+                    _ = action_id
+                    return np.zeros((shared_spec.SEQ_LEN, shared_spec.FEATURE_DIM), dtype=np.float32), 0.0, True
+
+            with patch.object(shared_spec, "FEATURE_ROOT", feature_root), patch.object(dqn_spec, "MODEL_ROOT", model_root), patch.object(train_mod, "MODEL_ROOT", model_root), patch.object(train_mod, "ContractEnv", FakeEnv):
+                train_asset_round("Forex", 1, episodes=1, sigma_tgt=0.058, device="cpu", seed=13)
+
+            self.assertEqual(captured["last_train_date"], "2010-12-31")
+            self.assertLess(captured["n_train_rows"], 1600)
 
     def test_default_checkpoint_resolution_does_not_fall_back_to_archive_dirs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -238,6 +308,12 @@ class DRLMainlineBundleTests(unittest.TestCase):
 
 
 class DQNInferenceTests(unittest.TestCase):
+    def test_epsilon_is_constant(self):
+        agent = DQNAgent(device="cpu")
+        self.assertEqual(agent.epsilon_for_step(0), 0.3)
+        self.assertEqual(agent.epsilon_for_step(50000), 0.3)
+        self.assertEqual(agent.epsilon_for_step(500000), 0.3)
+
     def test_predict_action_ids_returns_valid_action_ids(self):
         agent = DQNAgent(device="cpu")
         states = np.zeros((8, shared_spec.SEQ_LEN, shared_spec.FEATURE_DIM), dtype=np.float32)

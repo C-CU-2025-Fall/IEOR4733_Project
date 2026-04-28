@@ -1,4 +1,4 @@
-# DQN Validation (Single-Contract + Shared State Space)
+# DQN Validation (Asset-Class Shared + 9-Feature State Space)
 
 This note records the minimum non-training validation flow.
 
@@ -9,8 +9,8 @@ python drl/dqn/tests/verify_shared_dqn.py --asset Forex --round 1 --ticker AN
 ```
 
 Checks:
-- state feature shape is `(N, 8)`
-- one sampled window shape is `(60, 8)`
+- state feature shape is `(N, 9)`
+- one sampled window shape is `(60, 9)`
 - features are finite
 - Table 3 long-only backtest returns include `MDD` and `Calmar`
 
@@ -22,7 +22,7 @@ python drl/dqn/tests/verify_shared_dqn.py --asset Forex --round 1 --ticker AN --
 ```
 
 Checks:
-- prepared `.npz` exists at `drl/features/contract_rounds/AN/r1.npz`
+- prepared `.npz` exists at `drl/features/AN/r1.npz`
 - `prices/returns/sigma/features/source` match recomputed values
 
 ## 3) Verify checkpoint existence (after training)
@@ -32,7 +32,7 @@ python drl/dqn/tests/verify_shared_dqn.py --asset Forex --round 1 --ticker AN --
 ```
 
 Checks:
-- checkpoint exists at `drl/dqn/models/contract_rounds/dqn/AN/r1.pt`
+- checkpoint exists at `drl/dqn/models/<asset_class>/r<round>/<run_id>/checkpoint.pt`
 
 ## 4) Manual smoke for universal backtester
 
@@ -43,4 +43,4 @@ python drl/dqn/backtest/backtest_dqn_walkforward.py --strategy DQN --asset Forex
 
 Notes:
 - `Long` should run without checkpoints.
-- `DQN` requires contract checkpoints for all contracts in the selected asset class.
+- `DQN` requires one asset-class checkpoint per round for the selected asset class.

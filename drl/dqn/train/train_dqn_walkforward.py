@@ -52,10 +52,6 @@ from drl_shared.state_space import (
     get_feature_window,
 )
 
-
-# Early stop and validation removed — paper trains all episodes without validation split
-
-
 def _npz_scalar(data, key: str, default=None):
     if key not in data:
         return default
@@ -63,6 +59,35 @@ def _npz_scalar(data, key: str, default=None):
     if getattr(value, "shape", None) == ():
         return value.item()
     return value
+
+
+def _derive_round_split_indices_from_dates(dates: np.ndarray, round_info: dict[str, str]) -> dict[str, int]:
+    dt = np.asarray(dates)
+    train_start = np.datetime64(round_info["train_start"])
+    train_end = np.datetime64(round_info["train_end"])
+    test_start = np.datetime64(round_info["test_start"])
+    test_end = np.datetime64(round_info["test_end"])
+    train_start_idx_arr = np.where(dt >= train_start)[0]
+    train_idx = np.where(dt <= train_end)[0]
+    test_idx = np.where((dt >= test_start) & (dt <= test_end))[0]
+    if len(train_start_idx_arr) == 0:
+        raise ValueError(f"No rows found on/after train_start={round_info['train_start']}")
+    if len(train_idx) == 0:
+        raise ValueError(f"No rows found on/before train_end={round_info['train_end']}")
+    train_start_idx = int(train_start_idx_arr[0])
+    train_end_idx = int(train_idx[-1])
+    if len(test_idx) == 0:
+        test_start_idx = len(dt)
+        test_end_idx = len(dt) - 1
+    else:
+        test_start_idx = int(test_idx[0])
+        test_end_idx = int(test_idx[-1])
+    return {
+        "train_start_idx": train_start_idx,
+        "train_end_idx": train_end_idx,
+        "test_start_idx": test_start_idx,
+        "test_end_idx": test_end_idx,
+    }
 
 
 def parse_rounds(value: str | int | None) -> list[int]:
@@ -103,6 +128,10 @@ def load_contract_round(ticker: str, round_num: int) -> tuple[ContractArrays, di
         "train_end": str(_npz_scalar(data, "train_end", "")),
         "test_start": str(_npz_scalar(data, "test_start", "")),
         "test_end": str(_npz_scalar(data, "test_end", "")),
+        "train_start_idx": _npz_scalar(data, "train_start_idx", None),
+        "train_end_idx": _npz_scalar(data, "train_end_idx", None),
+        "test_start_idx": _npz_scalar(data, "test_start_idx", None),
+        "test_end_idx": _npz_scalar(data, "test_end_idx", None),
     }
     contract = ContractArrays(
         ticker=ticker,
@@ -113,7 +142,42 @@ def load_contract_round(ticker: str, round_num: int) -> tuple[ContractArrays, di
         dates=data["dates"],
         source=str(_npz_scalar(data, "source", "")),
     )
+    if any(meta[key] is None for key in ("train_start_idx", "train_end_idx", "test_start_idx", "test_end_idx")):
+        split_meta = _derive_round_split_indices_from_dates(contract.dates, RETRAIN_ROUNDS[round_num])
+        meta.update(split_meta)
+    else:
+        for key in ("train_start_idx", "train_end_idx", "test_start_idx", "test_end_idx"):
+            meta[key] = int(meta[key])
     return contract, meta
+
+
+def _slice_train_contract(contract: ContractArrays, meta: dict) -> tuple[ContractArrays, int, int, int]:
+    train_start_idx = int(meta["train_start_idx"])
+    train_end_idx = int(meta["train_end_idx"])
+    if train_start_idx < 0:
+        raise ValueError(f"Expected non-negative train_start_idx, got {train_start_idx}")
+    if train_end_idx < WARMUP:
+        raise ValueError(f"Train period too short after warmup: train_end_idx={train_end_idx}, WARMUP={WARMUP}")
+
+    train_contract = ContractArrays(
+        ticker=contract.ticker,
+        prices=contract.prices[:train_end_idx + 1],
+        returns=contract.returns[:train_end_idx + 1],
+        sigma=contract.sigma[:train_end_idx + 1],
+        features=contract.features[:train_end_idx + 1],
+        dates=contract.dates[:train_end_idx + 1],
+        source=contract.source,
+    )
+    n_train_period = train_end_idx - train_start_idx + 1
+    split_idx = train_start_idx + int(n_train_period * (1 - VALIDATION_SPLIT))
+    train_env_start = max(WARMUP, train_start_idx)
+    val_start = max(train_env_start, split_idx - SEQ_LEN)
+    if split_idx <= train_env_start:
+        raise ValueError(
+            f"Train split too short after warmup: n_train_period={n_train_period}, "
+            f"split_idx={split_idx}, train_env_start={train_env_start}"
+        )
+    return train_contract, train_env_start, split_idx, val_start
 
 
 def _asset_tickers_from_index(asset_name: str, round_num: int) -> list[str]:
@@ -334,10 +398,6 @@ def _validate_feature_policy(feature_meta: dict, ticker: str):
     if sorted(feature_meta.get("excluded_contracts", [])) != sorted(expected_policy["excluded_contracts"]):
         raise ValueError(f"Feature artifact excluded_contracts do not match structural_38 for {ticker}")
 
-
-# (validation split removed)
-
-
 def _run_training_episode(env: ContractEnv, agent: DQNAgent, global_step: int) -> tuple[float, int, list[float], int]:
     state = env.reset()
     total_reward = 0.0
@@ -360,7 +420,7 @@ def _run_training_episode(env: ContractEnv, agent: DQNAgent, global_step: int) -
 
 
 def _validation_reward(envs: dict[str, ContractEnv], agent: DQNAgent) -> float:
-    """Run one episode per contract with greedy policy, return avg reward."""
+    """Run one full validation episode per contract with greedy policy, return avg reward."""
     agent.q_net.eval()  # eval mode: disable dropout
     rewards = []
     for ticker, env in envs.items():
@@ -405,8 +465,9 @@ def train_asset_round(
 
     for ticker in tickers:
         try:
-            contract, feature_meta = load_contract_round(ticker, round_num)
+            full_contract, feature_meta = load_contract_round(ticker, round_num)
             _validate_feature_policy(feature_meta, ticker)
+            contract, train_env_start, split_idx, val_start = _slice_train_contract(full_contract, feature_meta)
 
             # Feature sanity check
             warns = _sanity_check_contract(contract, ticker)
@@ -416,19 +477,21 @@ def train_asset_round(
             contracts[ticker] = contract
             feature_meta_by_ticker[ticker] = feature_meta
             n = len(contract.prices)
-            split_idx = int(n * (1 - VALIDATION_SPLIT))
 
             # Train env
-            train_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, max_idx=split_idx)
+            train_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, start_idx=train_env_start, max_idx=split_idx)
             env_log_lines.append(
-                f"  {ticker}: n={n} train=[{WARMUP}..{split_idx}] ({split_idx - WARMUP} steps)"
+                f"  {ticker}: train_dates=[{contract.dates[int(feature_meta['train_start_idx'])]}..{contract.dates[-1]}] "
+                f"train_env=[{train_env_start}..{split_idx}] ({split_idx - train_env_start} steps)"
             )
 
             # Val env
-            val_start = max(WARMUP, split_idx - SEQ_LEN)
-            val_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, start_idx=val_start)
+            val_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, start_idx=val_start, max_idx=n)
             env_log_lines.append(
-                f"  {ticker}: val=[{val_start}..{n}] ({n - val_start} steps)"
+                f"  {ticker}: val_dates=[{contract.dates[val_start]}..{contract.dates[-1]}] "
+                f"val_env=[{val_start}..{n}] ({n - val_start} steps) "
+                f"test_dates=[{feature_meta['test_start']}..{feature_meta['test_end']}] "
+                f"test_idx=[{feature_meta['test_start_idx']}..{feature_meta['test_end_idx']}]"
             )
         except Exception as exc:
             skipped.append(f"{ticker}: {exc}")
@@ -486,6 +549,19 @@ def train_asset_round(
             "feature_artifact_paths": {
                 ticker: meta["feature_artifact_path"] for ticker, meta in feature_meta_by_ticker.items()
             },
+            "contract_round_splits": {
+                ticker: {
+                    "train_start_idx": int(meta["train_start_idx"]),
+                    "train_end_idx": int(meta["train_end_idx"]),
+                    "test_start_idx": int(meta["test_start_idx"]),
+                    "test_end_idx": int(meta["test_end_idx"]),
+                    "train_start": meta["train_start"],
+                    "train_end": meta["train_end"],
+                    "test_start": meta["test_start"],
+                    "test_end": meta["test_end"],
+                }
+                for ticker, meta in feature_meta_by_ticker.items()
+            },
             "state_spec_version": f_spec["state_spec_version"],
         },
     )
@@ -518,7 +594,10 @@ def train_asset_round(
         "DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, "
         "Dueling DQN; target hard-copy every 1000 learn steps; dropout 0.2"
     )
-    logger.log(f"Validation: {VALIDATION_SPLIT*100:.0f}% split, early stopping patience={EARLY_STOPPING_PATIENCE}")
+    logger.log(
+        f"Validation: {VALIDATION_SPLIT*100:.0f}% split, early stopping patience={EARLY_STOPPING_PATIENCE}, "
+        f"epsilon_train={agent.epsilon_for_step(0):.1f} constant, epsilon_val=0.0"
+    )
 
     # Log env construction details
     logger.log("--- Env construction ---")
@@ -548,6 +627,7 @@ def train_asset_round(
     global_episode = 0
     start_cycle = 1
     episode_rows: list[dict] = []
+    validation_rows: list[dict] = []
     contract_stats = defaultdict(lambda: {
         "episodes_seen": 0,
         "transitions_added": 0,
@@ -621,6 +701,14 @@ def train_asset_round(
         # Early stopping: check EVERY cycle (paper: 20 epochs patience)
         val_reward = _validation_reward(val_envs, agent) if val_envs else 0.0
         _last_val_reward = val_reward
+        validation_rows.append({
+            "cycle": cycle,
+            "round": round_num,
+            "validation_reward_mean": round(val_reward, 6),
+            "best_validation_reward": round(max(best_val_reward, val_reward), 6) if best_val_reward != float("-inf") else round(val_reward, 6),
+            "patience_counter": patience_counter,
+            "contract_count": len(val_envs),
+        })
         if val_reward > best_val_reward:
             best_val_reward = val_reward
             patience_counter = 0
@@ -667,6 +755,7 @@ def train_asset_round(
         agent.save(out_path, metadata=metadata, include_training_state=True)
     logger.write_csv("episode_metrics.csv", episode_rows)
     logger.write_csv("contract_metrics.csv", contract_rows)
+    logger.write_csv("validation_metrics.csv", validation_rows)
     logger.write_json("checkpoint_metadata.json", metadata)
     logger.write_json("manifest.json", metadata)
     logger.log(f"Saved checkpoint: {out_path}")

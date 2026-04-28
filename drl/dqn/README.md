@@ -21,13 +21,13 @@ python3 run_strategy_backtest.py --strategy DQN --asset Forex
 ## Shared State Space (Paper Section 3.1)
 
 - `seq_len = 60` (past 60 observations per feature)
-- `feature_dim = 7`
+- `feature_dim = 9`
 
-Features (matching paper exactly):
+Features (current repo mainline):
 - feature 0: Normalized close price series (`p_t / rolling_std(p, 60)`)
 - features 1-4: Vol-adjusted returns for horizons 21/42/63/252 days, formula: `(p_t - p_{t-H}) / (σ_t * √H)`
-- feature 5: Averaged MACD normalized by 63-day price volatility (Eq.3)
-- feature 6: RSI(30) normalized to [-1, 1]
+- features 5-7: Three MACD-pair features, each normalized by 63-day price volatility and then by rolling 252-day `std(q_t)`
+- feature 8: RSI(30) normalized to `[-1, 1]`
 
 ## DQN Architecture (Paper Table 1 + Published JFDS 2020)
 
@@ -43,7 +43,7 @@ Hyperparameters:
 - bp = 0.002
 - Batch size = 64
 - Memory = 5000
-- ε: 0.3 → 0.05 over 50000 steps
+- ε: constant 0.3 during training, 0.0 for validation/inference
 - Episodes = 200 per training round
 - Dropout = 0.2
 - Validation split = 10% (chronological)
@@ -54,6 +54,7 @@ Hyperparameters:
 Per published paper (JFDS 2020):
 - One shared model per asset class per round (anti-overfitting via cross-contract training)
 - Each contract split 90/10: train on first 90%, validate on last 10% (chronological, no shuffle)
+- Training episodes run to natural env termination; no active 1500-step truncation
 - Validation reward evaluated every cycle with greedy policy (ε=0)
 - Early stopping: if validation reward doesn't improve for 20 cycles, stop and save best checkpoint
 - Resume support: full RNG state (torch/numpy/python) saved for reproducible continuation

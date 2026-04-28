@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Verification script for the single-contract DQN pipeline."""
+"""Verification script for the active asset-class-shared DQN pipeline."""
 from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -12,17 +13,16 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config import SOURCE_OVERRIDES
 from data_loader import load_clc_full
 from drl.dqn.backtest.engine import portfolio_metrics
 from drl.dqn.spec import RETRAIN_ROUNDS, resolve_checkpoint_path
-from drl_shared.spec import FEATURE_DIM, SEQ_LEN, WARMUP, feature_data_path
+from drl_shared.spec import FEATURE_DIM, SEQ_LEN, WARMUP, current_source_policy, feature_data_path
 from drl_shared.state_space import build_contract_arrays, get_feature_window
 
 
 def _load_train_frame(ticker: str, round_num: int):
     round_info = RETRAIN_ROUNDS[round_num]
-    source = SOURCE_OVERRIDES.get(ticker, "RAD")
+    source = current_source_policy()["source_overrides"].get(ticker, "RAD")
     df = load_clc_full(
         ticker,
         source=source,
@@ -78,20 +78,34 @@ def verify_prepared_round_data(ticker: str, round_num: int) -> dict:
     if not prepared_path.exists():
         raise FileNotFoundError(f"Prepared state file missing: {prepared_path}")
 
-    train, source = _load_train_frame(ticker, round_num)
-    contract = build_contract_arrays(
+    round_info = RETRAIN_ROUNDS[round_num]
+    train_start_dt = datetime.strptime(round_info["train_start"], "%Y-%m-%d")
+    burnin_start = (train_start_dt - timedelta(days=365)).strftime("%Y-%m-%d")
+    source = current_source_policy()["source_overrides"].get(ticker, "RAD")
+    df = load_clc_full(
         ticker=ticker,
-        prices=train["Close"].to_numpy(dtype=float),
-        dates=train["Date"].to_numpy(),
+        source=source,
+        start_date=burnin_start,
+        anchor_date=round_info["test_start"],
+    )
+    if df is None:
+        raise RuntimeError(f"No source data for {ticker} (source={source})")
+    df_full = df.loc[df["Date"] <= round_info["test_end"]].reset_index(drop=True)
+    contract_full = build_contract_arrays(
+        ticker=ticker,
+        prices=df_full["Close"].to_numpy(dtype=float),
+        dates=df_full["Date"].to_numpy(),
         source=source,
     )
+    burnin_days = 252
+    start_idx = min(burnin_days, len(contract_full.prices))
 
     data = np.load(prepared_path, allow_pickle=True)
     checks = {
-        "prices": np.allclose(data["prices"], contract.prices),
-        "returns": np.allclose(data["returns"], contract.returns),
-        "sigma": np.allclose(data["sigma"], contract.sigma, equal_nan=True),
-        "features": np.allclose(data["features"], contract.features),
+        "prices": np.allclose(data["prices"], contract_full.prices[start_idx:]),
+        "returns": np.allclose(data["returns"], contract_full.returns[start_idx:]),
+        "sigma": np.allclose(data["sigma"], contract_full.sigma[start_idx:], equal_nan=True),
+        "features": np.allclose(data["features"], contract_full.features[start_idx:]),
         "source": str(_npz_scalar(data, "source", "")) == source,
     }
     failed = [name for name, ok in checks.items() if not ok]
@@ -101,15 +115,15 @@ def verify_prepared_round_data(ticker: str, round_num: int) -> dict:
     return {
         "prepared_path": str(prepared_path),
         "checks": checks,
-        "rows": len(contract.prices),
+        "rows": len(contract_full.prices[start_idx:]),
     }
 
 
-def verify_checkpoint_presence(ticker: str, round_num: int) -> dict:
-    checkpoint = resolve_checkpoint_path(round_num, ticker)
+def verify_checkpoint_presence(asset_name: str, round_num: int) -> dict:
+    checkpoint = resolve_checkpoint_path(round_num, asset_name=asset_name)
     if not checkpoint.exists():
         raise FileNotFoundError(
-            f"Contract checkpoint missing: {checkpoint}. "
+            f"Asset-class checkpoint missing: {checkpoint}. "
             "This is expected before training, but DQN backtest cannot run yet."
         )
     return {"checkpoint": str(checkpoint)}
@@ -156,10 +170,10 @@ def main():
         print(f"[INFO] prepared round data not required. expected path: {prepared_path}")
 
     if args.require_checkpoint:
-        checkpoint = verify_checkpoint_presence(ticker, args.round)
-        print(f"[OK] contract checkpoint: {checkpoint['checkpoint']}")
+        checkpoint = verify_checkpoint_presence(args.asset, args.round)
+        print(f"[OK] asset-class checkpoint: {checkpoint['checkpoint']}")
     else:
-        checkpoint = resolve_checkpoint_path(args.round, ticker)
+        checkpoint = resolve_checkpoint_path(args.round, asset_name=args.asset)
         print(f"[INFO] checkpoint not required. expected path: {checkpoint}")
 
 

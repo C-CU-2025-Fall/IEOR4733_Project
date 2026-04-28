@@ -35,6 +35,32 @@ def _npz_scalar(data, key: str, default=None):
     return value
 
 
+def _derive_round_indices(
+    dates: np.ndarray,
+    train_start: str,
+    train_end: str,
+    test_start: str,
+    test_end: str,
+) -> dict[str, int]:
+    dt = pd.to_datetime(dates)
+    train_start_ts = pd.Timestamp(train_start)
+    train_end_ts = pd.Timestamp(train_end)
+    test_start_ts = pd.Timestamp(test_start)
+    test_end_ts = pd.Timestamp(test_end)
+    train_start_idx_arr = np.where(dt >= train_start_ts)[0]
+    train_idx = np.where(dt <= train_end_ts)[0]
+    test_idx = np.where((dt >= test_start_ts) & (dt <= test_end_ts))[0]
+    assert len(train_start_idx_arr) > 0, f"no train rows on/after {train_start}"
+    assert len(train_idx) > 0, f"no train rows on/before {train_end}"
+    assert len(test_idx) > 0, f"no test rows in [{test_start}, {test_end}]"
+    return {
+        "train_start_idx": int(train_start_idx_arr[0]),
+        "train_end_idx": int(train_idx[-1]),
+        "test_start_idx": int(test_idx[0]),
+        "test_end_idx": int(test_idx[-1]),
+    }
+
+
 class DataSlice:
     """A contiguous slice of a ContractArrays, with validation metadata."""
     __slots__ = ("contract", "start_idx", "end_idx", "label")
@@ -83,6 +109,10 @@ def load_npz(ticker: str, round_num: int) -> tuple[np.lib.npyio.NpzFile, Contrac
         "train_end": str(_npz_scalar(data, "train_end", "")),
         "test_start": str(_npz_scalar(data, "test_start", "")),
         "test_end": str(_npz_scalar(data, "test_end", "")),
+        "train_start_idx": _npz_scalar(data, "train_start_idx", None),
+        "train_end_idx": _npz_scalar(data, "train_end_idx", None),
+        "test_start_idx": _npz_scalar(data, "test_start_idx", None),
+        "test_end_idx": _npz_scalar(data, "test_end_idx", None),
     }
 
     # Build full contract
@@ -128,6 +158,20 @@ def load_npz(ticker: str, round_num: int) -> tuple[np.lib.npyio.NpzFile, Contrac
     for key in ("train_start", "train_end", "test_start", "test_end"):
         assert meta[key], f"{ticker} r{round_num}: missing {key} in npz"
 
+    if any(meta[key] is None for key in ("train_start_idx", "train_end_idx", "test_start_idx", "test_end_idx")):
+        meta.update(
+            _derive_round_indices(
+                contract.dates,
+                meta["train_start"],
+                meta["train_end"],
+                meta["test_start"],
+                meta["test_end"],
+            )
+        )
+    else:
+        for key in ("train_start_idx", "train_end_idx", "test_start_idx", "test_end_idx"):
+            meta[key] = int(meta[key])
+
     # Train/test boundaries within data range
     first_date, last_date = dates[0], dates[-1]
     train_start = pd.Timestamp(meta["train_start"])
@@ -144,6 +188,16 @@ def load_npz(ticker: str, round_num: int) -> tuple[np.lib.npyio.NpzFile, Contrac
     )
     assert test_end <= last_date + pd.Timedelta(days=7), (
         f"{ticker} r{round_num}: data ends {last_date} before test_end {test_end}"
+    )
+    assert 0 <= meta["train_start_idx"] <= meta["train_end_idx"], (
+        f"{ticker} r{round_num}: bad train_start_idx={meta['train_start_idx']}"
+    )
+    assert 0 <= meta["train_end_idx"] < n, f"{ticker} r{round_num}: bad train_end_idx={meta['train_end_idx']}"
+    assert 0 <= meta["test_start_idx"] < n, f"{ticker} r{round_num}: bad test_start_idx={meta['test_start_idx']}"
+    assert 0 <= meta["test_end_idx"] < n, f"{ticker} r{round_num}: bad test_end_idx={meta['test_end_idx']}"
+    assert meta["train_end_idx"] < meta["test_start_idx"], (
+        f"{ticker} r{round_num}: split overlap train_end_idx={meta['train_end_idx']} "
+        f"test_start_idx={meta['test_start_idx']}"
     )
 
     return data, contract, meta
@@ -187,12 +241,10 @@ def get_train_slice(ticker: str, round_num: int) -> tuple[ContractArrays, DataSl
     from drl.dqn.spec import SEQ_LEN
 
     data, full_contract, meta = load_npz(ticker, round_num)
-    train_end_str = meta["train_end"]
-
-    # Slice to train period
     dates = pd.to_datetime(full_contract.dates)
-    train_end = pd.Timestamp(train_end_str)
-    n_train = int((dates <= train_end).sum())
+    train_start_idx = int(meta["train_start_idx"])
+    train_end_idx = int(meta["train_end_idx"])
+    n_train = train_end_idx + 1
     assert n_train > WARMUP + 50, (
         f"{ticker} r{round_num}: train period too short ({n_train} rows)"
     )
@@ -209,10 +261,16 @@ def get_train_slice(ticker: str, round_num: int) -> tuple[ContractArrays, DataSl
 
     n = len(train_contract.prices)
     val_split = 0.10
-    split_idx = int(n * (1 - val_split))
-    val_start = max(WARMUP, split_idx - SEQ_LEN)
+    n_train_period = train_end_idx - train_start_idx + 1
+    split_idx = train_start_idx + int(n_train_period * (1 - val_split))
+    val_start = max(WARMUP, train_start_idx, split_idx - SEQ_LEN)
 
-    train_slice = DataSlice(train_contract, start_idx=WARMUP, end_idx=split_idx, label=f"{ticker} r{round_num} train")
+    train_slice = DataSlice(
+        train_contract,
+        start_idx=max(WARMUP, train_start_idx),
+        end_idx=split_idx,
+        label=f"{ticker} r{round_num} train",
+    )
     val_slice = DataSlice(train_contract, start_idx=val_start, end_idx=n, label=f"{ticker} r{round_num} val")
 
     assert train_slice.usable_steps > 0, f"{ticker} r{round_num}: 0 train steps"
@@ -222,7 +280,7 @@ def get_train_slice(ticker: str, round_num: int) -> tuple[ContractArrays, DataSl
     meta["n_train_period"] = n_train
     meta["n_train"] = split_idx
     meta["n_val"] = n - val_start
-    meta["train_dates"] = f"{dates[0].date()} ~ {dates[n_train-1].date()}"
+    meta["train_dates"] = f"{dates[train_start_idx].date()} ~ {dates[train_end_idx].date()}"
 
     return train_contract, train_slice, val_slice, meta
 
@@ -238,26 +296,24 @@ def get_test_slice(ticker: str, round_num: int) -> tuple[ContractArrays, int, di
     data, full_contract, meta = load_npz(ticker, round_num)
 
     dates = pd.to_datetime(full_contract.dates)
-    test_start = pd.Timestamp(meta["test_start"])
-    test_end = pd.Timestamp(meta["test_end"])
-
-    mask = (dates >= test_start) & (dates <= test_end)
-    n_test = mask.sum()
+    test_start_idx = int(meta["test_start_idx"])
+    test_end_idx = int(meta["test_end_idx"])
+    n_test = test_end_idx - test_start_idx + 1
     assert n_test > WARMUP + 10, (
         f"{ticker} r{round_num}: test period too short ({n_test} rows)"
     )
 
     test_contract = ContractArrays(
         ticker=full_contract.ticker,
-        prices=full_contract.prices[mask],
-        returns=full_contract.returns[mask],
-        sigma=full_contract.sigma[mask],
-        features=full_contract.features[mask],
-        dates=full_contract.dates[mask],
+        prices=full_contract.prices[test_start_idx:test_end_idx + 1],
+        returns=full_contract.returns[test_start_idx:test_end_idx + 1],
+        sigma=full_contract.sigma[test_start_idx:test_end_idx + 1],
+        features=full_contract.features[test_start_idx:test_end_idx + 1],
+        dates=full_contract.dates[test_start_idx:test_end_idx + 1],
         source=full_contract.source,
     )
 
     meta["n_test"] = len(test_contract.prices)
-    meta["test_dates"] = f"{dates[mask][0].date()} ~ {dates[mask][-1].date()}"
+    meta["test_dates"] = f"{dates[test_start_idx].date()} ~ {dates[test_end_idx].date()}"
 
     return test_contract, WARMUP, meta

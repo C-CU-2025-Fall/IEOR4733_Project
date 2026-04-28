@@ -1,4 +1,4 @@
-"""Paper-faithful single-contract DQN model and agent."""
+"""Active asset-class-shared DQN model and agent."""
 from __future__ import annotations
 
 import os
@@ -28,8 +28,6 @@ from drl.dqn.spec import (
     DQN_SPEC_VERSION,
     DISCRETE_ACTION_DIM,
     DROPOUT,
-    EPS_DECAY_STEPS,
-    EPS_END,
     EPS_START,
     FEATURE_DIM,
     GAMMA,
@@ -154,16 +152,18 @@ class DQNAgent:
         self.replay = ReplayBuffer(MEMORY_SIZE)
         self.train_steps = 0
         self.target_updates = 0
+        self.scaler = torch.amp.GradScaler('cuda') if self.device == 'cuda' else None
 
     def epsilon_for_step(self, step: int) -> float:
-        frac = min(max(step, 0) / EPS_DECAY_STEPS, 1.0)
-        return EPS_START + frac * (EPS_END - EPS_START)
+        _ = step
+        return EPS_START
 
     def act(self, state: np.ndarray, eps: float) -> int:
         if np.random.random() < eps:
             return np.random.randint(DISCRETE_ACTION_DIM)
         self.q_net.eval()
-        with torch.no_grad():
+        dtype = torch.float16 if self.device == 'cuda' else torch.bfloat16
+        with torch.no_grad(), torch.autocast(device_type=self.device, dtype=dtype):
             tensor = torch.from_numpy(np.asarray(state, dtype=np.float32)).unsqueeze(0).to(self.device)
             return int(self.q_net(tensor).argmax().item())
 
@@ -172,7 +172,8 @@ class DQNAgent:
 
     def predict_action_ids(self, states: np.ndarray) -> np.ndarray:
         self.q_net.eval()
-        with torch.no_grad():
+        dtype = torch.float16 if self.device == 'cuda' else torch.bfloat16
+        with torch.no_grad(), torch.autocast(device_type=self.device, dtype=dtype):
             tensor = torch.from_numpy(np.asarray(states, dtype=np.float32)).to(self.device)
             return self.q_net(tensor).argmax(dim=1).detach().cpu().numpy().astype(np.int64)
 
@@ -191,17 +192,24 @@ class DQNAgent:
         next_states = torch.from_numpy(next_states).to(self.device)
         dones = torch.from_numpy(dones).to(self.device)
 
-        with torch.no_grad():
-            next_actions = self.q_net(next_states).argmax(1)
-            next_q = self.target(next_states).gather(1, next_actions.unsqueeze(1)).squeeze(1)
-            target_q = rewards + (1.0 - dones) * GAMMA * next_q
+        dtype = torch.float16 if self.device == 'cuda' else torch.bfloat16
+        with torch.autocast(device_type=self.device, dtype=dtype):
+            with torch.no_grad():
+                next_actions = self.q_net(next_states).argmax(1)
+                next_q = self.target(next_states).gather(1, next_actions.unsqueeze(1)).squeeze(1)
+                target_q = rewards + (1.0 - dones) * GAMMA * next_q
 
-        current_q = self.q_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
-        loss = F.mse_loss(current_q, target_q)
+            current_q = self.q_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
+            loss = F.mse_loss(current_q, target_q)
 
         self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+        if self.scaler is not None:
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+        else:
+            loss.backward()
+            self.optimizer.step()
 
         self.train_steps += 1
         if self.train_steps % TAU == 0:

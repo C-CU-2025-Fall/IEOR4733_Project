@@ -86,6 +86,8 @@ def _test_one_contract(ticker: str, round_num: int):
 
     # --- 2. Train slice ---
     train_contract, train_slice, val_slice, tmeta = get_train_slice(ticker, round_num)
+    assert tmeta["train_end_idx"] < tmeta["test_start_idx"], \
+        f"explicit split overlap: train_end_idx={tmeta['train_end_idx']} test_start_idx={tmeta['test_start_idx']}"
 
     # Train dates within expected range
     train_dates = pd.to_datetime(train_contract.dates)

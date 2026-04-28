@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from drl.dqn.model import DQNAgent
+from drl_shared.spec import FEATURE_DIM, SEQ_LEN
 from drl_shared.state_space import ContractArrays, ContractEnv
 
 
@@ -36,10 +37,20 @@ def test_seq_len_import():
 
 def test_validation_split_import():
     """VALIDATION_SPLIT and EARLY_STOPPING_PATIENCE must be importable from spec."""
-    from drl.dqn.spec import VALIDATION_SPLIT, EARLY_STOPPING_PATIENCE
+    from drl.dqn.spec import VALIDATION_SPLIT, EARLY_STOPPING_PATIENCE, EPS_END, EPS_START
     assert 0 < VALIDATION_SPLIT < 1, f"VALIDATION_SPLIT out of range: {VALIDATION_SPLIT}"
     assert EARLY_STOPPING_PATIENCE > 0, f"EARLY_STOPPING_PATIENCE must be positive: {EARLY_STOPPING_PATIENCE}"
-    print(f"✅ VALIDATION_SPLIT={VALIDATION_SPLIT}, EARLY_STOPPING_PATIENCE={EARLY_STOPPING_PATIENCE}")
+    assert EPS_START == EPS_END == 0.3, f"Epsilon should be constant 0.3, got start={EPS_START} end={EPS_END}"
+    print(f"✅ VALIDATION_SPLIT={VALIDATION_SPLIT}, EARLY_STOPPING_PATIENCE={EARLY_STOPPING_PATIENCE}, EPS=0.3")
+
+
+def test_constant_epsilon_schedule():
+    """epsilon_for_step should remain constant at 0.3."""
+    agent = DQNAgent(device="cpu")
+    for step in (0, 1, 100, 50000, 250000):
+        eps = agent.epsilon_for_step(step)
+        assert eps == 0.3, f"Expected constant epsilon 0.3 at step {step}, got {eps}"
+    print("✅ epsilon schedule: constant 0.3")
 
 
 def test_val_env_construction():
@@ -52,7 +63,7 @@ def test_val_env_construction():
     prices = np.cumsum(np.random.randn(n)) + 100.0
     returns = np.diff(prices, prepend=prices[0])
     sigma = np.abs(returns) + 1e-6
-    features = np.random.randn(n, 7).astype(np.float32)
+    features = np.random.randn(n, FEATURE_DIM).astype(np.float32)
     dates = np.arange(n)
 
     contract = ContractArrays(
@@ -102,7 +113,7 @@ def test_train_envs_no_warmup_needed():
     prices = np.cumsum(np.random.randn(n)) + 100.0
     returns = np.diff(prices, prepend=prices[0])
     sigma = np.abs(returns) + 1e-6
-    features = np.random.randn(n, 7).astype(np.float32)
+    features = np.random.randn(n, FEATURE_DIM).astype(np.float32)
     dates = np.arange(n)
 
     contract = ContractArrays(
@@ -166,7 +177,7 @@ def test_sanity_check_clean_data():
         prices=np.cumsum(np.random.randn(n)) + 100.0,
         returns=np.random.randn(n) * 0.01,
         sigma=np.abs(np.random.randn(n)) * 0.01 + 1e-3,
-        features=np.random.randn(n, 7).astype(np.float32),
+        features=np.random.randn(n, FEATURE_DIM).astype(np.float32),
         dates=np.arange(n),
         source="test",
     )
@@ -187,7 +198,7 @@ def test_sanity_check_nan_prices():
         prices=bad_prices,
         returns=np.diff(bad_prices, prepend=bad_prices[0]),
         sigma=np.abs(np.random.randn(n)) * 0.01 + 1e-3,
-        features=np.random.randn(n, 7).astype(np.float32),
+        features=np.random.randn(n, FEATURE_DIM).astype(np.float32),
         dates=np.arange(n),
         source="test",
     )
@@ -205,7 +216,7 @@ def test_sanity_check_short_data():
         prices=np.ones(100),
         returns=np.zeros(100),
         sigma=np.ones(100) * 0.01,
-        features=np.random.randn(100, 7).astype(np.float32),
+        features=np.random.randn(100, FEATURE_DIM).astype(np.float32),
         dates=np.arange(100),
         source="test",
     )
@@ -243,7 +254,7 @@ def test_sanity_check_near_zero_sigma():
         prices=np.ones(n) * 100.0,
         returns=np.random.randn(n) * 1e-10,
         sigma=np.ones(n) * 1e-12,  # near-zero sigma
-        features=np.random.randn(n, 7).astype(np.float32),
+        features=np.random.randn(n, FEATURE_DIM).astype(np.float32),
         dates=np.arange(n),
         source="test",
     )
@@ -264,7 +275,7 @@ def test_sanity_check_non_monotonic_dates():
         prices=np.cumsum(np.random.randn(n)) + 100.0,
         returns=np.random.randn(n) * 0.01,
         sigma=np.abs(np.random.randn(n)) * 0.01 + 1e-3,
-        features=np.random.randn(n, 7).astype(np.float32),
+        features=np.random.randn(n, FEATURE_DIM).astype(np.float32),
         dates=dates,
         source="test",
     )
@@ -284,7 +295,7 @@ def test_preflight_passes_good_env():
         prices=np.cumsum(np.random.randn(n)) + 100.0,
         returns=np.random.randn(n) * 0.01,
         sigma=np.abs(np.random.randn(n)) * 0.01 + 1e-3,
-        features=np.random.randn(n, 7).astype(np.float32),
+        features=np.random.randn(n, FEATURE_DIM).astype(np.float32),
         dates=np.arange(n),
         source="test",
     )
@@ -308,7 +319,7 @@ def test_preflight_catches_broken_env():
         prices=np.cumsum(np.random.randn(n)) + 100.0,
         returns=np.random.randn(n) * 0.01,
         sigma=np.abs(np.random.randn(n)) * 0.01 + 1e-3,
-        features=np.random.randn(n, 7).astype(np.float32),
+        features=np.random.randn(n, FEATURE_DIM).astype(np.float32),
         dates=np.arange(n),
         source="test",
     )
@@ -320,6 +331,89 @@ def test_preflight_catches_broken_env():
         errors = _preflight_check_envs({"TINY": env}, {}, {"TINY": contract}, logger)
         assert any("0 usable steps" in e for e in errors), f"Should detect 0 steps, got: {errors}"
     print("✅ preflight: 0 usable steps → detected")
+
+
+def test_training_episode_runs_to_env_termination():
+    """_run_training_episode should not truncate before env termination."""
+    from drl.dqn.train.train_dqn_walkforward import _run_training_episode
+
+    class FakeEnv:
+        def __init__(self, total_steps: int):
+            self.total_steps = total_steps
+            self.steps = 0
+
+        def reset(self):
+            self.steps = 0
+            return np.zeros((SEQ_LEN, FEATURE_DIM), dtype=np.float32)
+
+        def step(self, action_id):
+            _ = action_id
+            self.steps += 1
+            done = self.steps >= self.total_steps
+            return np.zeros((SEQ_LEN, FEATURE_DIM), dtype=np.float32), 0.1, done
+
+    class FakeAgent:
+        def epsilon_for_step(self, step):
+            _ = step
+            return 0.3
+
+        def act(self, state, eps):
+            _ = state, eps
+            return 1
+
+        def push(self, s, a, r, s2, d):
+            _ = s, a, r, s2, d
+
+        def learn(self):
+            return 0.0
+
+    env = FakeEnv(total_steps=1705)
+    reward, steps, losses, global_step = _run_training_episode(env, FakeAgent(), 0)
+    assert steps == 1705, f"Expected full env termination at 1705, got {steps}"
+    assert global_step == 1705, f"Expected global_step to advance fully, got {global_step}"
+    assert reward > 0
+    assert losses == []
+    print("✅ training episode: runs to env termination")
+
+
+def test_validation_reward_runs_full_span():
+    """_validation_reward should evaluate the full validation env span."""
+    from drl.dqn.train.train_dqn_walkforward import _validation_reward
+
+    class FakeEnv:
+        def __init__(self, total_steps: int):
+            self.total_steps = total_steps
+            self.steps = 0
+
+        def reset(self):
+            self.steps = 0
+            return np.zeros((SEQ_LEN, FEATURE_DIM), dtype=np.float32)
+
+        def step(self, action_id):
+            _ = action_id
+            self.steps += 1
+            done = self.steps >= self.total_steps
+            return np.zeros((SEQ_LEN, FEATURE_DIM), dtype=np.float32), 1.0, done
+
+    class DummyNet:
+        def eval(self):
+            return None
+
+        def train(self):
+            return None
+
+    class FakeAgent:
+        def __init__(self):
+            self.q_net = DummyNet()
+
+        def act(self, state, eps):
+            _ = state, eps
+            return 1
+
+    envs = {"A": FakeEnv(1601), "B": FakeEnv(1601)}
+    reward = _validation_reward(envs, FakeAgent())
+    assert reward == 1601.0, f"Expected full-span validation reward 1601.0, got {reward}"
+    print("✅ validation reward: runs full span")
 
 
 def test_training_health_nan_loss():
@@ -375,7 +469,7 @@ def test_training_health_buffer_full_cycle1():
         agent = DQNAgent(device="cpu")
         # Fill replay buffer
         for _ in range(MEMORY_SIZE + 1):
-            agent.push(np.random.randn(60, 7), 0, 1.0, np.random.randn(60, 7), 0.0)
+            agent.push(np.random.randn(SEQ_LEN, FEATURE_DIM), 0, 1.0, np.random.randn(SEQ_LEN, FEATURE_DIM), 0.0)
 
         warns = _check_training_health(1, [1.0], [0.1], agent, 100, logger)
         assert any("replay buffer full" in w for w in warns), f"Should detect full buffer in cycle 1, got: {warns}"

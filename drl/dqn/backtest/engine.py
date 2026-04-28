@@ -83,7 +83,9 @@ def _resolve_rounds_for_dates(
     round_num: int | None = None,
 ) -> list[tuple[np.ndarray, int]]:
     if round_num is not None:
-        return [(np.ones(len(dates), dtype=bool), round_num)]
+        info = RETRAIN_ROUNDS[round_num]
+        mask = (dates >= pd.Timestamp(info["test_start"])) & (dates <= pd.Timestamp(info["test_end"]))
+        return [(np.asarray(mask, dtype=bool), round_num)] if np.any(mask) else []
     masks = []
     for rn in sorted(RETRAIN_ROUNDS):
         info = RETRAIN_ROUNDS[rn]

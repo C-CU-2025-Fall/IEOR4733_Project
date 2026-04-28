@@ -43,10 +43,10 @@ BATCH_SIZE = 64
 MEMORY_SIZE = 5000
 TAU = 1000
 EPS_START = 0.3
-EPS_END = 0.05
-EPS_DECAY_STEPS = 50000
+EPS_END = 0.3
+EPS_DECAY_STEPS = None
 EPISODES = 200
-MAX_STEPS_PER_EP = 1500
+MAX_STEPS_PER_EP = 10_000_000  # non-binding safety guardrail, not an active training cap
 SIGMA_TGT = SIGMA_TGT_DEFAULT
 LEAKY_RELU_SLOPE = 0.01
 LSTM_HIDDEN_SIZES = (64, 32)
@@ -177,6 +177,7 @@ def checkpoint_metadata(
             "batch_size": BATCH_SIZE,
             "memory_size": MEMORY_SIZE,
             "tau": TAU,
+            "epsilon_mode": "constant",
             "eps_start": EPS_START,
             "eps_end": EPS_END,
             "eps_decay_steps": EPS_DECAY_STEPS,
