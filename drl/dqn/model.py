@@ -226,8 +226,13 @@ class DQNAgent:
                 "optimizer": self.optimizer.state_dict(),
                 "train_steps": self.train_steps,
                 "target_updates": self.target_updates,
-                "replay": self.replay.buffer.copy(),
-                "replay_position": self.replay.position,
+                "replay_states": self.replay.states[:self.replay.size].copy(),
+                "replay_actions": self.replay.actions[:self.replay.size].copy(),
+                "replay_rewards": self.replay.rewards[:self.replay.size].copy(),
+                "replay_next_states": self.replay.next_states[:self.replay.size].copy(),
+                "replay_dones": self.replay.dones[:self.replay.size].copy(),
+                "replay_pos": self.replay.pos,
+                "replay_size": self.replay.size,
                 "torch_rng": torch.random.get_rng_state(),
                 "numpy_rng": np.random.get_state(),
                 "python_rng": random.getstate(),
@@ -258,8 +263,13 @@ class DQNAgent:
             self.optimizer.load_state_dict(ts["optimizer"])
             self.train_steps = ts["train_steps"]
             self.target_updates = ts["target_updates"]
-            self.replay.buffer = ts["replay"].copy()
-            self.replay.position = ts["replay_position"]
+            self.replay.states[:ts["replay_size"]] = ts["replay_states"]
+            self.replay.actions[:ts["replay_size"]] = ts["replay_actions"]
+            self.replay.rewards[:ts["replay_size"]] = ts["replay_rewards"]
+            self.replay.next_states[:ts["replay_size"]] = ts["replay_next_states"]
+            self.replay.dones[:ts["replay_size"]] = ts["replay_dones"]
+            self.replay.pos = ts["replay_pos"]
+            self.replay.size = ts["replay_size"]
             if "torch_rng" in ts:
                 torch.random.set_rng_state(ts["torch_rng"])
             if "numpy_rng" in ts:

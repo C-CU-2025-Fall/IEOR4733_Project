@@ -405,30 +405,32 @@ def train_asset_round(
 
     for ticker in tickers:
         try:
+            # Use unified data_loader: loads npz, slices to train period,
+            # splits 90/10 for train/val — no test data leakage
+            from drl_shared.data_loader import get_train_slice
+            train_contract, train_slice, val_slice, dl_meta = get_train_slice(ticker, round_num)
+
+            # Feature sanity check on full npz
             contract, feature_meta = load_contract_round(ticker, round_num)
             _validate_feature_policy(feature_meta, ticker)
-
-            # Feature sanity check
             warns = _sanity_check_contract(contract, ticker)
             if warns:
                 sanity_warnings[ticker] = warns
 
-            contracts[ticker] = contract
+            contracts[ticker] = train_contract
             feature_meta_by_ticker[ticker] = feature_meta
-            n = len(contract.prices)
-            split_idx = int(n * (1 - VALIDATION_SPLIT))
 
-            # Train env
-            train_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, max_idx=split_idx)
+            # Train env: uses train_slice (90% of train period)
+            train_envs[ticker] = ContractEnv(train_contract, sigma_tgt=sigma_tgt, max_idx=train_slice.end_idx)
             env_log_lines.append(
-                f"  {ticker}: n={n} train=[{WARMUP}..{split_idx}] ({split_idx - WARMUP} steps)"
+                f"  {ticker}: train=[{train_slice.start_idx}..{train_slice.end_idx}] ({train_slice.usable_steps} steps)"
             )
 
-            # Val env
-            val_start = max(WARMUP, split_idx - SEQ_LEN)
-            val_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, start_idx=val_start)
+            # Val env: uses val_slice (last 10% of train period)
+            val_envs[ticker] = ContractEnv(train_contract, sigma_tgt=sigma_tgt,
+                                           start_idx=val_slice.start_idx, max_idx=val_slice.end_idx)
             env_log_lines.append(
-                f"  {ticker}: val=[{val_start}..{n}] ({n - val_start} steps)"
+                f"  {ticker}: val=[{val_slice.start_idx}..{val_slice.end_idx}] ({val_slice.usable_steps} steps)"
             )
         except Exception as exc:
             skipped.append(f"{ticker}: {exc}")

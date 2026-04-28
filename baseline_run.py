@@ -518,18 +518,56 @@ def compute_portfolio_returns_from_position_provider(
     sigma_tgt,
     position_provider,
     aggregation_mode='variable_n',
+    max_workers: int = 1,
 ):
     """Eq 13 portfolio returns from explicit per-contract position arrays.
 
     position_provider must return a full-history position array for each contract payload.
+
+    Args:
+        max_workers: number of parallel workers for per-contract position inference.
+                     1 = sequential (default, safe for closures).
+                     >1 = multiprocessing (requires pickle-able provider).
     """
     series = []
-    for rd in raw_data:
-        pos = np.asarray(position_provider(rd), dtype=float)
-        Rt = compute_contract_returns_from_positions(rd, pos, sigma_tgt)
-        start, t1, dates = rd['start'], rd['t1'], rd['dates']
-        slc = Rt[start:t1 + 1]
-        series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
+
+    if max_workers > 1:
+        # Multiprocessing path: compute positions in parallel, then returns.
+        # position_provider must be pickle-able.
+        from concurrent.futures import ProcessPoolExecutor
+        import os
+
+        def _worker(args):
+            rd, _sigma_tgt, _provider = args
+            pos = np.asarray(_provider(rd), dtype=float)
+            return rd, pos
+
+        try:
+            with ProcessPoolExecutor(max_workers=max_workers) as pool:
+                results = list(pool.map(_worker, [(rd, sigma_tgt, position_provider) for rd in raw_data]))
+            for rd, pos in results:
+                Rt = compute_contract_returns_from_positions(rd, pos, sigma_tgt)
+                start, t1, dates = rd['start'], rd['t1'], rd['dates']
+                slc = Rt[start:t1 + 1]
+                series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
+        except (pickle.UnpicklingError, TypeError, AttributeError):
+            # Fallback to sequential if provider can't be pickled
+            series = []
+            for rd in raw_data:
+                pos = np.asarray(position_provider(rd), dtype=float)
+                Rt = compute_contract_returns_from_positions(rd, pos, sigma_tgt)
+                start, t1, dates = rd['start'], rd['t1'], rd['dates']
+                slc = Rt[start:t1 + 1]
+                series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
+    else:
+        # Sequential path (default, works with closures)
+        for rd in raw_data:
+            pos = np.asarray(position_provider(rd), dtype=float)
+            Rt = compute_contract_returns_from_positions(rd, pos, sigma_tgt)
+            start, t1, dates = rd['start'], rd['t1'], rd['dates']
+            slc = Rt[start:t1 + 1]
+            series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
+
     df_all = pd.DataFrame(series)
     if aggregation_mode == 'dropna':
         port = df_all.T.dropna().mean(axis=1)
@@ -548,6 +586,7 @@ def compute_strategy_metrics(
     port_vol_target=None,
     port_bridge='constant_posthoc',
     position_provider=None,
+    max_workers: int = 1,
 ):
     """Compute all 9 metrics for one strategy using the unified baseline stack."""
     built_in = {'Long', 'Sign(R)', 'MACD'}
@@ -561,6 +600,7 @@ def compute_strategy_metrics(
             sigma_tgt=sigma_tgt,
             position_provider=position_provider,
             aggregation_mode=aggregation_mode,
+            max_workers=max_workers,
         )
 
     if port_vol_target is not None:

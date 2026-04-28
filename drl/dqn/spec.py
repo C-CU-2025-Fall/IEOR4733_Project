@@ -85,6 +85,17 @@ def _valid_bundle_dirs(round_num: int, asset_name: str) -> list[Path]:
 
 def resolve_model_bundle(round_num: int, asset_name: str, run_id: str = "latest") -> Path:
     if run_id == "latest":
+        # Prefer best_seed.json (val-reward selected) over alphabetical sort
+        root = MODEL_ROOT / asset_slug(asset_name) / round_name(round_num)
+        best_json = root / "best_seed.json"
+        if best_json.exists():
+            try:
+                info = json.loads(best_json.read_text())
+                best_dir = Path(info["best_model_dir"])
+                if best_dir.exists() and (best_dir / "checkpoint.pt").exists():
+                    return best_dir
+            except Exception:
+                pass
         bundles = _valid_bundle_dirs(round_num, asset_name)
         if not bundles:
             return MODEL_ROOT / asset_slug(asset_name) / round_name(round_num) / "latest"

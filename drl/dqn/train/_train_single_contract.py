@@ -157,7 +157,7 @@ def _train_one_seed(
                 agent.q_net.load_state_dict(best_agent_state)
             break
 
-        if (ep + 1) % 50 == 0:
+        if (ep + 1) % 5 == 0:
             _log(f"    s{seed} ep{ep+1}/{episodes} r={total_reward:.4f} loss={avg_loss:.4f} val={val_reward:.4f} best_val={best_val_reward:.4f}")
 
     # Use best val weights (not last episode weights)

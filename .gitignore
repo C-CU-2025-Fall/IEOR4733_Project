@@ -1,53 +1,16 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-.venv/
-
-# Data files — CLC futures data committed to repo
-data/futures/
-data/futures_processed/
-
-# Old model format (v0)
-models/dqn/*.pt
-
-# Track v0 walkforward and v2+ versioned models
-!models/dqn_walkforward/
-!models/dqn_walkforward/**
-!drl/dqn/models/
-
-# Logs
-*.log
-download_log.txt
-
-# Old results
-drl_results_*.csv
-drl_results_*.json
-drl_quick_results.csv
-drl_results_gpu.csv
-pilot_test_results.csv
-results_aligned_*.csv
-results_lstm_*.csv
-
-# Images (optional - can include if small)
-# *.png
-simulation_data/
-
-# DQN model artifacts (checkpoints, logs) — too large for git
-drl/dqn/models/**/*.pt
-drl/dqn/models/**/*.csv
-drl/dqn/models/**/*.json
-drl/dqn/models/**/*.log
-drl/dqn/models/**/
-# But keep the directory structure
+# Trained models (large binary files)
+drl/dqn/models/*/
 !drl/dqn/models/.gitkeep
-# Batch results
-batch_train_results_*.json
-# Old per-contract models
-drl/dqn/models/[A-Z][A-Z]/
-# Shell scripts
-drl/dqn/train/train_loop.sh
+models/dqn*/
+models/dqn/
+
+# Training logs
+*.log
+
+# Temp results
+scripts/results/
+__pycache__/
+.pytest_cache/
+
+# Temp files
+.commit_allowed
