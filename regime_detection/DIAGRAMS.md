@@ -4,7 +4,7 @@
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#000000', 'primaryTextColor': '#FFFFFF', 'primaryBorderColor': '#000000', 'backgroundColor': '#FFFFFF', 'secondaryColor': '#000000', 'secondaryTextColor': '#FFFFFF', 'secondaryBorderColor': '#000000', 'tertiaryColor': '#000000', 'tertiaryTextColor': '#FFFFFF', 'tertiaryBorderColor': '#000000', 'noteBkgColor': '#000000', 'noteBorderColor': '#000000', 'noteTextColor': '#FFFFFF'}}}%%
-graph TD
+graph LR
     A["📊 Load CLC Data<br/>50 contracts"] --> B["🔧 Build State Matrices<br/>For each asset at each time point<br/>Construct 60×9 matrix"]
     B --> C["📈 Extract FFT Features<br/>9 columns independent FFT →<br/>10 Real + 10 Imaginary<br/>= 180-dimensional vector"]
     C --> D["🎲 GMM Clustering<br/>n_components=3<br/>Fit Gaussian Mixture Model"]
@@ -80,8 +80,9 @@ graph TD
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#000000', 'primaryTextColor': '#FFFFFF', 'primaryBorderColor': '#000000', 'backgroundColor': '#FFFFFF', 'secondaryColor': '#000000', 'secondaryTextColor': '#FFFFFF', 'secondaryBorderColor': '#000000', 'tertiaryColor': '#000000', 'tertiaryTextColor': '#FFFFFF', 'tertiaryBorderColor': '#000000', 'noteBkgColor': '#000000', 'noteBorderColor': '#000000', 'noteTextColor': '#FFFFFF'}}}%%
-graph TD
+graph LR
     subgraph train["🔴 TRAINING PHASE"]
+        direction LR
         A1["Get Regime Soft Probabilities<br/>predict_proba()<br/>→ [p0,p1,p2]"] --> A2["Augment State Features"]
         A2 --> A3["Original State Features<br/>9-dim: price, MACD, RSI, etc."]
         A1 --> A4["Regime Features<br/>3-dim: P0, P1, P2"]
@@ -92,6 +93,7 @@ graph TD
     end
     
     subgraph test["🟢 TEST PHASE"]
+        direction LR
         B1["Load test data"] --> B2["Get Augmented State<br/>[Original 9-dim + Soft prob 3-dim]<br/>= 12-dim input"]
         B2 --> B3["Single A2C inference<br/>LSTM automatically handles<br/>regime conditioning"]
         B3 --> B4["Output action directly"]
