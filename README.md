@@ -42,6 +42,24 @@ python3 tests/run_structural_38.py --table 3
 
 # 5. Run tests
 python3 -m unittest tests.test_drl_v2 -v
+
+# 6. DQN evaluation (integration test)
+python tests/test_integration_dqn_vs_long.py --ticker AN --round 1          # single-contract
+python tests/test_integration_dqn_vs_long.py --ticker AN --stitch            # stitched r1+r2
+python tests/test_integration_dqn_vs_long.py --ticker AN --stitch --from-files  # from saved .npz
+python tests/test_integration_dqn_vs_long.py --ticker AN --stitch --from-files --ver v2  # different version
+python tests/test_integration_dqn_vs_long.py --ticker AN --seeds 5           # multi-seed
+python tests/test_integration_dqn_vs_long.py --asset Forex --round 1         # portfolio (9 contracts)
+python tests/test_integration_dqn_vs_long.py --ticker AN --save-rewards      # persist to results/v1/
+python tests/test_integration_dqn_vs_long.py --ticker AN --save-rewards --ver v2  # persist to results/v2/
+
+# 7. Feature occlusion analysis
+python tests/test_feature_occlusion.py --ticker AN --round 1                  # single round
+python tests/test_feature_occlusion.py --ticker AN --both                     # both rounds
+python tests/test_feature_occlusion.py --ticker AN --stitch                   # stitched r1+r2
+python tests/test_feature_occlusion.py --ticker AN --seeds 5                  # multi-seed
+python tests/test_feature_occlusion.py --asset Forex --round 1               # portfolio-level
+python tests/test_feature_occlusion.py --ticker AN --round 1 --method mean   # mean-replacement
 ```
 
 ## Current Baseline
@@ -80,8 +98,10 @@ Current DQN training unit:
 - dropout (0.2) after LSTM layers (published paper)
 - chronological 90/10 train/validation split per contract
 - early stopping with patience 20 on validation reward
-- ε: 0.3 → 0.05 linear decay over `n_contracts × 25000` steps
-- memory: dynamic `n_contracts × 25000` (paper default 5000)
+- ε: warmup 10% at 0.30, decay 0.30→0.10 over next 20%, flat at 0.10
+- memory: `max(5000, total_steps * 0.2)` (MEMORY_RATIO=0.2, MEMORY_SIZE_MIN=5000)
+- MSE loss (paper default, USE_HUBER_LOSS=False); gradient clipping max_norm=1.0
+- locked seeds: `[42, 43, 44, 45, 46]`
 - validation envs crash-fast: if 0 val envs constructed, `RuntimeError` aborts training
 - resume: `--resume` restores weights, optimizer, replay buffer, and full RNG state for reproducible continuation
 - round extensibility: add entries to `drl_shared/spec.py RETRAIN_ROUNDS` for r3+

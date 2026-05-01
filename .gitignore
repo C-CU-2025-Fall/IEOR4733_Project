@@ -45,6 +45,8 @@ drl/dqn/models/**/*.log
 drl/dqn/models/**/
 # But keep the directory structure
 !drl/dqn/models/.gitkeep
+# Saved evaluation results (reward arrays), versioned by RESULTS_VERSION
+results/v*/
 # Batch results
 batch_train_results_*.json
 # Old per-contract models

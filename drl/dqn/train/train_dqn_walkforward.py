@@ -11,6 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
+import torch
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
@@ -520,6 +521,9 @@ def train_asset_round(
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
 
     tickers = tickers_override if tickers_override else _asset_tickers_from_index(asset_name, round_num)
     if not tickers:

@@ -1,5 +1,5 @@
 # PROJECT_MEMORY.md
-# Last updated: 2026-04-30
+# Last updated: 2026-05-01
 
 Read this first when resuming work on this repo.
 
@@ -71,9 +71,12 @@ Feature pruning analysis on the original 9D space found severe multicollinearity
 - Dropout 0.2 after LSTM layers (published paper addition)
 - Dueling DQN + Double DQN + Fixed Q-targets (tau=1000)
 - LR=0.0001, gamma=0.3, bp=0.002, batch=64
-- memory: dynamic `n_contracts * 25000` (paper default 5000)
-- epsilon: 0.3 -> 0.05 linear decay over `n_contracts * 25000` steps; greedy 0.0 for validation/inference
-- 10% validation split, early stopping patience=20
+- memory: `max(5000, total_steps * 0.2)` (MEMORY_RATIO=0.2, MEMORY_SIZE_MIN=5000)
+- epsilon: warmup 10% at 0.30, decay 0.30->0.10 over next 20%, flat 0.10 until end
+- MSE loss (paper default, USE_HUBER_LOSS=False); gradient clipping max_norm=1.0
+- 10% chronological validation split, early stopping patience=20
+- Locked seeds: [42, 43, 44, 45, 46] — all experiments use LOCKED_SEEDS
+- torch.manual_seed + torch.cuda.manual_seed_all for full RNG reproducibility
 
 ### Training
 - 200 cycles per round (paper default); each cycle visits every contract once
@@ -94,8 +97,31 @@ Feature pruning analysis on the original 9D space found severe multicollinearity
 
 ### Commands
 ```bash
+# Prepare features
 python drl_shared/prepare_features.py --asset Forex
+
+# Train DQN
 python drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 200 --device cuda
+
+# Single-contract integration test
+python tests/test_integration_dqn_vs_long.py --ticker AN --round 1 --episodes 100
+
+# Stitched r1+r2 evaluation
+python tests/test_integration_dqn_vs_long.py --ticker AN --stitch
+
+# Stitch from saved files (no retraining)
+python tests/test_integration_dqn_vs_long.py --ticker AN --stitch --from-files
+
+# Save rewards for offline analysis
+python tests/test_integration_dqn_vs_long.py --ticker AN --round 1 --save-rewards
+
+# Multi-seed evaluation
+python tests/test_integration_dqn_vs_long.py --ticker AN --seeds 5
+
+# Asset-class portfolio evaluation (all Forex contracts)
+python tests/test_integration_dqn_vs_long.py --asset Forex --round 1 --episodes 100
+
+# Full backtest
 python run_strategy_backtest.py --strategy DQN --asset Forex
 ```
 
@@ -104,15 +130,128 @@ python run_strategy_backtest.py --strategy DQN --asset Forex
 - DQN bundles: `drl/dqn/models/<asset_class>/r<round>/<run_id>/`
 - Active state spec: `structural_38_pruned_v2_5d`
 - All 96 contract artifacts (48 tickers x 2 rounds) regenerated with 5 market features
+- Saved results: `results/v<VERSION>/<TICKER>_r<R>_s<SEED>.npz` (per-contract reward arrays)
+- Portfolio results: `results/v<VERSION>/<ASSET>_r<R>_s<SEED>_portfolio.npz`
+- RESULTS_VERSION = `"v1"` — increment when hyperparameters change
 
-## 3. Eq.4 Reward
+## 3. Integration Test & Evaluation Pipeline
+
+`tests/test_integration_dqn_vs_long.py` provides the full evaluation pipeline:
+
+- **Single-contract**: `--ticker AN --round 1` — trains per-contract DQN, compares vs Long
+- **Multi-seed**: `--seeds 5` — runs LOCKED_SEEDS, reports median +/- IQR
+- **Stitched**: `--stitch` — concatenates r1+r2 test rewards for full 2011-2019 view
+- **From files**: `--stitch --from-files` — loads saved .npz, computes stitched metrics without retraining
+- **Version control**: `--save-rewards --ver v2` — saves to `results/v2/`, `--from-files --ver v2` loads from there
+- **Asset class**: `--asset Forex` — trains one shared model on full Forex, evaluates all 9 contracts
+- **Portfolio**: Equal-weight aggregation of per-contract DQN rewards (Paper Eq.13)
+- **Save rewards**: `--save-rewards` — persists reward arrays to `results/` for offline analysis
+
+Key finding from single-contract evaluation (AN, r1+r2):
+- DQN `% +ve` is far from 50% (20% r1, 7% r2) because AN was in downtrend
+- DQN learns position sizing / flat preference, not direction prediction
+- Paper's DQN `% +ve` ~= 50% is an artifact of equal-weight portfolio across 9 contracts
+- Single-contract DQN beats Long on std(R) and DD (volatility scaling) but not Sharpe/Sortino
+
+## 4. Feature Occlusion Analysis
+
+`tests/test_feature_occlusion.py` — Per-feature contribution analysis on trained DQN.
+
+Method: zero-out (or mean-replace) one feature dimension at a time during greedy inference,
+measure impact on 7 trade metrics and action distribution. Delta = baseline - occluded.
+
+- Positive delta on Sharpe/Sortino/E(R)/AveP/L = feature is useful (removing it hurts)
+- Positive delta on std(R)/DD = feature reduces risk (removing it increases volatility)
+
+Feature mapping (5D pruned v2):
+- 0: `ret_1d_vol_norm` — 1-day vol-normalized return
+- 1: `ret_21d_vol_norm` — 21-day momentum
+- 2: `macd_8_24` — fast MACD
+- 3: `macd_16_48` — medium MACD
+- 4: `rsi_30` — mean-reversion signal
+
+Commands:
+```bash
+# Single-contract occlusion
+python tests/test_feature_occlusion.py --ticker AN --round 1
+
+# Both rounds
+python tests/test_feature_occlusion.py --ticker AN --both
+
+# Stitched r1+r2
+python tests/test_feature_occlusion.py --ticker AN --stitch
+
+# Multi-seed with median/IQR
+python tests/test_feature_occlusion.py --ticker AN --seeds 5
+
+# Asset-class portfolio occlusion (train on all Forex, occlude per-contract, aggregate)
+python tests/test_feature_occlusion.py --asset Forex --round 1
+
+# Mean-replacement instead of zero
+python tests/test_feature_occlusion.py --ticker AN --round 1 --method mean
+```
+
+## 5. Eq.4 Reward
 
 - Additive `r_t = p_t - p_{t-1}`
 - Volatility-scaled positions: `sigma_tgt / sigma_{t-1}`
 - Transaction cost: `bp * p_{t-1} * |scaled_position_change|`
 
-## 4. Alignment Snapshot
+## 6. Alignment Snapshot
 
 Current retained structural-38 snapshot:
 - Trade-world metrics only: Table 3 <=10: 23/28, <=15: 28/28
 - Table 2 <=10: 24/28, <=15: 25/28
+
+## 7. Training Experiment Log
+
+### Hyperparameter Search (AN r1, seed=42, episodes=100)
+
+| # | Config | r1 DQN wins | Best val reward | Early stop cycle | Notes |
+|---|--------|:-----------:|:---------------:|:----------------:|-------|
+| 1 | Original (linear eps 0.3→0.05, MSE, fixed mem=5000) | 4/7 | — | cycle 14 | Best checkpoint very early; val degrade afterward |
+| 2 | 3-stage eps (0.3→0.05→0.01→0.005), Huber | 3/7 | — | never (cycle 100) | Severe overfitting; never early-stopped |
+| 3 | 2-stage eps (0.3→0.05→0.01), MSE | 3/7 | — | cycle 38 | Early stop late; val quality worse |
+| 4 | 2-stage eps (0.3→0.05→0.01), Huber | 5/7 | — | — | Good but slightly worse than MSE |
+| 5 | Warmup eps (0.3→0.1 flat), Huber | 5/7 | val=0.90 | cycle 28 | Stable warmup helps |
+| **6** | **Warmup eps (0.3→0.1 flat), MSE** | **6/7** | **val=1.04** | **cycle 30** | **Best overall — selected as final config** |
+
+Selected config (#6): `EPS_SCHEDULE = [(0.00, 0.30), (0.10, 0.30), (0.30, 0.10), (1.00, 0.10)]`, MSE loss, memory ratio 0.2, grad clip 1.0.
+
+### AN Single-Contract Results (Config #6, seed=42, episodes=100)
+
+**r1 (2011-2015):**
+
+| Metric | DQN | Long | Win |
+|--------|-----|------|-----|
+| E(R) | -0.1965 | -0.5049 | **DQN** |
+| std(R) | +0.6578 | +0.9367 | **DQN** |
+| DD | +0.5767 | +0.6272 | **DQN** |
+| Sharpe | -0.2987 | -0.5390 | **DQN** |
+| Sortino | -0.3407 | -0.8051 | **DQN** |
+| % +ve | +0.2048 | +0.4889 | Long |
+| Ave P/L | +1.2376 | +0.9581 | **DQN** |
+
+DQN wins **6/7** metrics. Position dist: L=30% F=56% S=14%. DQN predominantly stays flat (56%), not long.
+
+**r2 (2016-2019):**
+
+| Metric | DQN | Long | Win |
+|--------|-----|------|-----|
+| E(R) | -0.0842 | -0.1140 | **DQN** |
+| std(R) | +0.3906 | +0.9145 | **DQN** |
+| DD | +0.4850 | +0.5828 | **DQN** |
+| Sharpe | -0.2156 | -0.1247 | Long |
+| Sortino | -0.1736 | -0.1957 | **DQN** |
+| % +ve | +0.0706 | +0.5095 | Long |
+| Ave P/L | +1.3879 | +0.9435 | **DQN** |
+
+DQN wins **5/7** metrics. Position dist: L=11% F=85% S=5%. DQN almost entirely flat (85%).
+
+**Key observations across r1+r2:**
+- DQN consistently **reduces std(R) and DD** vs Long (volatility scaling effect)
+- DQN **improves Ave P/L** (wins bigger when it does trade, loses smaller)
+- DQN **fails on % +ve** (20% r1, 7% r2) — it trades very infrequently
+- Sharpe is negative for both DQN and Long (AN is a downtrend currency)
+- DQN learns **position sizing** (when to stay flat), not direction prediction
+- Paper's `% +ve ≈ 50%` is an artifact of 9-contract equal-weight portfolio

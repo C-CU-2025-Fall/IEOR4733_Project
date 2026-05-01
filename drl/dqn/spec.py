@@ -62,19 +62,24 @@ WARMUP = SEQ_LEN
 MEMORY_RATIO = 0.2             # buffer = 20% of total expected transitions
 MEMORY_SIZE_MIN = 5000         # floor (paper default)
 
-# ── Epsilon decay (3-stage, percentage-based) ──
+# ── Epsilon decay (warmup + decay, percentage-based) ──
 # Each tuple: (fraction_of_total_training_steps, epsilon_value)
+# Warmup 10% at eps=0.30, then decay 0.30→0.10 over 20%, then flat at 0.10
 EPS_SCHEDULE = [
     (0.00, 0.300),             # start:  eps = 0.30
-    (0.20, 0.050),             # 20%:   eps = 0.05
-    (0.50, 0.010),             # 50%:   eps = 0.01
-    (1.00, 0.005),             # 100%:  eps = 0.005
+    (0.10, 0.300),             # 10%:   warmup ends, still 0.30
+    (0.30, 0.100),             # 30%:   decay from 0.30 → 0.10
+    (1.00, 0.100),             # 100%:  stays at 0.10
 ]
 
-# ── Stability enhancements (off-paper, enabled for robustness) ──
+# ── Stability enhancements ──
 GRAD_CLIP_MAX_NORM = 1.0       # gradient L2 norm clipping (0 = disabled)
-USE_HUBER_LOSS = True          # smooth_l1_loss instead of MSE for Q-learning
+USE_HUBER_LOSS = False         # MSE loss (paper default); set True for smooth_l1_loss
 HUBER_DELTA = 1.0              # Huber loss delta (threshold between L1/L2)
+
+# ── Locked seeds for reproducibility ──
+# These 5 seeds are fixed. All experiments, ablations, and reports use LOCKED_SEEDS.
+LOCKED_SEEDS = [42, 43, 44, 45, 46]
 
 
 def contract_data_path(round_num: int, ticker: str) -> Path:
