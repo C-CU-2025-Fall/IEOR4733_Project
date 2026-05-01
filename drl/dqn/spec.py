@@ -46,7 +46,7 @@ MEMORY_SIZE = 5000
 TAU = 1000
 EPS_START = 0.3
 EPS_END = 0.05
-EPS_DECAY_STEPS = "dynamic"  # computed at runtime as n_contracts * 25000
+EPS_DECAY_STEPS = "dynamic"  # legacy; superseded by EPS_SCHEDULE + total_steps percentage
 EPISODES = 200
 MAX_STEPS_PER_EP = 5_000  # non-binding safety guardrail for finite datasets
 SIGMA_TGT = SIGMA_TGT_DEFAULT
@@ -57,6 +57,24 @@ VALIDATION_SPLIT = 0.1
 EARLY_STOPPING_PATIENCE = 20
 UPDATE_FREQ = 4  # learn every N transitions in interleaved training
 WARMUP = SEQ_LEN
+
+# ── Memory (percentage-based) ──
+MEMORY_RATIO = 0.2             # buffer = 20% of total expected transitions
+MEMORY_SIZE_MIN = 5000         # floor (paper default)
+
+# ── Epsilon decay (3-stage, percentage-based) ──
+# Each tuple: (fraction_of_total_training_steps, epsilon_value)
+EPS_SCHEDULE = [
+    (0.00, 0.300),             # start:  eps = 0.30
+    (0.20, 0.050),             # 20%:   eps = 0.05
+    (0.50, 0.010),             # 50%:   eps = 0.01
+    (1.00, 0.005),             # 100%:  eps = 0.005
+]
+
+# ── Stability enhancements (off-paper, enabled for robustness) ──
+GRAD_CLIP_MAX_NORM = 1.0       # gradient L2 norm clipping (0 = disabled)
+USE_HUBER_LOSS = True          # smooth_l1_loss instead of MSE for Q-learning
+HUBER_DELTA = 1.0              # Huber loss delta (threshold between L1/L2)
 
 
 def contract_data_path(round_num: int, ticker: str) -> Path:
@@ -180,9 +198,11 @@ def checkpoint_metadata(
             "gamma": GAMMA,
             "batch_size": BATCH_SIZE,
             "memory_size_default": MEMORY_SIZE,
-            "memory_size_note": "actual value is dynamic: n_contracts * 25000",
+            "memory_size_note": f"actual value: max({MEMORY_SIZE_MIN}, total_expected_steps * {MEMORY_RATIO})",
+            "memory_ratio": MEMORY_RATIO,
             "tau": TAU,
-            "epsilon_mode": "linear_decay",
+            "epsilon_mode": "3_stage_percentage",
+            "eps_schedule": [list(s) for s in EPS_SCHEDULE],
             "eps_start": EPS_START,
             "eps_end": EPS_END,
             "eps_decay_steps": EPS_DECAY_STEPS,
@@ -193,6 +213,9 @@ def checkpoint_metadata(
             "dropout": DROPOUT,
             "validation_split": VALIDATION_SPLIT,
             "early_stopping_patience": EARLY_STOPPING_PATIENCE,
+            "grad_clip_max_norm": GRAD_CLIP_MAX_NORM,
+            "use_huber_loss": USE_HUBER_LOSS,
+            "huber_delta": HUBER_DELTA,
         },
         "reward_spec": {
             "name": "eq4_additive_price_difference",

@@ -22,8 +22,11 @@ from drl.dqn.model import DQNAgent
 from drl.dqn.spec import (
     EARLY_STOPPING_PATIENCE,
     EPISODES,
+    EPS_SCHEDULE,
     FEATURE_DIM,
     MAX_STEPS_PER_EP,
+    MEMORY_RATIO,
+    MEMORY_SIZE_MIN,
     MODEL_ROOT,
     RETRAIN_ROUNDS,
     UPDATE_FREQ,
@@ -512,6 +515,8 @@ def train_asset_round(
     resume: bool = False,
     tickers_override: list[str] | None = None,
 ) -> tuple[Path, Path]:
+    t0_start = time.time()
+
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
@@ -568,9 +573,10 @@ def train_asset_round(
         raise ValueError(f"No loadable contracts for {asset_name} {round_name(round_num)}")
 
     n_contracts = len(contracts)
-    eps_decay_steps = n_contracts * 25000
-    memory_size = n_contracts * 25000
-    agent = DQNAgent(device=device, eps_decay_steps=eps_decay_steps, memory_size=memory_size)
+    steps_per_contract = sum(env.max_idx - env.start_idx for env in train_envs.values())
+    total_expected_steps = episodes * steps_per_contract
+    memory_size = max(MEMORY_SIZE_MIN, int(total_expected_steps * MEMORY_RATIO))
+    agent = DQNAgent(device=device, total_steps=total_expected_steps, memory_size=memory_size)
     
     if resume:
         # Find latest checkpoint for this asset+round
@@ -638,8 +644,10 @@ def train_asset_round(
     logger.write_json("train_config.json", metadata["hyperparameters"] | {
         "cycles": episodes,
         "seed": seed,
-        "eps_decay_steps": agent.eps_decay_steps,
+        "eps_total_steps": agent.total_steps,
+        "eps_schedule": [list(s) for s in EPS_SCHEDULE],
         "memory_size": agent.replay.capacity,
+        "memory_ratio": MEMORY_RATIO,
     })
     logger.write_json("feature_spec.json", metadata["feature_spec"])
 
@@ -667,7 +675,8 @@ def train_asset_round(
     )
     logger.log(
         f"Validation: {VALIDATION_SPLIT*100:.0f}% split, early stopping patience={EARLY_STOPPING_PATIENCE}, "
-        f"epsilon_train={agent.epsilon_for_step(0):.1f} constant, epsilon_val=0.0"
+        f"epsilon: {EPS_SCHEDULE[0][1]:.2f}→{EPS_SCHEDULE[-1][1]:.3f} over {agent.total_steps:,} steps, "
+        f"epsilon_val=0.0"
     )
 
     # Log env construction details
@@ -691,6 +700,11 @@ def train_asset_round(
         logger.log(f"⚠️  Preflight errors: {len(preflight_errors)} — training may fail or produce garbage results")
 
     logger.log(f"{'=' * 70}")
+
+    # --- Phase timing bookkeeping ---
+    t_phase = time.time()
+    t_data_load = t_phase - t0_start
+    t_val_total = 0.0
 
     t0 = time.time()
     report_interval = max(1, episodes // 10)
@@ -719,9 +733,12 @@ def train_asset_round(
 
     try:
         from tqdm import tqdm
-        cycle_iterator = tqdm(range(1, episodes + 1), desc="Training Cycles", unit="cycle")
+        cycle_iterator = tqdm(range(1, episodes + 1), desc="Training Cycles", unit="cycle", dynamic_ncols=True)
+        _tqdm_available = True
     except ImportError:
         cycle_iterator = range(1, episodes + 1)
+        _tqdm_available = False
+        print("Hint: pip install tqdm  for progress bar with live metrics")
         
     for cycle in cycle_iterator:
         # --- Interleaved training: step all contracts round-robin ---
@@ -763,8 +780,24 @@ def train_asset_round(
             episode_rows.append(row)
 
         # Calculate early to log for this cycle
+        t_val0 = time.time()
         val_reward, val_action_counts = _validation_reward(val_envs, agent) if val_envs else (0.0, {0:0, 1:0, 2:0})
+        t_val_total += time.time() - t_val0
         _last_val_reward = val_reward
+
+        # Update tqdm postfix with live metrics every cycle
+        if _tqdm_available:
+            elapsed = time.time() - t0
+            avg_reward = float(np.mean(cycle_rewards)) if cycle_rewards else 0.0
+            avg_loss = float(np.mean(cycle_losses)) if cycle_losses else 0.0
+            cycle_iterator.set_postfix({
+                "rew": f"{avg_reward:+.4f}",
+                "val": f"{val_reward:+.4f}",
+                "loss": f"{avg_loss:.4f}",
+                "eps": f"{agent.epsilon_for_step(global_step):.3f}",
+                "buf": f"{len(agent.replay)}",
+                "t": f"{elapsed:.0f}s",
+            }, refresh=False)
 
         if cycle % report_interval == 0 or cycle == 1:
             elapsed = time.time() - t0
@@ -844,6 +877,31 @@ def train_asset_round(
     logger.write_json("manifest.json", metadata)
     logger.log(f"Saved checkpoint: {out_path}")
     logger.log(f"Saved logs: {logger.dir}")
+
+    # --- Timing Summary ---
+    t_total = time.time() - t0_start
+    completed_cycles = metadata["completed_cycles"]
+    n_contracts = len(contracts)
+    transitions = sum(s["transitions_added"] for s in contract_stats.values())
+    learn_steps = agent.train_steps
+    t_train_loop = t_total - t_data_load - t_val_total
+
+    logger.log("")
+    logger.log(f"{'=' * 70}")
+    logger.log("Training Timing Summary")
+    logger.log(f"{'=' * 70}")
+    logger.log(f"  Data loading + env construction:  {t_data_load:6.1f}s")
+    logger.log(f"  Preflight checks + agent init:      (included above)")
+    logger.log(f"  Training loop ({completed_cycles} cycles):            {t_train_loop:6.1f}s")
+    logger.log(f"    avg per cycle:                    {t_train_loop/max(1,completed_cycles):6.1f}s")
+    logger.log(f"    avg per transition:               {t_train_loop/max(1,transitions)*1000:6.1f}ms")
+    logger.log(f"  Validation (total):                 {t_val_total:6.1f}s")
+    logger.log(f"    avg per cycle:                    {t_val_total/max(1,completed_cycles):6.1f}s")
+    logger.log(f"  Total wall time:                    {t_total:6.1f}s")
+    logger.log(f"  Device: {agent.device:<6s} | Params: {sum(p.numel() for p in agent.q_net.parameters()):,}")
+    logger.log(f"  Transitions: {transitions:,} | Learn steps: {learn_steps:,}")
+    logger.log(f"  Contracts: {n_contracts} | Stopped: {'early' if early_stopped else 'complete'}")
+    logger.log(f"{'=' * 70}")
     return out_path, logger.dir
 
 

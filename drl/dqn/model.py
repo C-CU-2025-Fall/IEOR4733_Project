@@ -28,15 +28,18 @@ from drl.dqn.spec import (
     DQN_SPEC_VERSION,
     DISCRETE_ACTION_DIM,
     DROPOUT,
-    EPS_START,
+    EPS_SCHEDULE,
     FEATURE_DIM,
     GAMMA,
+    GRAD_CLIP_MAX_NORM,
+    HUBER_DELTA,
     LEAKY_RELU_SLOPE,
     LR,
     LSTM_HIDDEN_SIZES,
     MEMORY_SIZE,
     SEQ_LEN,
     TAU,
+    USE_HUBER_LOSS,
 )
 
 def resolve_device(device: str | None = None) -> str:
@@ -141,11 +144,20 @@ class ReplayBuffer:
 
 
 class DQNAgent:
-    def __init__(self, device: str | None = None, eps_decay_steps: int = 50000, memory_size: int = MEMORY_SIZE):
+    def __init__(
+        self,
+        device: str | None = None,
+        total_steps: int = 100000,
+        memory_size: int = MEMORY_SIZE,
+        clip_grad_norm: float = GRAD_CLIP_MAX_NORM,
+        use_huber: bool = USE_HUBER_LOSS,
+    ):
         if _TORCH_IMPORT_ERROR is not None:
             raise RuntimeError("PyTorch is required for DQN training/inference but is not installed in this environment.") from _TORCH_IMPORT_ERROR
         self.device = resolve_device(device)
-        self.eps_decay_steps = eps_decay_steps
+        self.total_steps = max(1, int(total_steps))
+        self.clip_grad_norm = float(clip_grad_norm)
+        self.use_huber = bool(use_huber)
         self.q_net = DuelingDQNLSTM().to(self.device)
         self.target = DuelingDQNLSTM().to(self.device)
         self.target.load_state_dict(self.q_net.state_dict())
@@ -155,10 +167,17 @@ class DQNAgent:
         self.target_updates = 0
 
     def epsilon_for_step(self, step: int) -> float:
-        """Linear decay from 0.3 to 0.05 over the specified decay steps."""
-        if step > self.eps_decay_steps:
-            return 0.05
-        return 0.3 - (step / float(self.eps_decay_steps)) * 0.25
+        """3-stage piecewise-linear decay based on fraction of total training steps.
+
+        EPS_SCHEDULE = [(0.0, 0.30), (0.2, 0.05), (0.5, 0.01), (1.0, 0.005)]
+        """
+        p = step / float(self.total_steps)
+        for i in range(len(EPS_SCHEDULE) - 1):
+            p0, e0 = EPS_SCHEDULE[i]
+            p1, e1 = EPS_SCHEDULE[i + 1]
+            if p <= p1:
+                return e0 + (e1 - e0) * (p - p0) / (p1 - p0)
+        return EPS_SCHEDULE[-1][1]
 
     def act(self, state: np.ndarray, eps: float) -> int:
         if np.random.random() < eps:
@@ -197,10 +216,15 @@ class DQNAgent:
         target_q = rewards + (1.0 - dones) * GAMMA * next_q
 
         current_q = self.q_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
-        loss = F.mse_loss(current_q, target_q)
+        if self.use_huber:
+            loss = F.smooth_l1_loss(current_q, target_q, beta=HUBER_DELTA)
+        else:
+            loss = F.mse_loss(current_q, target_q)
 
         self.optimizer.zero_grad()
         loss.backward()
+        if self.clip_grad_norm > 0:
+            torch.nn.utils.clip_grad_norm_(self.q_net.parameters(), self.clip_grad_norm)
         self.optimizer.step()
 
         self.train_steps += 1
