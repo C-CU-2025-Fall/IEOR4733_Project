@@ -19,6 +19,7 @@ import pandas as pd
 
 from drl_shared.spec import (
     FEATURE_DIM,
+    MARKET_FEATURE_DIM,
     RETRAIN_ROUNDS,
     WARMUP,
     feature_spec,
@@ -131,8 +132,8 @@ def load_npz(ticker: str, round_num: int) -> tuple[np.lib.npyio.NpzFile, Contrac
     assert n > 0, f"{ticker} r{round_num}: 0 rows"
 
     # Feature dim
-    assert contract.features.shape == (n, FEATURE_DIM), (
-        f"{ticker} r{round_num}: features shape {contract.features.shape} != ({n}, {FEATURE_DIM})"
+    assert contract.features.shape == (n, MARKET_FEATURE_DIM), (
+        f"{ticker} r{round_num}: features shape {contract.features.shape} != ({n}, {MARKET_FEATURE_DIM})"
     )
 
     # No NaN/Inf in critical arrays

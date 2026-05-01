@@ -6,12 +6,14 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from config import BP, EWMA_SPAN, MACD_PAIRS, MACD_VOL_WINDOW
+from config import BP, EWMA_SPAN, MACD_VOL_WINDOW
 from drl_shared.spec import (
     CONTINUOUS_ACTION_RANGE,
     DISCRETE_ACTION_VALUES,
     FEATURE_DIM,
     HORIZONS,
+    MACD_PAIRS_ACTIVE,
+    MARKET_FEATURE_DIM,
     RSI_WINDOW,
     SEQ_LEN,
     SIGMA_TGT_DEFAULT,
@@ -51,57 +53,59 @@ def build_feature_matrix(
     sigma: np.ndarray,
     feature_spec_override: dict | None = None,
 ) -> np.ndarray:
-    """Build the shared 7-dimensional state matrix (paper Section 3.1).
+    """Build the 5-dimensional market feature matrix (pruned v2).
 
     Features:
-    0: Normalized close price (60-day rolling std)
-    1-4: Returns over 21/42/63/252 days, normalized by sigma*sqrt(H)
-    5: MACD (averaged multi-scale) normalized by 63-day price volatility
-    6: RSI(30) normalized to [-1, 1]
+    0: r_t / sigma_t — 1-day vol-normalized return (replaces non-stationary p_t/rollstd)
+    1: Return over 21 days, normalized by sigma*sqrt(21)
+    2: MACD (8, 24) normalized
+    3: MACD (16, 48) normalized
+    4: RSI(30) normalized to [-1, 1]
+
+    Previous action (6th channel) is appended at runtime by ContractEnv.
     """
     n = len(prices)
-    feats = np.zeros((n, FEATURE_DIM), dtype=np.float32)
+    feats = np.zeros((n, MARKET_FEATURE_DIM), dtype=np.float32)
 
-    # Feature 0: p_t / rolling_std(p, 60) — low correlation with other features
-    rolling_std = pd.Series(prices).rolling(window=60, min_periods=5).std().to_numpy(dtype=float)
-    feats[:, 0] = prices / (rolling_std + 1e-10)
+    # Feature 0: r_t / sigma_t — 1-day vol-normalized return
+    feats[:, 0] = returns / (sigma + 1e-10)
 
-    # Features 1-4: Returns over horizons, normalized by sigma*sqrt(H)
-    for idx, horizon in enumerate(HORIZONS):
-        col = np.zeros(n, dtype=float)
-        for i in range(horizon, n):
-            col[i] = (prices[i] - prices[i - horizon]) / (sigma[i] * np.sqrt(horizon) + 1e-10)
-        feats[:, idx + 1] = col
+    # Feature 1: Return over 21 days, normalized by sigma*sqrt(H)
+    horizon = HORIZONS[0]  # 21
+    col = np.zeros(n, dtype=float)
+    for i in range(horizon, n):
+        col[i] = (prices[i] - prices[i - horizon]) / (sigma[i] * np.sqrt(horizon) + 1e-10)
+    feats[:, 1] = col
 
-    # Features 5-7: MACD pairs (Eq.3), each independently normalized
-    # MACD_q = (m(S) - m(L)) / std(p_{t-63:t}), then / std(q, 252)
+    # Features 2-3: MACD pairs (8,24) and (16,48), each independently normalized
     macd_vol = (
         pd.Series(prices)
         .rolling(window=MACD_VOL_WINDOW, min_periods=5)
         .std()
         .to_numpy(dtype=float)
     )
-    for macd_idx, (short_span, long_span) in enumerate(MACD_PAIRS):
+    for macd_idx, (short_span, long_span) in enumerate(MACD_PAIRS_ACTIVE):
         ema_s = pd.Series(prices).ewm(span=short_span, adjust=False).mean().to_numpy(dtype=float)
         ema_l = pd.Series(prices).ewm(span=long_span, adjust=False).mean().to_numpy(dtype=float)
         q_t = (ema_s - ema_l) / (macd_vol + 1e-10)
         q_std_252 = pd.Series(q_t).rolling(window=252, min_periods=21).std().to_numpy(dtype=float)
-        feats[:, 5 + macd_idx] = q_t / (q_std_252 + 1e-10)
+        feats[:, 2 + macd_idx] = q_t / (q_std_252 + 1e-10)
 
-    # Feature 8: RSI(30) — Wilder smoothing (α=1/n EMA), normalized to [-1, 1]
+    # Feature 4: RSI(30) — Wilder smoothing (α=1/n EMA), normalized to [-1, 1]
     delta = np.diff(prices, prepend=prices[0])
     alpha = 1.0 / RSI_WINDOW
     gain = pd.Series(np.where(delta > 0, delta, 0.0)).ewm(alpha=alpha, adjust=False).mean().to_numpy(dtype=float)
     loss = pd.Series(np.where(delta < 0, -delta, 0.0)).ewm(alpha=alpha, adjust=False).mean().to_numpy(dtype=float) + 1e-10
     rsi = 100.0 - 100.0 / (1.0 + gain / loss)
-    feats[:, 8] = (rsi - 50.0) / 50.0
+    feats[:, 4] = (rsi - 50.0) / 50.0
 
     return np.nan_to_num(feats, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
 
 
 def get_feature_window(features: np.ndarray, idx: int, seq_len: int = SEQ_LEN) -> np.ndarray:
+    """Return (seq_len, MARKET_FEATURE_DIM) window of market features."""
     if idx < seq_len:
-        pad = np.zeros((seq_len - idx, FEATURE_DIM), dtype=np.float32)
+        pad = np.zeros((seq_len - idx, MARKET_FEATURE_DIM), dtype=np.float32)
         return np.vstack([pad, features[:idx]])
     return features[idx - seq_len:idx]
 
@@ -174,7 +178,10 @@ def build_contract_arrays(
 
 
 class ContractEnv:
-    """Single-contract environment using the shared state/reward pipeline."""
+    """Single-contract environment using the shared state/reward pipeline.
+
+    Returns states of shape (SEQ_LEN, FEATURE_DIM).
+    """
 
     def __init__(
         self,
@@ -195,17 +202,22 @@ class ContractEnv:
         self.last_position = 0.0
         self.last_sigma = self.sigma[self.start_idx - 1] if self.start_idx >= 1 else self.sigma[0]
 
+    def _make_state(self, idx: int) -> np.ndarray:
+        """Build state (SEQ_LEN, FEATURE_DIM) — market features only."""
+        return get_feature_window(self.features, idx)  # (SEQ_LEN, FEATURE_DIM)
+
     def reset(self) -> np.ndarray:
         self.idx = self.start_idx
         self.last_position = 0.0
         self.last_sigma = self.sigma[self.start_idx - 1] if self.start_idx >= 1 else self.sigma[0]
-        return get_feature_window(self.features, self.idx)
+        return self._make_state(self.idx)
 
     def step(self, action_id: int) -> tuple[np.ndarray, float, bool]:
         position = action_id_to_position(action_id)
         self.idx += 1
         if self.idx >= self.max_idx:
-            return get_feature_window(self.features, min(self.idx, self.max_idx)), 0.0, True
+            self.last_position = position
+            return self._make_state(min(self.idx, self.max_idx)), 0.0, True
 
         reward, _, _, _ = compute_eq4_reward(
             self.prices,
@@ -221,4 +233,4 @@ class ContractEnv:
         self.last_sigma = self.sigma[self.idx - 1]
         self.last_position = position
         done = self.idx >= self.max_idx - 1
-        return get_feature_window(self.features, self.idx), float(reward), done
+        return self._make_state(self.idx), float(reward), done

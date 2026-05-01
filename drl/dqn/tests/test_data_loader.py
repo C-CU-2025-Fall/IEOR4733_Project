@@ -24,7 +24,7 @@ import pandas as pd
 
 from config import ASSET_CLASSES
 from drl_shared.data_loader import load_npz, get_train_slice, get_test_slice
-from drl_shared.spec import FEATURE_DIM, RETRAIN_ROUNDS, WARMUP
+from drl_shared.spec import FEATURE_DIM, MARKET_FEATURE_DIM, RETRAIN_ROUNDS, WARMUP
 
 
 def test_all_forex_contracts():
@@ -62,9 +62,9 @@ def _test_one_contract(ticker: str, round_num: int):
     data, full_contract, meta = load_npz(ticker, round_num)
     n = len(full_contract.prices)
 
-    # Feature dim
-    assert full_contract.features.shape == (n, FEATURE_DIM), \
-        f"features shape {full_contract.features.shape} != ({n}, {FEATURE_DIM})"
+    # Feature dim (npz stores MARKET_FEATURE_DIM columns; prev_action added at runtime)
+    assert full_contract.features.shape == (n, MARKET_FEATURE_DIM), \
+        f"features shape {full_contract.features.shape} != ({n}, {MARKET_FEATURE_DIM})"
 
     # No NaN/Inf
     assert not np.any(np.isnan(full_contract.prices)), "prices has NaN"
@@ -136,8 +136,8 @@ def _test_one_contract(ticker: str, round_num: int):
         f"train/test overlap: train ends {train_last_date}, test starts {test_first_date}"
 
     # --- 5. Consistent feature dim across slices ---
-    assert train_contract.features.shape[1] == FEATURE_DIM
-    assert test_contract.features.shape[1] == FEATURE_DIM
+    assert train_contract.features.shape[1] == MARKET_FEATURE_DIM
+    assert test_contract.features.shape[1] == MARKET_FEATURE_DIM
 
     # --- 6. Sigma_tgt in meta (for manifest) ---
     assert "train_start" in tmeta

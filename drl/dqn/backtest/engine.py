@@ -128,7 +128,30 @@ def dqn_position_provider(
             return positions
 
         sigma = np.asarray(rd["sigma"], dtype=float)
-        features = build_feature_matrix(prices, returns, sigma, feature_spec_override=feature_spec())
+
+        # Prefer precomputed features from .npz to ensure bit-exact consistency
+        # with training. Fall back to on-the-fly computation if not available.
+        npz_features = None
+        for rn_try in [rm for _, rm in round_masks]:
+            try:
+                from drl.dqn.spec import contract_data_path
+                npz_path = contract_data_path(rn_try, ticker)
+                if npz_path.exists():
+                    npz_data = np.load(npz_path, allow_pickle=True)
+                    npz_features = npz_data["features"]
+                    break
+            except Exception:
+                pass
+        if npz_features is not None and len(npz_features) == len(prices):
+            features = npz_features
+        else:
+            import warnings as _warnings
+            _warnings.warn(
+                f"Backtest for {ticker}: using on-the-fly features (npz not found or length mismatch). "
+                "This may cause minor numerical differences vs training.",
+                stacklevel=2,
+            )
+            features = build_feature_matrix(prices, returns, sigma, feature_spec_override=feature_spec())
 
         for mask, rn in round_masks:
             if rn not in cache:

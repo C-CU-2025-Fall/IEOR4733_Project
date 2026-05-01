@@ -64,23 +64,22 @@ class DRLMainlineFeatureTests(unittest.TestCase):
         self.assertEqual(spec["feature_line"], shared_spec.ACTIVE_FEATURE_LINE)
         self.assertEqual(spec["state_spec_version"], shared_spec.STATE_SPEC_VERSION)
         self.assertEqual(spec["preset"], "structural_38")
-        self.assertEqual(spec["close_feature"]["name"], "normalized_close_price_60d_rolling_std")
-        self.assertEqual(spec["feature_dim"], 9)
+        self.assertEqual(spec["feature_dim"], shared_spec.FEATURE_DIM)
+        self.assertEqual(spec["market_feature_dim"], shared_spec.MARKET_FEATURE_DIM)
 
-    def test_close_feature_matches_formula(self):
+    def test_ret_1d_vol_norm_matches_formula(self):
         prices = 100.0 + np.cumsum(np.sin(np.arange(360) / 9.0) + 0.1)
         returns = compute_additive_returns(prices)
         sigma = compute_ewma_sigma(returns)
-        rolling_std = pd.Series(prices).rolling(window=60, min_periods=5).std().to_numpy(dtype=float)
 
         feats = build_feature_matrix(prices, returns, sigma)
-        manual = prices / (rolling_std + 1e-10)
+        manual = returns / (sigma + 1e-10)
         manual = np.nan_to_num(manual, nan=0.0, posinf=1.0, neginf=-1.0).astype(np.float32)
 
-        self.assertEqual(feats.shape[1], shared_spec.FEATURE_DIM)
+        self.assertEqual(feats.shape[1], shared_spec.MARKET_FEATURE_DIM)
         np.testing.assert_allclose(feats[:, 0], manual, rtol=0, atol=1e-6)
 
-    def test_close_feature_is_causal(self):
+    def test_feature_matrix_is_causal(self):
         prices = 100.0 + np.cumsum(np.sin(np.arange(360) / 9.0) + 0.1)
         returns = compute_additive_returns(prices)
         sigma = compute_ewma_sigma(returns)
@@ -209,10 +208,10 @@ class DRLMainlineBundleTests(unittest.TestCase):
                 self.assertTrue(manifest["architecture"]["dueling_dqn"])
                 self.assertTrue(manifest["architecture"]["double_dqn"])
                 self.assertTrue(manifest["architecture"]["fixed_q_targets"])
-                self.assertEqual(manifest["hyperparameters"]["epsilon_mode"], "constant")
+                self.assertEqual(manifest["hyperparameters"]["epsilon_mode"], "linear_decay")
                 self.assertEqual(manifest["hyperparameters"]["eps_start"], 0.3)
-                self.assertEqual(manifest["hyperparameters"]["eps_end"], 0.3)
-                self.assertIsNone(manifest["hyperparameters"]["eps_decay_steps"])
+                self.assertEqual(manifest["hyperparameters"]["eps_end"], 0.05)
+                self.assertEqual(manifest["hyperparameters"]["eps_decay_steps"], "dynamic")
                 self.assertGreater(manifest["hyperparameters"]["max_steps_per_ep"], 1500)
                 splits = manifest["contract_round_splits"]["AN"]
                 self.assertEqual(splits["train_start"], "2005-01-01")
@@ -308,11 +307,24 @@ class DRLMainlineBundleTests(unittest.TestCase):
 
 
 class DQNInferenceTests(unittest.TestCase):
-    def test_epsilon_is_constant(self):
-        agent = DQNAgent(device="cpu")
+    def test_epsilon_with_custom_decay_steps(self):
+        """Dynamic eps_decay_steps should be respected by the agent."""
+        agent = DQNAgent(device="cpu", eps_decay_steps=100)
         self.assertEqual(agent.epsilon_for_step(0), 0.3)
-        self.assertEqual(agent.epsilon_for_step(50000), 0.3)
-        self.assertEqual(agent.epsilon_for_step(500000), 0.3)
+        self.assertAlmostEqual(agent.epsilon_for_step(50), 0.175, places=4)
+        self.assertEqual(agent.epsilon_for_step(200), 0.05)
+
+    def test_epsilon_default_decay_steps(self):
+        """Default 50000 decay steps should work as before."""
+        agent = DQNAgent(device="cpu")
+        self.assertEqual(agent.eps_decay_steps, 50000)
+        self.assertEqual(agent.epsilon_for_step(0), 0.3)
+        self.assertEqual(agent.epsilon_for_step(60000), 0.05)
+
+    def test_dynamic_memory_size(self):
+        """Custom memory_size should set replay buffer capacity."""
+        agent = DQNAgent(device="cpu", memory_size=100)
+        self.assertEqual(agent.replay.capacity, 100)
 
     def test_predict_action_ids_returns_valid_action_ids(self):
         agent = DQNAgent(device="cpu")
@@ -332,6 +344,99 @@ class DQNInferenceTests(unittest.TestCase):
         loss = agent.learn()
         self.assertGreaterEqual(loss, 0.0)
         self.assertEqual(agent.target_updates, 1)
+
+
+class Eq4RewardTests(unittest.TestCase):
+    """Hand-computed verification of compute_eq4_reward against paper Eq.4."""
+
+    def test_basic_long_position_reward(self):
+        """A simple long position with known values should produce exact reward."""
+        from drl_shared.state_space import compute_eq4_reward
+        from config import BP
+
+        prices = np.array([100.0, 101.0, 102.0], dtype=float)
+        returns = np.array([0.0, 1.0, 1.0], dtype=float)  # r_t = p_t - p_{t-1}
+        sigma = np.array([0.5, 0.5, 0.5], dtype=float)
+        sigma_tgt = 0.058
+
+        # At idx=2: action=1 (long), prev_action=0 (flat)
+        # vol_scale = 0.058 / 0.5 = 0.116
+        # gross = 1.0 * 0.116 * 1.0 = 0.116
+        # tc = BP * 101.0 * |1.0*0.116 - 0.0*0.116| = 0.002 * 101 * 0.116 = 0.023432
+        # net = 0.116 - 0.023432 = 0.092568
+        reward, gross, tc, vol_scale = compute_eq4_reward(
+            prices, returns, sigma, idx=2,
+            action=1.0, prev_action=0.0,
+            sigma_tgt=sigma_tgt, bp=BP, prev_sigma=0.5,
+        )
+        expected_vol_scale = 0.058 / 0.5
+        expected_gross = 1.0 * expected_vol_scale * 1.0
+        expected_tc = BP * 101.0 * abs(1.0 * expected_vol_scale - 0.0 * expected_vol_scale)
+        expected_net = expected_gross - expected_tc
+
+        self.assertAlmostEqual(vol_scale, expected_vol_scale, places=8)
+        self.assertAlmostEqual(gross, expected_gross, places=8)
+        self.assertAlmostEqual(tc, expected_tc, places=8)
+        self.assertAlmostEqual(reward, expected_net, places=8)
+
+    def test_zero_sigma_returns_zero(self):
+        """Zero sigma should safely return zero reward (no division by zero)."""
+        from drl_shared.state_space import compute_eq4_reward
+        prices = np.array([100.0, 101.0], dtype=float)
+        returns = np.array([0.0, 1.0], dtype=float)
+        sigma = np.array([0.0, 0.0], dtype=float)
+        reward, gross, tc, vol_scale = compute_eq4_reward(
+            prices, returns, sigma, idx=1,
+            action=1.0, prev_action=0.0,
+            sigma_tgt=0.058, bp=0.002,
+        )
+        self.assertEqual(reward, 0.0)
+
+    def test_flat_to_flat_no_tc(self):
+        """Holding flat position should incur zero transaction cost."""
+        from drl_shared.state_space import compute_eq4_reward
+        prices = np.array([100.0, 101.0, 102.0], dtype=float)
+        returns = np.array([0.0, 1.0, 1.0], dtype=float)
+        sigma = np.array([0.5, 0.5, 0.5], dtype=float)
+        reward, gross, tc, vol_scale = compute_eq4_reward(
+            prices, returns, sigma, idx=2,
+            action=0.0, prev_action=0.0,
+            sigma_tgt=0.058, bp=0.002, prev_sigma=0.5,
+        )
+        self.assertEqual(gross, 0.0)
+        self.assertEqual(tc, 0.0)
+        self.assertEqual(reward, 0.0)
+
+
+class FeatureCausalityTests(unittest.TestCase):
+    """Ensure feature window construction never looks ahead."""
+
+    def test_get_feature_window_uses_only_past(self):
+        """Feature window at idx T should contain only features[:T], not features[T]."""
+        from drl_shared.state_space import get_feature_window
+        n = 200
+        features = np.arange(n * 9, dtype=np.float32).reshape(n, 9)
+
+        # At idx=100, window should be features[40:100] (60 rows ending before idx)
+        window = get_feature_window(features, idx=100, seq_len=60)
+        self.assertEqual(window.shape, (60, 9))
+        # Last row of window should be features[99], NOT features[100]
+        np.testing.assert_array_equal(window[-1], features[99])
+        # First row of window should be features[40]
+        np.testing.assert_array_equal(window[0], features[40])
+
+    def test_get_feature_window_pads_early_indices(self):
+        """Early indices should be zero-padded, not wrap around."""
+        from drl_shared.state_space import get_feature_window
+        n = 200
+        features = np.ones((n, 9), dtype=np.float32)
+
+        window = get_feature_window(features, idx=5, seq_len=60)
+        self.assertEqual(window.shape, (60, 9))
+        # First 55 rows should be zero-padding
+        np.testing.assert_array_equal(window[:55], np.zeros((55, 9), dtype=np.float32))
+        # Last 5 rows should be the actual features
+        np.testing.assert_array_equal(window[55:], features[:5])
 
 
 if __name__ == "__main__":

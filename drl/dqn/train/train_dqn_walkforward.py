@@ -26,6 +26,7 @@ from drl.dqn.spec import (
     MAX_STEPS_PER_EP,
     MODEL_ROOT,
     RETRAIN_ROUNDS,
+    UPDATE_FREQ,
     VALIDATION_SPLIT,
     asset_slug,
     checkpoint_metadata,
@@ -196,6 +197,7 @@ def _sanity_check_contract(contract: ContractArrays, ticker: str) -> list[str]:
     warnings = []
     n = len(contract.prices)
     from drl.dqn.spec import FEATURE_DIM as FDIM
+    from drl_shared.spec import MARKET_FEATURE_DIM
 
     # --- Length checks ---
     if n <= WARMUP:
@@ -207,9 +209,9 @@ def _sanity_check_contract(contract: ContractArrays, ticker: str) -> list[str]:
 
     # --- Shape check ---
     if contract.features.ndim != 2:
-        warnings.append(f"features has {contract.features.ndim} dims, expected 2 (n, {FDIM})")
-    elif contract.features.shape[1] != FDIM:
-        warnings.append(f"features has {contract.features.shape[1]} cols, expected {FDIM}")
+        warnings.append(f"features has {contract.features.ndim} dims, expected 2 (n, {MARKET_FEATURE_DIM})")
+    elif contract.features.shape[1] != MARKET_FEATURE_DIM:
+        warnings.append(f"features has {contract.features.shape[1]} cols, expected {MARKET_FEATURE_DIM}")
 
     # --- NaN / Inf checks ---
     for attr in ("prices", "returns", "sigma"):
@@ -399,6 +401,7 @@ def _validate_feature_policy(feature_meta: dict, ticker: str):
         raise ValueError(f"Feature artifact excluded_contracts do not match structural_38 for {ticker}")
 
 def _run_training_episode(env: ContractEnv, agent: DQNAgent, global_step: int) -> tuple[float, int, list[float], int]:
+    """Run a full sequential episode for one contract (legacy, kept for reference)."""
     state = env.reset()
     total_reward = 0.0
     losses: list[float] = []
@@ -419,10 +422,70 @@ def _run_training_episode(env: ContractEnv, agent: DQNAgent, global_step: int) -
     return float(total_reward), steps, losses, global_step
 
 
-def _validation_reward(envs: dict[str, ContractEnv], agent: DQNAgent) -> float:
-    """Run one full validation episode per contract with greedy policy, return avg reward."""
+def _run_interleaved_cycle(
+    train_envs: dict[str, ContractEnv],
+    agent: DQNAgent,
+    global_step: int,
+    contract_stats: dict,
+) -> tuple[dict[str, float], dict[str, int], list[float], int]:
+    """Run one cycle with step-interleaved training across all contracts.
+
+    Instead of running full episodes sequentially (all steps of contract A,
+    then all of B, etc.), this interleaves one step at a time across contracts.
+    This ensures the replay buffer always contains a balanced mix of experience.
+
+    Returns:
+        per_contract_rewards: {ticker: total_reward}
+        per_contract_steps: {ticker: step_count}
+        all_losses: list of all loss values
+        global_step: updated global step counter
+    """
+    # Reset all envs and initialize tracking
+    active_states: dict[str, np.ndarray] = {}
+    active_tickers: list[str] = []
+    per_contract_rewards: dict[str, float] = {}
+    per_contract_steps: dict[str, int] = {}
+
+    for ticker, env in train_envs.items():
+        active_states[ticker] = env.reset()
+        active_tickers.append(ticker)
+        per_contract_rewards[ticker] = 0.0
+        per_contract_steps[ticker] = 0
+
+    all_losses: list[float] = []
+    transition_count = 0  # count transitions for UPDATE_FREQ
+
+    while active_tickers:
+        for ticker in list(active_tickers):
+            state = active_states[ticker]
+            eps = agent.epsilon_for_step(global_step)
+            action_id = agent.act(state, eps)
+            next_state, reward, done = train_envs[ticker].step(action_id)
+            agent.push(state, action_id, reward, next_state, float(done))
+
+            active_states[ticker] = next_state
+            per_contract_rewards[ticker] += reward
+            per_contract_steps[ticker] += 1
+            global_step += 1
+            transition_count += 1
+
+            # Learn every UPDATE_FREQ transitions
+            if transition_count % UPDATE_FREQ == 0:
+                loss = agent.learn()
+                if loss > 0:
+                    all_losses.append(loss)
+
+            if done:
+                active_tickers.remove(ticker)
+
+    return per_contract_rewards, per_contract_steps, all_losses, global_step
+
+
+def _validation_reward(envs: dict[str, ContractEnv], agent: DQNAgent) -> tuple[float, dict[int, int]]:
+    """Run one full validation episode per contract with greedy policy, return avg reward and action counts."""
     agent.q_net.eval()  # eval mode: disable dropout
     rewards = []
+    action_counts = {0: 0, 1: 0, 2: 0}
     for ticker, env in envs.items():
         state = env.reset()
         total = 0.0
@@ -430,12 +493,13 @@ def _validation_reward(envs: dict[str, ContractEnv], agent: DQNAgent) -> float:
         steps = 0
         while not done and steps < MAX_STEPS_PER_EP:
             action_id = agent.act(state, 0.0)  # greedy
+            action_counts[action_id] += 1
             state, reward, done = env.step(action_id)
             total += reward
             steps += 1
         rewards.append(total)
     agent.q_net.train()  # back to train mode
-    return float(np.mean(rewards))
+    return float(np.mean(rewards)), action_counts
 
 
 def train_asset_round(
@@ -446,12 +510,13 @@ def train_asset_round(
     seed: int | None = None,
     sigma_tgt: float = SIGMA_TGT_DEFAULT,
     resume: bool = False,
+    tickers_override: list[str] | None = None,
 ) -> tuple[Path, Path]:
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
 
-    tickers = _asset_tickers_from_index(asset_name, round_num)
+    tickers = tickers_override if tickers_override else _asset_tickers_from_index(asset_name, round_num)
     if not tickers:
         raise ValueError(f"No eligible contracts found for {asset_name} {round_name(round_num)}")
 
@@ -502,7 +567,11 @@ def train_asset_round(
     if not contracts:
         raise ValueError(f"No loadable contracts for {asset_name} {round_name(round_num)}")
 
-    agent = DQNAgent(device=device)
+    n_contracts = len(contracts)
+    eps_decay_steps = n_contracts * 25000
+    memory_size = n_contracts * 25000
+    agent = DQNAgent(device=device, eps_decay_steps=eps_decay_steps, memory_size=memory_size)
+    
     if resume:
         # Find latest checkpoint for this asset+round
         # Prefer latest_checkpoint.pt (full training state), fall back to checkpoint.pt (best)
@@ -569,6 +638,8 @@ def train_asset_round(
     logger.write_json("train_config.json", metadata["hyperparameters"] | {
         "cycles": episodes,
         "seed": seed,
+        "eps_decay_steps": agent.eps_decay_steps,
+        "memory_size": agent.replay.capacity,
     })
     logger.write_json("feature_spec.json", metadata["feature_spec"])
 
@@ -646,24 +717,32 @@ def train_asset_round(
     best_bundle_dir = bundle_dir  # track best checkpoint dir
     early_stopped = False
 
-    for cycle in range(1, episodes + 1):
-        random.shuffle(ordered_tickers)
-        cycle_rewards = []
-        cycle_losses = []
-        for ticker in ordered_tickers:
-            global_episode += 1
-            reward, steps, losses, global_step = _run_training_episode(train_envs[ticker], agent, global_step)
-            mean_loss = float(np.mean(losses)) if losses else 0.0
-            last_loss = float(losses[-1]) if losses else 0.0
-            cycle_rewards.append(reward)
-            cycle_losses.extend(losses)
+    try:
+        from tqdm import tqdm
+        cycle_iterator = tqdm(range(1, episodes + 1), desc="Training Cycles", unit="cycle")
+    except ImportError:
+        cycle_iterator = range(1, episodes + 1)
+        
+    for cycle in cycle_iterator:
+        # --- Interleaved training: step all contracts round-robin ---
+        per_contract_rewards, per_contract_steps, cycle_losses, global_step = _run_interleaved_cycle(
+            train_envs, agent, global_step, contract_stats,
+        )
+        cycle_rewards = list(per_contract_rewards.values())
+        global_episode += len(per_contract_rewards)
+
+        for ticker in per_contract_rewards:
+            reward = per_contract_rewards[ticker]
+            steps = per_contract_steps[ticker]
+            mean_loss = float(np.mean(cycle_losses)) if cycle_losses else 0.0
+            last_loss = float(cycle_losses[-1]) if cycle_losses else 0.0
 
             stats = contract_stats[ticker]
             stats["episodes_seen"] += 1
             stats["transitions_added"] += steps
             stats["reward_sum"] += reward
-            stats["loss_sum"] += sum(losses)
-            stats["loss_count"] += len(losses)
+            stats["loss_sum"] += sum(cycle_losses) / max(1, len(per_contract_rewards))  # distribute evenly
+            stats["loss_count"] += max(1, len(cycle_losses) // max(1, len(per_contract_rewards)))
             stats["last_reward"] = reward
             stats["last_loss"] = last_loss
 
@@ -683,13 +762,22 @@ def train_asset_round(
             }
             episode_rows.append(row)
 
+        # Calculate early to log for this cycle
+        val_reward, val_action_counts = _validation_reward(val_envs, agent) if val_envs else (0.0, {0:0, 1:0, 2:0})
+        _last_val_reward = val_reward
+
         if cycle % report_interval == 0 or cycle == 1:
             elapsed = time.time() - t0
             avg_loss = float(np.mean(cycle_losses)) if cycle_losses else 0.0
             eta = (elapsed / cycle) * max(0, episodes - cycle) if cycle > 0 else 0.0
+            
+            # Action dist str
+            total_val_actions = sum(val_action_counts.values()) or 1
+            action_dist_str = f"[L:{val_action_counts.get(2, 0)/total_val_actions*100:.0f}% S:{val_action_counts.get(0, 0)/total_val_actions*100:.0f}% F:{val_action_counts.get(1, 0)/total_val_actions*100:.0f}%]"
+
             logger.log(
                 f"cycle {cycle}/{episodes} reward_avg={np.mean(cycle_rewards):+.4f} "
-                f"val_reward={_last_val_reward:+.4f} "
+                f"val_reward={_last_val_reward:+.4f} val_actions={action_dist_str} "
                 f"loss={avg_loss:.6f} "
                 f"epsilon={agent.epsilon_for_step(global_step):.4f} replay={len(agent.replay)} "
                 f"target_updates={agent.target_updates} patience={patience_counter}/{EARLY_STOPPING_PATIENCE} "
@@ -697,10 +785,6 @@ def train_asset_round(
             )
             # Training health check
             _check_training_health(cycle, cycle_rewards, cycle_losses, agent, global_step, logger)
-
-        # Early stopping: check EVERY cycle (paper: 20 epochs patience)
-        val_reward = _validation_reward(val_envs, agent) if val_envs else 0.0
-        _last_val_reward = val_reward
         validation_rows.append({
             "cycle": cycle,
             "round": round_num,
@@ -779,6 +863,7 @@ def main():
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--sigma-tgt", type=float, default=SIGMA_TGT_DEFAULT)
     parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoint for each round")
+    parser.add_argument("--tickers", nargs="+", default=None, help="Specific tickers to train (e.g. --tickers AN BN). Overrides asset index.")
     args = parser.parse_args()
 
     rounds = parse_rounds(args.round)
@@ -793,6 +878,7 @@ def main():
                 seed=args.seed,
                 sigma_tgt=args.sigma_tgt,
                 resume=args.resume,
+                tickers_override=args.tickers,
             )
 
 

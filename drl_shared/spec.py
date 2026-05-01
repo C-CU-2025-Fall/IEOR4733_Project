@@ -8,13 +8,15 @@ from config import ASSET_CLASSES
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 SEQ_LEN = 60
-FEATURE_DIM = 9  # 1(price norm) + 4(returns) + 3(MACD pairs) + 1(RSI)
-HORIZONS = (21, 42, 63, 252)
+MARKET_FEATURE_DIM = 5  # ret_1d/sigma + ret_21d + MACD(8,24) + MACD(16,48) + RSI(30)
+FEATURE_DIM = 5  # = MARKET_FEATURE_DIM (prev_action removed)
+HORIZONS = (21,)
+MACD_PAIRS_ACTIVE = [(8, 24), (16, 48)]
 RSI_WINDOW = 30
-WARMUP = 252
+WARMUP = SEQ_LEN
 
-ACTIVE_FEATURE_LINE = "structural_38_mainline"
-STATE_SPEC_VERSION = "structural_38_close_norm_9d"
+ACTIVE_FEATURE_LINE = "structural_38_pruned_v2"
+STATE_SPEC_VERSION = "structural_38_pruned_v2_5d"
 
 DISCRETE_ACTION_VALUES = (-1.0, 0.0, 1.0)
 CONTINUOUS_ACTION_RANGE = (-1.0, 1.0)
@@ -104,18 +106,19 @@ def feature_spec() -> dict:
         "state_spec_version": STATE_SPEC_VERSION,
         "seq_len": SEQ_LEN,
         "feature_dim": FEATURE_DIM,
-        "close_feature": {
-            "name": "normalized_close_price_60d_rolling_std",
-            "formula": "p_t / std_60(p)_t",
-            "note": "Repo convention for current 9-feature line.",
-        },
+        "market_feature_dim": MARKET_FEATURE_DIM,
+        "features": [
+            {"index": 0, "name": "ret_1d_vol_norm", "formula": "r_t / sigma_t", "note": "replaces non-stationary p_t/rolling_std(p,60)"},
+            {"index": 1, "name": "ret_21d_vol_norm", "formula": "(p_t - p_{t-21}) / (sigma_t * sqrt(21))"},
+            {"index": 2, "name": "macd_8_24", "formula": "q_t / std_252(q_t), q_t = (EMA_8 - EMA_24) / std_63(p)"},
+            {"index": 3, "name": "macd_16_48", "formula": "q_t / std_252(q_t), q_t = (EMA_16 - EMA_48) / std_63(p)"},
+            {"index": 4, "name": "rsi_30_norm", "formula": "(RSI_30 - 50) / 50, Wilder smoothing"},
+        ],
         "return_horizons": list(HORIZONS),
-        "return_feature_formula": "(p_t - p_{t-H}) / (sigma_t * sqrt(H))",
         "volatility_estimator": "EWMA(60) std of additive r_t",
         "macd_feature": {
-            "name": "three_pair_macd_stack",
-            "pairs": [[8, 24], [16, 48], [32, 96]],
-            "formula": "q_t / std_252(q_t), where q_t = (EMA_short - EMA_long) / std_63(p)",
+            "name": "two_pair_macd_stack",
+            "pairs": [list(p) for p in MACD_PAIRS_ACTIVE],
         },
         "rsi_window": RSI_WINDOW,
         "preset": policy["preset"],

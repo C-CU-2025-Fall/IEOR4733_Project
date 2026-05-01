@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from config import BP, EWMA_SPAN, MACD_PAIRS, MACD_VOL_WINDOW
+from config import BP, EWMA_SPAN, MACD_VOL_WINDOW
 from drl_shared.spec import (
     ACTIVE_FEATURE_LINE,
     asset_slug,
@@ -12,6 +12,8 @@ from drl_shared.spec import (
     DISCRETE_ACTION_VALUES,
     FEATURE_DIM,
     HORIZONS,
+    MACD_PAIRS_ACTIVE,
+    MARKET_FEATURE_DIM,
     RETRAIN_ROUNDS,
     RSI_WINDOW,
     SEQ_LEN,
@@ -43,17 +45,18 @@ BATCH_SIZE = 64
 MEMORY_SIZE = 5000
 TAU = 1000
 EPS_START = 0.3
-EPS_END = 0.3
-EPS_DECAY_STEPS = None
+EPS_END = 0.05
+EPS_DECAY_STEPS = "dynamic"  # computed at runtime as n_contracts * 25000
 EPISODES = 200
-MAX_STEPS_PER_EP = 10_000_000  # non-binding safety guardrail, not an active training cap
+MAX_STEPS_PER_EP = 5_000  # non-binding safety guardrail for finite datasets
 SIGMA_TGT = SIGMA_TGT_DEFAULT
 LEAKY_RELU_SLOPE = 0.01
 LSTM_HIDDEN_SIZES = (64, 32)
 DROPOUT = 0.2
 VALIDATION_SPLIT = 0.1
 EARLY_STOPPING_PATIENCE = 20
-WARMUP = 252
+UPDATE_FREQ = 4  # learn every N transitions in interleaved training
+WARMUP = SEQ_LEN
 
 
 def contract_data_path(round_num: int, ticker: str) -> Path:
@@ -156,6 +159,7 @@ def checkpoint_metadata(
         "round": round_num,
         "round_info": RETRAIN_ROUNDS[round_num],
         "feature_dim": FEATURE_DIM,
+        "market_feature_dim": MARKET_FEATURE_DIM,
         "seq_len": SEQ_LEN,
         "feature_spec": f_spec,
         "feature_artifact_path": None,
@@ -168,16 +172,17 @@ def checkpoint_metadata(
         "bp": BP,
         "ewma_span": EWMA_SPAN,
         "return_horizons": list(HORIZONS),
-        "macd_pairs": list(MACD_PAIRS),
+        "macd_pairs": [list(p) for p in MACD_PAIRS_ACTIVE],
         "macd_vol_window": MACD_VOL_WINDOW,
         "rsi_window": RSI_WINDOW,
         "hyperparameters": {
             "lr": LR,
             "gamma": GAMMA,
             "batch_size": BATCH_SIZE,
-            "memory_size": MEMORY_SIZE,
+            "memory_size_default": MEMORY_SIZE,
+            "memory_size_note": "actual value is dynamic: n_contracts * 25000",
             "tau": TAU,
-            "epsilon_mode": "constant",
+            "epsilon_mode": "linear_decay",
             "eps_start": EPS_START,
             "eps_end": EPS_END,
             "eps_decay_steps": EPS_DECAY_STEPS,

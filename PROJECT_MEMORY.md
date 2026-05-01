@@ -1,5 +1,5 @@
 # PROJECT_MEMORY.md
-# Last updated: 2026-04-28
+# Last updated: 2026-04-30
 
 Read this first when resuming work on this repo.
 
@@ -34,7 +34,7 @@ Key additions in published version:
 - Cross-contract training as overfitting control
 - Updated references (Lim, Zohren, Roberts 2019)
 
-Core methodology (LSTM arch, asset-class grouping, memory 5000, 5-year retrain, vol scaling) is identical.
+Core methodology (LSTM arch, asset-class grouping, 5-year retrain, vol scaling) is identical.
 
 ## 1. Baseline
 
@@ -44,38 +44,53 @@ Primary commands:
 
 ## 2. DRL Mainline
 
-### State Space (Paper Section 3.1)
-- `seq_len = 60`, `feature_dim = 9`
-- Feature 0: `p_t / rolling_std(p, 60)` — lowest correlation with other features (validated across 50 contracts × 2 rounds)
-- Features 1-4: Returns over 21/42/63/252 days, normalized by `σ_t * √H`
-- Features 5-7: 3 MACD pairs, each `(EMA_s - EMA_l) / σ_63(p)`, then `/ σ_252(q)`
-- Feature 8: RSI(30) normalized to [-1, 1] via `(RSI - 50) / 50`
+### State Space (Pruned v2 — 2026-04-30)
+
+Feature pruning analysis on the original 9D space found severe multicollinearity (15 pairs with |r| > 0.7, effective rank ~4-5). The pruned 5D set reduces noise while retaining independent signal:
+
+- `seq_len = 60`, `feature_dim = 5`, `market_feature_dim = 5`
+- `state_spec_version = structural_38_pruned_v2_5d`
+
+| Index | Feature | Formula | Rationale |
+|-------|---------|---------|-----------|
+| 0 | ret_1d_vol_norm | `r_t / sigma_t` | Replaces non-stationary `p_t/rolling_std(p,60)`. Scale [-5, 5], max |r|=0.27 with other features, VIF=1.26 |
+| 1 | ret_21d_vol_norm | `(p_t - p_{t-21}) / (sigma_t * sqrt(21))` | Core short-term momentum, best aligned with gamma=0.3 |
+| 2 | macd_8_24 | `(EMA_8 - EMA_24) / sigma_63(p)`, then `/ sigma_252(q)` | Fastest MACD, short-term trend |
+| 3 | macd_16_48 | Same formula, spans (16, 48) | Medium MACD, ~0.6 corr with MACD(8,24) |
+| 4 | rsi_30 | `(RSI_30 - 50) / 50`, Wilder smoothing | Mean-reversion complement, well-scaled [-1, 1] |
+
+**Removed from original 9D:**
+- `p_t / rolling_std(p, 60)` — scale [4, 342] vs others [-3, 3], non-stationary
+- `ret_42d`, `ret_63d` — corr > 0.72 with ret_21d, redundant at gamma=0.3
+- `ret_252d` — annual momentum, gamma=0.3 can't exploit
+- `MACD(32, 96)` — corr 0.77 with MACD(16,48), too slow
+- `prev_action` — removed; agent infers position from reward signal
 
 ### DQN Architecture (Paper Table 1 + JFDS 2020 additions)
 - 2-layer LSTM [64, 32] + Leaky-ReLU
 - Dropout 0.2 after LSTM layers (published paper addition)
-- Dueling DQN + Double DQN + Fixed Q-targets (τ=1000)
-- LR=0.0001, γ=0.3, bp=0.002, batch=64, memory=5000
-- ε: constant 0.3 during training; greedy 0.0 for validation/inference
+- Dueling DQN + Double DQN + Fixed Q-targets (tau=1000)
+- LR=0.0001, gamma=0.3, bp=0.002, batch=64
+- memory: dynamic `n_contracts * 25000` (paper default 5000)
+- epsilon: 0.3 -> 0.05 linear decay over `n_contracts * 25000` steps; greedy 0.0 for validation/inference
 - 10% validation split, early stopping patience=20
 
 ### Training
-- 200 episodes per round (paper default)
-- 10% validation split, early stopping patience=20
+- 200 cycles per round (paper default); each cycle visits every contract once
+- 10% chronological validation split, early stopping patience=20
 - no active 1500-step truncation; episodes run to natural env termination
+- round extensibility: add entries to `drl_shared/spec.py RETRAIN_ROUNDS` for r3+
+- 2026-04-29 audit fixes:
+  - backtest engine loads features from `.npz` (bit-exact with training); warns if fallback
+  - `checkpoint_metadata()` correctly records `linear_decay` epsilon and dynamic memory
+  - 8 new unit tests: Eq.4 reward hand-verification, epsilon dynamics, feature causality
 - 2026-04-28 leakage fix:
-  - prepared feature artifacts now persist explicit round boundaries:
-    - `train_start_idx`, `train_end_idx`, `test_start_idx`, `test_end_idx`
-  - training slices only the true train period, then takes the last 10% of that train segment as validation
+  - prepared feature artifacts persist explicit round boundaries
+  - training slices only the true train period, last 10% as validation
   - backtest/inference only uses the true round test period
-  - verified `Forex` windows after the fix:
-    - `r1` train ends `2010-12-31`, test starts `2011-01-03`, train env steps about `1104–1116`
-    - `r2` train ends `2015-12-31`, test starts `2016-01-04`, train env steps about `2233–2277`
-- Fail-fast: RuntimeError if 0 val envs constructed (catches missing imports)
+- Fail-fast: RuntimeError if 0 val envs constructed
 - Pipeline checks: data sanity, env preflight, agent health, cycle monitoring
-- Unit tests: `drl/dqn/train/test_training_pipeline.py` (19 tests)
 - One model per asset class per round
-- Batch scheduler: `drl/dqn/train/train_all_assets.py`
 
 ### Commands
 ```bash
@@ -87,19 +102,17 @@ python run_strategy_backtest.py --strategy DQN --asset Forex
 ### Artifacts
 - Features: `drl/features/<ticker>/r<round>.npz`
 - DQN bundles: `drl/dqn/models/<asset_class>/r<round>/<run_id>/`
-- On 2026-04-28, active prepared features were regenerated to the 9-feature mainline:
-  - `96` active `r1/r2` contract artifacts are now `9`-dimensional
-  - only excluded `FB` and `ZA` remain as old `8`-dimensional archive artifacts
-  - active state spec string is `structural_38_close_norm_9d`
+- Active state spec: `structural_38_pruned_v2_5d`
+- All 96 contract artifacts (48 tickers x 2 rounds) regenerated with 5 market features
 
 ## 3. Eq.4 Reward
 
 - Additive `r_t = p_t - p_{t-1}`
-- Volatility-scaled positions: `σ_tgt / σ_{t-1}`
+- Volatility-scaled positions: `sigma_tgt / sigma_{t-1}`
 - Transaction cost: `bp * p_{t-1} * |scaled_position_change|`
 
 ## 4. Alignment Snapshot
 
 Current retained structural-38 snapshot:
-- Trade-world metrics only: Table 3 ≤10: 23/28, ≤15: 28/28
-- Table 2 ≤10: 24/28, ≤15: 25/28
+- Trade-world metrics only: Table 3 <=10: 23/28, <=15: 28/28
+- Table 2 <=10: 24/28, <=15: 25/28

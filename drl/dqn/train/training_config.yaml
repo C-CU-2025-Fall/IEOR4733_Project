@@ -7,9 +7,10 @@ version: 1
 # Feature configuration (must match drl_shared/spec.py)
 feature:
   preset: structural_38
-  feature_line: structural_38_mainline
-  state_spec_version: structural_38_close_norm_9d
-  feature_dim: 9
+  feature_line: structural_38_pruned_v2
+  state_spec_version: structural_38_pruned_v2_5d
+  feature_dim: 5
+  market_feature_dim: 5
   seq_len: 60
 
 # Hyperparameters (paper Table 1)

@@ -141,29 +141,30 @@ class ReplayBuffer:
 
 
 class DQNAgent:
-    def __init__(self, device: str | None = None):
+    def __init__(self, device: str | None = None, eps_decay_steps: int = 50000, memory_size: int = MEMORY_SIZE):
         if _TORCH_IMPORT_ERROR is not None:
             raise RuntimeError("PyTorch is required for DQN training/inference but is not installed in this environment.") from _TORCH_IMPORT_ERROR
         self.device = resolve_device(device)
+        self.eps_decay_steps = eps_decay_steps
         self.q_net = DuelingDQNLSTM().to(self.device)
         self.target = DuelingDQNLSTM().to(self.device)
         self.target.load_state_dict(self.q_net.state_dict())
         self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=LR)
-        self.replay = ReplayBuffer(MEMORY_SIZE)
+        self.replay = ReplayBuffer(memory_size)
         self.train_steps = 0
         self.target_updates = 0
-        self.scaler = torch.amp.GradScaler('cuda') if self.device == 'cuda' else None
 
     def epsilon_for_step(self, step: int) -> float:
-        _ = step
-        return EPS_START
+        """Linear decay from 0.3 to 0.05 over the specified decay steps."""
+        if step > self.eps_decay_steps:
+            return 0.05
+        return 0.3 - (step / float(self.eps_decay_steps)) * 0.25
 
     def act(self, state: np.ndarray, eps: float) -> int:
         if np.random.random() < eps:
             return np.random.randint(DISCRETE_ACTION_DIM)
         self.q_net.eval()
-        dtype = torch.float16 if self.device == 'cuda' else torch.bfloat16
-        with torch.no_grad(), torch.autocast(device_type=self.device, dtype=dtype):
+        with torch.no_grad():
             tensor = torch.from_numpy(np.asarray(state, dtype=np.float32)).unsqueeze(0).to(self.device)
             return int(self.q_net(tensor).argmax().item())
 
@@ -172,8 +173,7 @@ class DQNAgent:
 
     def predict_action_ids(self, states: np.ndarray) -> np.ndarray:
         self.q_net.eval()
-        dtype = torch.float16 if self.device == 'cuda' else torch.bfloat16
-        with torch.no_grad(), torch.autocast(device_type=self.device, dtype=dtype):
+        with torch.no_grad():
             tensor = torch.from_numpy(np.asarray(states, dtype=np.float32)).to(self.device)
             return self.q_net(tensor).argmax(dim=1).detach().cpu().numpy().astype(np.int64)
 
@@ -192,24 +192,16 @@ class DQNAgent:
         next_states = torch.from_numpy(next_states).to(self.device)
         dones = torch.from_numpy(dones).to(self.device)
 
-        dtype = torch.float16 if self.device == 'cuda' else torch.bfloat16
-        with torch.autocast(device_type=self.device, dtype=dtype):
-            with torch.no_grad():
-                next_actions = self.q_net(next_states).argmax(1)
-                next_q = self.target(next_states).gather(1, next_actions.unsqueeze(1)).squeeze(1)
-                target_q = rewards + (1.0 - dones) * GAMMA * next_q
+        next_actions = self.q_net(next_states).argmax(1).detach()
+        next_q = self.target(next_states).gather(1, next_actions.unsqueeze(1)).squeeze(1).detach()
+        target_q = rewards + (1.0 - dones) * GAMMA * next_q
 
-            current_q = self.q_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
-            loss = F.mse_loss(current_q, target_q)
+        current_q = self.q_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
+        loss = F.mse_loss(current_q, target_q)
 
         self.optimizer.zero_grad()
-        if self.scaler is not None:
-            self.scaler.scale(loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
-        else:
-            loss.backward()
-            self.optimizer.step()
+        loss.backward()
+        self.optimizer.step()
 
         self.train_steps += 1
         if self.train_steps % TAU == 0:

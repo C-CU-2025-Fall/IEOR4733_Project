@@ -19,26 +19,29 @@ Paper:
 > ⚠️ Use the published JFDS version. It adds dropout, cross-validation, early stopping,
 > and an explicit "Procedures for Controlling Overfitting" section not in the arXiv draft.
 
-## Main Commands
+## Quick Start (One-Liners)
 
 ```bash
-# Prepare shared features
+# 1. Prepare shared features (run once per asset class)
 python3 drl_shared/prepare_features.py --asset Forex
+python3 drl_shared/prepare_features.py --all
 
-# Train DQN (per asset class, per round)
-python3 drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 200 --device cuda
-python3 drl/dqn/train/train_dqn_walkforward.py --asset Forex --round 1 --episodes 200 --device cuda
+# 2. Train DQN
+python3 drl/dqn/train/train_dqn_walkforward.py --asset Forex --episodes 200 --device cpu
+python3 drl/dqn/train/train_dqn_walkforward.py --asset Forex --round 1 --tickers AN BN  # debug 1-2 contracts
+python3 drl/dqn/train/train_dqn_walkforward.py --asset Forex --resume  # resume from checkpoint
 
-# Resume from latest checkpoint (reproducible)
-python3 drl/dqn/train/train_dqn_walkforward.py --asset Forex --round 1 --episodes 200 --resume --device cuda
-
-# Unified backtest
-python3 run_strategy_backtest.py --strategy DQN --asset Forex
+# 3. Backtest (any strategy)
 python3 run_strategy_backtest.py --strategy Long --asset Forex
+python3 run_strategy_backtest.py --strategy DQN  --asset Forex
+python3 run_strategy_backtest.py --strategy DQN  --asset Forex --round 1  # single round
 
-# Baseline references
+# 4. Baseline reproduction
+python3 baseline_run.py --table 3 --all-metrics --sigma 0.058
 python3 tests/run_structural_38.py --table 3
-python3 tests/run_structural_38.py --table both
+
+# 5. Run tests
+python3 -m unittest tests.test_drl_v2 -v
 ```
 
 ## Current Baseline
@@ -77,15 +80,18 @@ Current DQN training unit:
 - dropout (0.2) after LSTM layers (published paper)
 - chronological 90/10 train/validation split per contract
 - early stopping with patience 20 on validation reward
+- ε: 0.3 → 0.05 linear decay over `n_contracts × 25000` steps
+- memory: dynamic `n_contracts × 25000` (paper default 5000)
 - validation envs crash-fast: if 0 val envs constructed, `RuntimeError` aborts training
-- resume: `--resume` restores weights, optimizer, replay buffer, and full RNG state (torch/numpy/python) for reproducible continuation
+- resume: `--resume` restores weights, optimizer, replay buffer, and full RNG state for reproducible continuation
+- round extensibility: add entries to `drl_shared/spec.py RETRAIN_ROUNDS` for r3+
 
 Training pipeline checks (fail-fast):
-- **Data sanity**: NaN/Inf, length consistency, feature shape `(n,9)`, sigma range, date monotonicity
+- **Data sanity**: NaN/Inf, length consistency, feature shape `(n, 5)`, sigma range, date monotonicity
 - **Env preflight**: usable steps >0, valid initial state, bounded first-step reward
 - **Agent health**: parameter count, device/GPU confirmation
 - **Cycle monitoring**: reward explosion, NaN loss, Q-value range, epsilon sanity, buffer overflow timing
-- **Unit tests**: 19 pipeline tests in `test_training_pipeline.py`
+- **Unit tests**: 23 pipeline tests in `tests/test_drl_v2.py` (Eq.4 reward, epsilon dynamics, feature causality, training smoke)
 
 DQN stabilizers retained from the paper:
 - `[49]` fixed Q-targets, hard target-network copy every `1000` learn steps
@@ -101,13 +107,27 @@ the active default path.
 
 ## Shared State Space
 
-Current shared state:
+Current shared state (pruned v2, 2026-04-30):
+
+Feature pruning analysis on the original 9D space found severe multicollinearity:
+15 pairs with |r| > 0.7, effective rank ~4-5, VIF up to 28.
+
+The pruned 5D set removes redundant features while adding one orthogonal dimension (ret_1d/sigma):
+
 - `seq_len = 60`
-- `feature_dim = 9`
-- feature 0: `p_t / rolling_std(p, 60)` — lowest correlation with other features
-- features 1-4: vol-adjusted returns for `21 / 42 / 63 / 252` days, `(p_t - p_{t-H}) / (σ·√H)`
-- features 5-7: 3 MACD pairs, `(EMA_s - EMA_l) / σ_63(p)`, then `/ σ_252(q)`
-- feature 8: RSI(30) normalized to [-1, 1] via `(RSI - 50) / 50`
+- `feature_dim = 5` (= `market_feature_dim`, no prev_action channel)
+- `state_spec_version = structural_38_pruned_v2_5d`
+
+| Index | Feature | Formula |
+|-------|---------|---------|
+| 0 | ret_1d_vol_norm | `r_t / sigma_t` |
+| 1 | ret_21d_vol_norm | `(p_t - p_{t-21}) / (sigma_t * sqrt(21))` |
+| 2 | macd_8_24 | `(EMA_8 - EMA_24) / sigma_63(p)`, then `/ sigma_252(q)` |
+| 3 | macd_16_48 | Same formula, spans (16, 48) |
+| 4 | rsi_30 | `(RSI_30 - 50) / 50`, Wilder smoothing |
+
+Removed from original 9D: norm_price (non-stationary), ret_42d/ret_63d (redundant with ret_21d),
+ret_252d (too slow for gamma=0.3), MACD(32,96) (redundant with MACD(16,48)).
 
 This shared state is meant for `DQN` now, and later `PG / A2C`.
 

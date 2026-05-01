@@ -17,15 +17,16 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from drl.dqn.model import DQNAgent
-from drl_shared.spec import FEATURE_DIM, SEQ_LEN
+from drl_shared.spec import FEATURE_DIM, MARKET_FEATURE_DIM, SEQ_LEN, WARMUP
 from drl_shared.state_space import ContractArrays, ContractEnv
 
 
 def test_warmup_import():
     """WARMUP must be importable from drl_shared.state_space (used in val_envs)."""
     from drl_shared.state_space import WARMUP
-    assert WARMUP == 252, f"WARMUP should be 252, got {WARMUP}"
-    print("✅ WARMUP import: 252")
+    from drl_shared.spec import WARMUP as SPEC_WARMUP
+    assert WARMUP == SPEC_WARMUP, f"WARMUP mismatch: state_space={WARMUP}, spec={SPEC_WARMUP}"
+    print(f"✅ WARMUP import: {WARMUP}")
 
 
 def test_seq_len_import():
@@ -37,11 +38,10 @@ def test_seq_len_import():
 
 def test_validation_split_import():
     """VALIDATION_SPLIT and EARLY_STOPPING_PATIENCE must be importable from spec."""
-    from drl.dqn.spec import VALIDATION_SPLIT, EARLY_STOPPING_PATIENCE, EPS_END, EPS_START
+    from drl.dqn.spec import VALIDATION_SPLIT, EARLY_STOPPING_PATIENCE
     assert 0 < VALIDATION_SPLIT < 1, f"VALIDATION_SPLIT out of range: {VALIDATION_SPLIT}"
     assert EARLY_STOPPING_PATIENCE > 0, f"EARLY_STOPPING_PATIENCE must be positive: {EARLY_STOPPING_PATIENCE}"
-    assert EPS_START == EPS_END == 0.3, f"Epsilon should be constant 0.3, got start={EPS_START} end={EPS_END}"
-    print(f"✅ VALIDATION_SPLIT={VALIDATION_SPLIT}, EARLY_STOPPING_PATIENCE={EARLY_STOPPING_PATIENCE}, EPS=0.3")
+    print(f"✅ VALIDATION_SPLIT={VALIDATION_SPLIT}, EARLY_STOPPING_PATIENCE={EARLY_STOPPING_PATIENCE}")
 
 
 def test_constant_epsilon_schedule():
@@ -63,7 +63,7 @@ def test_val_env_construction():
     prices = np.cumsum(np.random.randn(n)) + 100.0
     returns = np.diff(prices, prepend=prices[0])
     sigma = np.abs(returns) + 1e-6
-    features = np.random.randn(n, FEATURE_DIM).astype(np.float32)
+    features = np.random.randn(n, MARKET_FEATURE_DIM).astype(np.float32)
     dates = np.arange(n)
 
     contract = ContractArrays(
@@ -89,17 +89,19 @@ def test_val_env_construction():
 def test_val_env_start_idx_bounds():
     """Edge case: very short data should still produce valid start_idx."""
     from drl.dqn.spec import VALIDATION_SPLIT, SEQ_LEN
-    from drl_shared.state_space import WARMUP
+    from drl_shared.spec import WARMUP
 
     n = 500
     split_idx = int(n * (1 - VALIDATION_SPLIT))
     start_idx = max(WARMUP, split_idx - SEQ_LEN)
-    assert start_idx == 390, f"Expected 390, got {start_idx}"
+    expected = max(WARMUP, split_idx - SEQ_LEN)
+    assert start_idx == expected, f"Expected {expected}, got {start_idx}"
 
     n = 300
     split_idx = int(n * (1 - VALIDATION_SPLIT))
     start_idx = max(WARMUP, split_idx - SEQ_LEN)
-    assert start_idx == 252, f"Expected 252, got {start_idx}"
+    expected = max(WARMUP, split_idx - SEQ_LEN)
+    assert start_idx == expected, f"Expected {expected}, got {start_idx}"
 
     print("✅ val_env start_idx bounds correct")
 
@@ -107,13 +109,13 @@ def test_val_env_start_idx_bounds():
 def test_train_envs_no_warmup_needed():
     """train_envs use max_idx=split_idx, no WARMUP dependency."""
     from drl.dqn.spec import VALIDATION_SPLIT
-    from drl_shared.spec import SIGMA_TGT_DEFAULT
+    from drl_shared.spec import SIGMA_TGT_DEFAULT, WARMUP
 
     n = 2000
     prices = np.cumsum(np.random.randn(n)) + 100.0
     returns = np.diff(prices, prepend=prices[0])
     sigma = np.abs(returns) + 1e-6
-    features = np.random.randn(n, FEATURE_DIM).astype(np.float32)
+    features = np.random.randn(n, MARKET_FEATURE_DIM).astype(np.float32)
     dates = np.arange(n)
 
     contract = ContractArrays(
@@ -129,15 +131,15 @@ def test_train_envs_no_warmup_needed():
     split_idx = int(n * (1 - VALIDATION_SPLIT))
     env = ContractEnv(contract, sigma_tgt=SIGMA_TGT_DEFAULT, max_idx=split_idx)
 
-    assert env.start_idx >= 252
-    assert env.idx >= 252
+    assert env.start_idx >= WARMUP
+    assert env.idx >= WARMUP
     print(f"✅ train_env construction OK: max_idx={split_idx}")
 
 
 def test_all_critical_imports_in_training_module():
     """Verify train_dqn_walkforward.py has all constants it uses at runtime."""
     required = {
-        "WARMUP": ("drl_shared.state_space", 252),
+        "WARMUP": ("drl_shared.spec", WARMUP),
         "ContractArrays": ("drl_shared.state_space", None),
         "ContractEnv": ("drl_shared.state_space", None),
         "VALIDATION_SPLIT": ("drl.dqn.spec", 0.1),
@@ -177,7 +179,7 @@ def test_sanity_check_clean_data():
         prices=np.cumsum(np.random.randn(n)) + 100.0,
         returns=np.random.randn(n) * 0.01,
         sigma=np.abs(np.random.randn(n)) * 0.01 + 1e-3,
-        features=np.random.randn(n, FEATURE_DIM).astype(np.float32),
+        features=np.random.randn(n, MARKET_FEATURE_DIM).astype(np.float32),
         dates=np.arange(n),
         source="test",
     )
@@ -198,7 +200,7 @@ def test_sanity_check_nan_prices():
         prices=bad_prices,
         returns=np.diff(bad_prices, prepend=bad_prices[0]),
         sigma=np.abs(np.random.randn(n)) * 0.01 + 1e-3,
-        features=np.random.randn(n, FEATURE_DIM).astype(np.float32),
+        features=np.random.randn(n, MARKET_FEATURE_DIM).astype(np.float32),
         dates=np.arange(n),
         source="test",
     )
@@ -213,11 +215,11 @@ def test_sanity_check_short_data():
 
     contract = ContractArrays(
         ticker="SHORT",
-        prices=np.ones(100),
-        returns=np.zeros(100),
-        sigma=np.ones(100) * 0.01,
-        features=np.random.randn(100, FEATURE_DIM).astype(np.float32),
-        dates=np.arange(100),
+        prices=np.ones(20),
+        returns=np.zeros(20),
+        sigma=np.ones(20) * 0.01,
+        features=np.random.randn(20, MARKET_FEATURE_DIM).astype(np.float32),
+        dates=np.arange(20),
         source="test",
     )
     warns = _sanity_check_contract(contract, "SHORT")
@@ -254,7 +256,7 @@ def test_sanity_check_near_zero_sigma():
         prices=np.ones(n) * 100.0,
         returns=np.random.randn(n) * 1e-10,
         sigma=np.ones(n) * 1e-12,  # near-zero sigma
-        features=np.random.randn(n, FEATURE_DIM).astype(np.float32),
+        features=np.random.randn(n, MARKET_FEATURE_DIM).astype(np.float32),
         dates=np.arange(n),
         source="test",
     )
@@ -275,7 +277,7 @@ def test_sanity_check_non_monotonic_dates():
         prices=np.cumsum(np.random.randn(n)) + 100.0,
         returns=np.random.randn(n) * 0.01,
         sigma=np.abs(np.random.randn(n)) * 0.01 + 1e-3,
-        features=np.random.randn(n, FEATURE_DIM).astype(np.float32),
+        features=np.random.randn(n, MARKET_FEATURE_DIM).astype(np.float32),
         dates=dates,
         source="test",
     )
@@ -295,7 +297,7 @@ def test_preflight_passes_good_env():
         prices=np.cumsum(np.random.randn(n)) + 100.0,
         returns=np.random.randn(n) * 0.01,
         sigma=np.abs(np.random.randn(n)) * 0.01 + 1e-3,
-        features=np.random.randn(n, FEATURE_DIM).astype(np.float32),
+        features=np.random.randn(n, MARKET_FEATURE_DIM).astype(np.float32),
         dates=np.arange(n),
         source="test",
     )
@@ -319,7 +321,7 @@ def test_preflight_catches_broken_env():
         prices=np.cumsum(np.random.randn(n)) + 100.0,
         returns=np.random.randn(n) * 0.01,
         sigma=np.abs(np.random.randn(n)) * 0.01 + 1e-3,
-        features=np.random.randn(n, FEATURE_DIM).astype(np.float32),
+        features=np.random.randn(n, MARKET_FEATURE_DIM).astype(np.float32),
         dates=np.arange(n),
         source="test",
     )

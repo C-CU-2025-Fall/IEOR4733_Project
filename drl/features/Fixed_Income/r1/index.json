@@ -1,0 +1,114 @@
+{
+  "asset_class": "Fixed Income",
+  "excluded_contracts": [
+    "FB",
+    "ZA"
+  ],
+  "expected_count": 4,
+  "expected_tickers": [
+    "DT",
+    "TY",
+    "UB",
+    "US"
+  ],
+  "failed_count": 0,
+  "failed_tickers": [],
+  "feature_spec": {
+    "feature_dim": 5,
+    "feature_line": "structural_38_pruned_v2",
+    "features": [
+      {
+        "formula": "r_t / sigma_t",
+        "index": 0,
+        "name": "ret_1d_vol_norm",
+        "note": "replaces non-stationary p_t/rolling_std(p,60)"
+      },
+      {
+        "formula": "(p_t - p_{t-21}) / (sigma_t * sqrt(21))",
+        "index": 1,
+        "name": "ret_21d_vol_norm"
+      },
+      {
+        "formula": "q_t / std_252(q_t), q_t = (EMA_8 - EMA_24) / std_63(p)",
+        "index": 2,
+        "name": "macd_8_24"
+      },
+      {
+        "formula": "q_t / std_252(q_t), q_t = (EMA_16 - EMA_48) / std_63(p)",
+        "index": 3,
+        "name": "macd_16_48"
+      },
+      {
+        "formula": "(RSI_30 - 50) / 50, Wilder smoothing",
+        "index": 4,
+        "name": "rsi_30_norm"
+      }
+    ],
+    "macd_feature": {
+      "name": "two_pair_macd_stack",
+      "pairs": [
+        [
+          8,
+          24
+        ],
+        [
+          16,
+          48
+        ]
+      ]
+    },
+    "market_feature_dim": 5,
+    "preset": "structural_38",
+    "return_horizons": [
+      21
+    ],
+    "rsi_window": 30,
+    "seq_len": 60,
+    "state_spec_version": "structural_38_pruned_v2_5d",
+    "volatility_estimator": "EWMA(60) std of additive r_t"
+  },
+  "loaded_count": 4,
+  "member_tickers": [
+    "DT",
+    "TY",
+    "UB",
+    "US"
+  ],
+  "preset": "structural_38",
+  "round": "r1",
+  "round_num": 1,
+  "source_overrides": {
+    "CC": "RAD_REGEN",
+    "DA": "RAD_REGEN",
+    "DT": "RAD",
+    "EN": "REV",
+    "ES": "RAD_REGEN",
+    "GI": "RAD_REGEN",
+    "JN": "REV",
+    "JO": "RAD_REGEN",
+    "KW": "REV",
+    "LB": "RAD",
+    "MP": "RAD_REGEN",
+    "NK": "RAD_REGEN",
+    "SC": "RAD_REGEN",
+    "SN": "REV",
+    "SP": "RAD_REGEN",
+    "ZA": "RAD_REGEN",
+    "ZF": "REV",
+    "ZG": "RAD_REGEN",
+    "ZH": "RAD_REGEN",
+    "ZI": "REV",
+    "ZK": "REV",
+    "ZN": "REV",
+    "ZO": "RAD_REGEN",
+    "ZR": "REV",
+    "ZT": "RAD_REGEN",
+    "ZU": "REV",
+    "ZW": "REV"
+  },
+  "state_spec_version": "structural_38_pruned_v2_5d",
+  "test_end": "2015-12-31",
+  "test_start": "2011-01-01",
+  "train_end": "2010-12-31",
+  "train_start": "2005-01-01"
+}
