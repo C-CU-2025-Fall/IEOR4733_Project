@@ -127,27 +127,86 @@ the active default path.
 
 ## Shared State Space
 
-Current shared state (pruned v2, 2026-04-30):
+Current shared state (enhanced 12D, 2026-05-01):
 
-Feature pruning analysis on the original 9D space found severe multicollinearity:
-15 pairs with |r| > 0.7, effective rank ~4-5, VIF up to 28.
-
-The pruned 5D set removes redundant features while adding one orthogonal dimension (ret_1d/sigma):
+Evolution: original 9D → pruned 5D → enhanced 11D → enhanced 12D (added gap_overnight).
+The 5D→11D expansion addressed Q-value collapse diagnosed in 5D models.
+The 12D adds overnight gap for price discovery signal.
 
 - `seq_len = 60`
-- `feature_dim = 5` (= `market_feature_dim`, no prev_action channel)
-- `state_spec_version = structural_38_pruned_v2_5d`
+- `feature_dim = 12` (= `market_feature_dim`, no prev_action channel)
+- `state_spec_version = structural_38_enhanced_12d`
 
-| Index | Feature | Formula |
-|-------|---------|---------|
-| 0 | ret_1d_vol_norm | `r_t / sigma_t` |
-| 1 | ret_21d_vol_norm | `(p_t - p_{t-21}) / (sigma_t * sqrt(21))` |
-| 2 | macd_8_24 | `(EMA_8 - EMA_24) / sigma_63(p)`, then `/ sigma_252(q)` |
-| 3 | macd_16_48 | Same formula, spans (16, 48) |
-| 4 | rsi_30 | `(RSI_30 - 50) / 50`, Wilder smoothing |
+| Index | Feature | Formula | Category | Source |
+|-------|---------|---------|----------|--------|
+| 0 | ret_1d | `r_t / sigma_t` | ultra-short momentum | Close |
+| 1 | ret_5d | `(p_t - p_{t-5}) / (sigma_t * sqrt(5))` | short-term momentum | Close |
+| 2 | ret_21d | `(p_t - p_{t-21}) / (sigma_t * sqrt(21))` | medium-term momentum | Close |
+| 3 | ret_126d | `(p_t - p_{t-126}) / (sigma_t * sqrt(126))` | long-term trend | Close |
+| 4 | macd_8_24 | `(EMA_8 - EMA_24) / sigma_63(p)`, then `/ sigma_252(q)` | trend | Close |
+| 5 | rsi_5 | `(RSI_5 - 50) / 50` | ultra-short oscillator | Close |
+| 6 | rsi_30 | `(RSI_30 - 50) / 50` | oscillator | Close |
+| 7 | atr_norm | `TR / ATR_MA(20)` | volatility regime | OHLC |
+| 8 | vol_norm | `Volume / Volume_MA(20)` | liquidity | Volume |
+| 9 | oi_chg | `ΔOI / |OI_{t-1}|` | positioning flow | OI |
+| 10 | drawdown | `(p - max_126d) / max_126d` | risk state | Close |
+| 11 | gap_overnight | `(O_t - C_{t-1}) / sigma_t` | overnight gap | OHLC |
 
-Removed from original 9D: norm_price (non-stationary), ret_42d/ret_63d (redundant with ret_21d),
-ret_252d (too slow for gamma=0.3), MACD(32,96) (redundant with MACD(16,48)).
+### Feature Correlation Analysis (48-contract aggregate, 2026-05-01)
+
+**Highly correlated pairs (|r| > 0.6, 10 pairs):**
+
+| Feature A | Feature B | r |
+|-----------|-----------|---|
+| ret_21d | macd_8_24 | +0.881 |
+| ret_5d | rsi_5 | +0.872 |
+| ret_21d | rsi_30 | +0.863 |
+| macd_8_24 | rsi_30 | +0.854 |
+| ret_126d | drawdown | +0.766 |
+| rsi_30 | drawdown | +0.699 |
+| rsi_5 | rsi_30 | +0.697 |
+| ret_126d | rsi_30 | +0.692 |
+| ret_21d | rsi_5 | +0.665 |
+| macd_8_24 | rsi_5 | +0.648 |
+
+**Feature independence ranking (by mean |r| with all other features):**
+
+| Rank | Feature | mean\|r\| | max\|r\| | Assessment |
+|------|---------|-----------|----------|------------|
+| 1 | oi_chg | 0.024 | 0.074 | Highly independent |
+| 2 | vol_norm | 0.051 | 0.277 | Highly independent |
+| 3 | atr_norm | 0.092 | 0.277 | Highly independent |
+| 4 | gap_overnight | 0.097 | 0.266 | Highly independent |
+| 5 | ret_1d | 0.202 | 0.548 | Moderate |
+| 6 | ret_126d | 0.290 | 0.766 | Moderate (↔drawdown) |
+| 7 | drawdown | 0.313 | 0.766 | Moderate (↔ret_126d) |
+| 8 | ret_5d | 0.332 | 0.872 | Redundant cluster |
+| 9 | macd_8_24 | 0.378 | 0.881 | Redundant cluster |
+| 10 | ret_21d | 0.394 | 0.881 | Redundant cluster |
+| 11 | rsi_5 | 0.403 | 0.872 | Redundant cluster |
+| 12 | rsi_30 | 0.446 | 0.863 | Most redundant |
+
+**Interpretation:** The 12D set has two clear clusters:
+1. **Independent block** (indices 7-11): atr_norm, vol_norm, oi_chg, drawdown, gap — max |r| ≤ 0.28, truly orthogonal signals
+2. **Momentum/oscillator cluster** (indices 0-6): ret_1d/5d/21d/126d + macd + rsi_5/30 — internally correlated but captures different time horizons. LSTM can learn to weight these adaptively.
+
+**gap_overnight** adds unique information (mean|r|=0.097, max|r|=0.266 with ret_1d) — validates the feature addition.
+
+### Feature Reconsideration History
+
+**5D → 11D (2026-04-30):**
+- Diagnosed Q-value collapse in 5D: Forex model outputs 100% flat on random input
+- Root cause: feature redundancy → weak LSTM signal → flat dominates replay → uniform sampling reinforces flat
+- Added: ret_5d, ret_126d, rsi_5, atr_norm, vol_norm, oi_chg, drawdown
+- Replaced: macd_16_48 → single macd_8_24 (paper uses one pair)
+
+**11D → 12D (2026-05-01):**
+- Added gap_overnight: vol-normalized overnight gap `(O_t - C_{t-1}) / sigma_t`
+- Rationale: overnight price discovery, gaps indicate news/events (Schwager [42], Murphy [38])
+- Correlation validation: 4th most independent feature, no new high-corr pairs introduced
+
+Removed from original 9D: norm_price (non-stationary), ret_42d/ret_63d (redundant),
+ret_252d (too slow for gamma=0.3), MACD(32,96) (redundant), prev_action (not in paper).
 
 This shared state is meant for `DQN` now, and later `PG / A2C`.
 

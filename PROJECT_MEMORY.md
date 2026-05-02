@@ -44,27 +44,47 @@ Primary commands:
 
 ## 2. DRL Mainline
 
-### State Space (Pruned v2 — 2026-04-30)
+### State Space (Enhanced 12D — 2026-05-01)
 
-Feature pruning analysis on the original 9D space found severe multicollinearity (15 pairs with |r| > 0.7, effective rank ~4-5). The pruned 5D set reduces noise while retaining independent signal:
+Feature evolution: original 9D → pruned 5D → enhanced 11D → enhanced 12D (added gap_overnight).
+The 5D→11D expansion addressed Q-value collapse diagnosed in 5D models (100% flat Q-values).
+The 12D adds overnight gap for price discovery signal.
 
-- `seq_len = 60`, `feature_dim = 5`, `market_feature_dim = 5`
-- `state_spec_version = structural_38_pruned_v2_5d`
+- `seq_len = 60`, `feature_dim = 12`, `market_feature_dim = 12`
+- `state_spec_version = structural_38_enhanced_12d`
 
-| Index | Feature | Formula | Rationale |
-|-------|---------|---------|-----------|
-| 0 | ret_1d_vol_norm | `r_t / sigma_t` | Replaces non-stationary `p_t/rolling_std(p,60)`. Scale [-5, 5], max |r|=0.27 with other features, VIF=1.26 |
-| 1 | ret_21d_vol_norm | `(p_t - p_{t-21}) / (sigma_t * sqrt(21))` | Core short-term momentum, best aligned with gamma=0.3 |
-| 2 | macd_8_24 | `(EMA_8 - EMA_24) / sigma_63(p)`, then `/ sigma_252(q)` | Fastest MACD, short-term trend |
-| 3 | macd_16_48 | Same formula, spans (16, 48) | Medium MACD, ~0.6 corr with MACD(8,24) |
-| 4 | rsi_30 | `(RSI_30 - 50) / 50`, Wilder smoothing | Mean-reversion complement, well-scaled [-1, 1] |
+| Index | Feature | Formula | Category | Source |
+|-------|---------|---------|----------|--------|
+| 0 | ret_1d | `r_t / sigma_t` | ultra-short momentum | Close |
+| 1 | ret_5d | `(p_t - p_{t-5}) / (sigma_t * sqrt(5))` | short-term momentum | Close |
+| 2 | ret_21d | `(p_t - p_{t-21}) / (sigma_t * sqrt(21))` | medium-term momentum | Close |
+| 3 | ret_126d | `(p_t - p_{t-126}) / (sigma_t * sqrt(126))` | long-term trend | Close |
+| 4 | macd_8_24 | `(EMA_8 - EMA_24) / sigma_63(p)`, then `/ sigma_252(q)` | trend (paper Eq.3) | Close |
+| 5 | rsi_5 | `(RSI_5 - 50) / 50`, Wilder smoothing | ultra-short oscillator | Close |
+| 6 | rsi_30 | `(RSI_30 - 50) / 50`, Wilder smoothing | medium-term oscillator | Close |
+| 7 | atr_norm | `TR / ATR_MA(20)` | volatility regime | OHLC |
+| 8 | vol_norm | `Volume / Volume_MA(20)` | liquidity/activity | Volume |
+| 9 | oi_chg | `ΔOI / |OI_{t-1}|`, clipped [-5,5] | positioning flow | OI |
+| 10 | drawdown | `(p - max_126d) / max_126d` | risk state | Close |
+| 11 | gap_overnight | `(O_t - C_{t-1}) / sigma_t` | overnight price discovery | OHLC |
+
+**5D→11D changes (2026-04-30):**
+- Added ret_5d, ret_126d (multi-horizon momentum)
+- Replaced macd_16_48 with single macd_8_24 (paper uses one pair)
+- Added rsi_5 alongside rsi_30
+- Added atr_norm, vol_norm, oi_chg, drawdown (volatility/microstructure/risk)
+
+**11D→12D changes (2026-05-01):**
+- Added gap_overnight: vol-normalized overnight gap `(O_t - C_{t-1}) / sigma_t`
+- Rationale: overnight price discovery, gaps indicate news/events (Schwager [42], Murphy [38])
+- AN statistics: mean=-0.008, std=0.31, range [-2.51, 3.13], 94% non-zero
 
 **Removed from original 9D:**
 - `p_t / rolling_std(p, 60)` — scale [4, 342] vs others [-3, 3], non-stationary
 - `ret_42d`, `ret_63d` — corr > 0.72 with ret_21d, redundant at gamma=0.3
 - `ret_252d` — annual momentum, gamma=0.3 can't exploit
 - `MACD(32, 96)` — corr 0.77 with MACD(16,48), too slow
-- `prev_action` — removed; agent infers position from reward signal
+- `prev_action` — removed; paper uses purely market features
 
 ### DQN Architecture (Paper Table 1 + JFDS 2020 additions)
 - 2-layer LSTM [64, 32] + Leaky-ReLU
@@ -75,8 +95,33 @@ Feature pruning analysis on the original 9D space found severe multicollinearity
 - epsilon: warmup 10% at 0.30, decay 0.30->0.10 over next 20%, flat 0.10 until end
 - MSE loss (paper default, USE_HUBER_LOSS=False); gradient clipping max_norm=1.0
 - 10% chronological validation split, early stopping patience=20
-- Locked seeds: [42, 43, 44, 45, 46] — all experiments use LOCKED_SEEDS
+- Locked seeds: [42, 43, 44, 45, 46, 47, 48, 49, 50, 51] — all experiments use LOCKED_SEEDS
 - torch.manual_seed + torch.cuda.manual_seed_all for full RNG reproducibility
+- **Device**: auto (CUDA→MPS→CPU). Verified on NVIDIA GB10 (130.7GB), ~20x faster than CPU
+
+### Feature Correlation Analysis (48-contract aggregate, 2026-05-01)
+
+Highly correlated pairs (|r| > 0.6, 10 pairs):
+- ret_21d ↔ macd_8_24 = +0.881 (strongest)
+- ret_5d ↔ rsi_5 = +0.872
+- ret_21d ↔ rsi_30 = +0.863
+- macd_8_24 ↔ rsi_30 = +0.854
+- ret_126d ↔ drawdown = +0.766
+- rsi_30 ↔ drawdown = +0.699, rsi_5 ↔ rsi_30 = +0.697
+- ret_126d ↔ rsi_30 = +0.692, ret_21d ↔ rsi_5 = +0.665, macd_8_24 ↔ rsi_5 = +0.648
+
+Feature independence ranking (mean |r| with all other features):
+1. oi_chg (0.024) — Highly independent
+2. vol_norm (0.051) — Highly independent
+3. atr_norm (0.092) — Highly independent
+4. **gap_overnight (0.097)** — Highly independent (validates addition)
+5. ret_1d (0.202) — Moderate
+6. ret_126d (0.290) — Moderate (↔drawdown=0.766)
+7. drawdown (0.313) — Moderate (↔ret_126d=0.766)
+8-12. ret_5d/macd/ret_21d/rsi_5/rsi_30 (0.33-0.45) — Momentum cluster, internally correlated
+
+Full correlation matrix saved: `results/feature_correlation_48/aggregate_corr_12d_mean.csv`
+Summary JSON: `results/feature_correlation_48/summary_12d.json`
 
 ### Training
 - 200 cycles per round (paper default); each cycle visits every contract once
@@ -128,8 +173,8 @@ python run_strategy_backtest.py --strategy DQN --asset Forex
 ### Artifacts
 - Features: `drl/features/<ticker>/r<round>.npz`
 - DQN bundles: `drl/dqn/models/<asset_class>/r<round>/<run_id>/`
-- Active state spec: `structural_38_pruned_v2_5d`
-- All 96 contract artifacts (48 tickers x 2 rounds) regenerated with 5 market features
+- Active state spec: `structural_38_enhanced_12d`
+- All 96 contract artifacts (48 tickers x 2 rounds) regenerated with 12 market features
 - Saved results: `results/v<VERSION>/<TICKER>_r<R>_s<SEED>.npz` (per-contract reward arrays)
 - Portfolio results: `results/v<VERSION>/<ASSET>_r<R>_s<SEED>_portfolio.npz`
 - RESULTS_VERSION = `"v1"` — increment when hyperparameters change

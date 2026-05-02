@@ -132,6 +132,9 @@ class ReplayBuffer:
 
     def sample(self, batch_size: int = BATCH_SIZE):
         batch = random.sample(self.buffer, batch_size)
+        return self._to_arrays(batch)
+
+    def _to_arrays(self, batch):
         states = np.stack([x[0] for x in batch])
         actions = np.array([x[1] for x in batch], dtype=np.int64)
         rewards = np.array([x[2] for x in batch], dtype=np.float32)
@@ -139,8 +142,88 @@ class ReplayBuffer:
         dones = np.array([x[4] for x in batch], dtype=np.float32)
         return states, actions, rewards, next_states, dones
 
+    def action_distribution(self) -> dict[int, int]:
+        counts: dict[int, int] = {}
+        for t in self.buffer:
+            counts[t[1]] = counts.get(t[1], 0) + 1
+        return counts
+
+    def reward_distribution(self) -> dict:
+        rewards = np.array([t[2] for t in self.buffer])
+        if len(rewards) == 0:
+            return {"mean": 0, "std": 0, "near_zero_pct": 0, "high_abs_pct": 0}
+        return {
+            "mean": float(rewards.mean()),
+            "std": float(rewards.std()),
+            "near_zero_pct": float((np.abs(rewards) < 0.01).mean() * 100),
+            "high_abs_pct": float((np.abs(rewards) > 0.5).mean() * 100),
+        }
+
+    def turnover_rate(self) -> float:
+        if len(self.buffer) < 2:
+            return 0.0
+        actions = [t[1] for t in self.buffer]
+        changes = sum(1 for i in range(1, len(actions)) if actions[i] != actions[i - 1])
+        return changes / (len(actions) - 1)
+
     def __len__(self):
         return len(self.buffer)
+
+
+class StratifiedReplayBuffer(ReplayBuffer):
+    def __init__(self, capacity: int = MEMORY_SIZE, mode: str = "uniform"):
+        super().__init__(capacity)
+        if mode not in ("uniform", "action_balanced", "reward_stratified"):
+            raise ValueError(f"Unknown replay mode: {mode}")
+        self.mode = mode
+
+    def sample(self, batch_size: int = BATCH_SIZE):
+        if self.mode == "uniform" or len(self.buffer) < batch_size:
+            return super().sample(batch_size)
+        if self.mode == "action_balanced":
+            return self._sample_action_balanced(batch_size)
+        return self._sample_reward_stratified(batch_size)
+
+    def _sample_action_balanced(self, batch_size: int):
+        per_action = batch_size // (DISCRETE_ACTION_DIM + 1)
+        batch = []
+        for action_id in range(DISCRETE_ACTION_DIM):
+            pool = [t for t in self.buffer if t[1] == action_id]
+            if pool:
+                n = min(per_action, len(pool))
+                batch.extend(random.sample(pool, n))
+        remaining = batch_size - len(batch)
+        if remaining > 0:
+            sorted_by_abs_r = sorted(self.buffer, key=lambda t: -abs(t[2]))
+            high_reward = sorted_by_abs_r[:max(remaining * 3, 100)]
+            n = min(remaining, len(high_reward))
+            batch.extend(random.sample(high_reward, n))
+        random.shuffle(batch)
+        return self._to_arrays(batch[:batch_size])
+
+    def _sample_reward_stratified(self, batch_size: int):
+        rewards = np.array([t[2] for t in self.buffer])
+        abs_r = np.abs(rewards)
+        n_bins = 4
+        edges = np.percentile(abs_r, np.linspace(0, 100, n_bins + 1))
+        per_bin = batch_size // n_bins
+        batch = []
+        for i in range(n_bins):
+            lo, hi = edges[i], edges[i + 1]
+            if i == n_bins - 1:
+                pool_idx = np.where((abs_r >= lo) & (abs_r <= hi))[0]
+            else:
+                pool_idx = np.where((abs_r >= lo) & (abs_r < hi))[0]
+            if len(pool_idx) == 0:
+                continue
+            n = min(per_bin, len(pool_idx))
+            chosen = random.sample(list(pool_idx), n)
+            batch.extend(self.buffer[j] for j in chosen)
+        remaining = batch_size - len(batch)
+        if remaining > 0:
+            batch.extend(random.sample(self.buffer, min(remaining, len(self.buffer))))
+        random.shuffle(batch)
+        return self._to_arrays(batch[:batch_size])
 
 
 class DQNAgent:
@@ -151,6 +234,7 @@ class DQNAgent:
         memory_size: int = MEMORY_SIZE,
         clip_grad_norm: float = GRAD_CLIP_MAX_NORM,
         use_huber: bool = USE_HUBER_LOSS,
+        replay_mode: str = "uniform",
     ):
         if _TORCH_IMPORT_ERROR is not None:
             raise RuntimeError("PyTorch is required for DQN training/inference but is not installed in this environment.") from _TORCH_IMPORT_ERROR
@@ -162,7 +246,7 @@ class DQNAgent:
         self.target = DuelingDQNLSTM().to(self.device)
         self.target.load_state_dict(self.q_net.state_dict())
         self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=LR)
-        self.replay = ReplayBuffer(memory_size)
+        self.replay = StratifiedReplayBuffer(memory_size, mode=replay_mode)
         self.train_steps = 0
         self.target_updates = 0
 

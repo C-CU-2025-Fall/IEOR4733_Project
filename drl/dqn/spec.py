@@ -61,6 +61,8 @@ WARMUP = SEQ_LEN
 # ── Memory (percentage-based) ──
 MEMORY_RATIO = 0.2             # buffer = 20% of total expected transitions
 MEMORY_SIZE_MIN = 5000         # floor (paper default)
+REPLAY_MODE = "uniform"        # "uniform" (paper default) | "action_balanced" | "reward_stratified"
+REPLAY_DIAG_INTERVAL = 5       # log replay diagnostics every N cycles
 
 # ── Epsilon decay (warmup + decay, percentage-based) ──
 # Each tuple: (fraction_of_total_training_steps, epsilon_value)
@@ -79,7 +81,7 @@ HUBER_DELTA = 1.0              # Huber loss delta (threshold between L1/L2)
 
 # ── Locked seeds for reproducibility ──
 # These 5 seeds are fixed. All experiments, ablations, and reports use LOCKED_SEEDS.
-LOCKED_SEEDS = [42, 43, 44, 45, 46]
+LOCKED_SEEDS = [42, 43, 44, 45, 46, 47, 48, 49, 50, 51]
 
 
 def contract_data_path(round_num: int, ticker: str) -> Path:

@@ -485,6 +485,13 @@ def _run_interleaved_cycle(
     return per_contract_rewards, per_contract_steps, all_losses, global_step
 
 
+def _is_degenerate(val_action_counts: dict[int, int], threshold: float = 0.95) -> bool:
+    total = sum(val_action_counts.values())
+    if total == 0:
+        return True
+    return max(val_action_counts.values()) / total >= threshold
+
+
 def _validation_reward(envs: dict[str, ContractEnv], agent: DQNAgent) -> tuple[float, dict[int, int]]:
     """Run one full validation episode per contract with greedy policy, return avg reward and action counts."""
     agent.q_net.eval()  # eval mode: disable dropout
@@ -830,7 +837,10 @@ def train_asset_round(
             "patience_counter": patience_counter,
             "contract_count": len(val_envs),
         })
-        if val_reward > best_val_reward:
+        degenerate = _is_degenerate(val_action_counts)
+        if degenerate:
+            patience_counter += 1
+        elif val_reward > best_val_reward:
             best_val_reward = val_reward
             patience_counter = 0
             best_ckpt = checkpoint_path_for_bundle(bundle_dir)
@@ -838,7 +848,7 @@ def train_asset_round(
             best_bundle_dir = bundle_dir
         else:
             patience_counter += 1
-            if patience_counter >= EARLY_STOPPING_PATIENCE:
+            if patience_counter >= EARLY_STOPPING_PATIENCE and cycle >= 30:
                 logger.log(f"Early stopping at cycle {cycle}: val_reward={val_reward:+.4f} best={best_val_reward:+.4f}")
                 early_stopped = True
                 break

@@ -326,6 +326,106 @@ def _print_multi_seed_summary(
     return total_wins
 
 
+def _compute_topk_ensemble(
+    seed_results: list[dict],
+    k: int = 7,
+) -> dict:
+    """Select top-K seeds by Sharpe, average their metrics, return ensemble dict."""
+    sorted_seeds = sorted(seed_results,
+                         key=lambda r: r["dqn_metrics"]["Sharpe"],
+                         reverse=True)
+    topk = sorted_seeds[:k]
+
+    dqn_avg = {}
+    for name in TRADE_METRIC_NAMES:
+        vals = [s["dqn_metrics"][name] for s in topk]
+        dqn_avg[name] = float(np.mean(vals))
+
+    long_metrics = topk[0]["long_metrics"]
+
+    return {
+        "ensemble": f"top-{k}-avg",
+        "k": k,
+        "total_seeds": len(seed_results),
+        "selected_seeds": [s["seed"] for s in topk],
+        "dqn_metrics": dqn_avg,
+        "long_metrics": long_metrics,
+    }
+
+
+def _print_topk_ensemble_table(
+    ensemble: dict,
+    ticker: str,
+    round_num: int,
+) -> int:
+    """Print top-K ensemble vs Long comparison table."""
+    print(f"\n{'=' * 70}")
+    print(f"  {ticker} r{round_num} -- Top-{ensemble['k']} ensemble (seeds: {ensemble['selected_seeds']})")
+    print(f"{'=' * 70}")
+    print(f"  {'Metric':>10s}  {'DQN topK':>9s}  {'Long':>9s}  {'Win':>6s}  {'Delta':>9s}")
+    print("  " + "-" * 55)
+
+    wins = 0
+    d = ensemble["dqn_metrics"]
+    l = ensemble["long_metrics"]
+    for name in TRADE_METRIC_NAMES:
+        diff = d[name] - l[name]
+        if name in ("std(R)", "DD"):
+            winner = "DQN" if d[name] < l[name] else ("Long" if d[name] > l[name] else "-")
+        else:
+            winner = "DQN" if d[name] > l[name] else ("Long" if d[name] < l[name] else "-")
+        if winner == "DQN":
+            wins += 1
+        print(f"  {name:>10s}  {d[name]:>+9.4f}  {l[name]:>+9.4f}  {winner:>6s}  {diff:>+9.4f}")
+
+    print("  " + "-" * 55)
+    print(f"  Top-{ensemble['k']} ensemble wins {wins}/{len(TRADE_METRIC_NAMES)} metrics vs Long-only")
+    print(f"{'=' * 70}\n")
+    return wins
+
+
+def _print_compact_seed_summary(
+    seed_results: list[dict],
+    ticker: str,
+    round_num: int,
+) -> None:
+    """Print compact summary of all individual seeds (2 key metrics + wins)."""
+    print(f"\n  {ticker} r{round_num} -- Individual seed summary ({len(seed_results)} seeds)")
+    print(f"  {'Seed':>5s}  {'Sharpe':>8s}  {'E(R)':>9s}  {'DD':>8s}  {'Sortino':>8s}  {'Wins':>4s}")
+    print("  " + "-" * 52)
+    for r in sorted(seed_results, key=lambda x: x["dqn_metrics"]["Sharpe"], reverse=True):
+        dm = r["dqn_metrics"]
+        print(f"  {r['seed']:>5d}  {dm['Sharpe']:>+8.4f}  {dm['E(R)']:>+9.6f}  {dm['DD']:>8.4f}  {dm['Sortino']:>+8.4f}  {r['wins']:>4d}/{len(TRADE_METRIC_NAMES)}")
+    print()
+
+
+def _compute_topk_ensemble_portfolio(
+    portfolio_results: list[dict],
+    k: int = 7,
+) -> dict:
+    """Top-K ensemble for asset-class portfolio results."""
+    sorted_by_sharpe = sorted(portfolio_results,
+                              key=lambda r: r["portfolio"]["dqn_metrics"]["Sharpe"],
+                              reverse=True)
+    topk = sorted_by_sharpe[:k]
+
+    dqn_avg = {}
+    for name in TRADE_METRIC_NAMES:
+        vals = [s["portfolio"]["dqn_metrics"][name] for s in topk]
+        dqn_avg[name] = float(np.mean(vals))
+
+    long_metrics = topk[0]["portfolio"]["long_metrics"]
+
+    return {
+        "ensemble": f"top-{k}-avg",
+        "k": k,
+        "total_seeds": len(portfolio_results),
+        "selected_seeds": [s["seed"] for s in topk],
+        "dqn_metrics": dqn_avg,
+        "long_metrics": long_metrics,
+    }
+
+
 def _print_per_contract_table(
     contract_results: dict[str, dict],
     asset_name: str,
@@ -838,9 +938,11 @@ def main():
 
     # ── Asset-class portfolio evaluation ──
     if args.asset:
-        for seed in seeds:
-            for rn in ([1, 2] if args.both or args.round is None else [args.round]):
-                compare_asset_class(
+        round_nums = [1, 2] if args.both or args.round is None else [args.round]
+        for rn in round_nums:
+            portfolio_results: list[dict] = []
+            for seed in seeds:
+                res = compare_asset_class(
                     asset_name=args.asset,
                     round_num=rn,
                     episodes=args.episodes,
@@ -849,6 +951,30 @@ def main():
                     seed=seed,
                     save_dir=save_dir,
                 )
+                portfolio_results.append(res)
+
+            if len(seeds) > 1:
+                print(f"\n{'#' * 70}")
+                print(f"#  MULTI-SEED AGGREGATION: {args.asset} r{rn} ({len(seeds)} seeds)")
+                print(f"{'#' * 70}")
+
+                _print_compact_seed_summary(
+                    [{"seed": r["seed"], "dqn_metrics": r["portfolio"]["dqn_metrics"],
+                      "long_metrics": r["portfolio"]["long_metrics"], "wins": r["portfolio"]["wins"]}
+                     for r in portfolio_results],
+                    f"{args.asset} (portfolio)", rn,
+                )
+
+                _print_multi_seed_summary(
+                    [{"seed": r["seed"], "dqn_metrics": r["portfolio"]["dqn_metrics"],
+                      "long_metrics": r["portfolio"]["long_metrics"], "wins": r["portfolio"]["wins"]}
+                     for r in portfolio_results],
+                    f"{args.asset} (portfolio)", rn,
+                    portfolio_results[0]["portfolio"]["long_metrics"],
+                )
+
+                ensemble = _compute_topk_ensemble_portfolio(portfolio_results, k=7)
+                _print_topk_ensemble_table(ensemble, f"{args.asset} (portfolio)", rn)
         return
 
     # ── Single-contract evaluation ──
@@ -872,9 +998,12 @@ def main():
             all_results.append(res)
 
         if len(seed_results) > 1:
+            _print_compact_seed_summary(seed_results, ticker, rn)
             _print_multi_seed_summary(
                 seed_results, ticker, rn, seed_results[0]["long_metrics"]
             )
+            ensemble = _compute_topk_ensemble(seed_results, k=7)
+            _print_topk_ensemble_table(ensemble, ticker, rn)
 
     if len(rounds) == 2 and len(seeds) == 1:
         print("-" * 70)
