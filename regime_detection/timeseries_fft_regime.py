@@ -522,6 +522,158 @@ def export_regime_for_a2c(
     return a2c_data
 
 
+def predict_regime_soft_probs(
+    clc_data: Dict,
+    asset_class_tickers: List[str],
+    asset_class_name: str,
+    trained_gmm,
+    trained_scaler,
+    n_fft_components: int = 10,
+    min_data_length: int = 312,
+    date_range: Optional[Tuple[str, str]] = None,
+) -> Optional[pd.DataFrame]:
+    """
+    Apply a pre-trained GMM to generate regime soft probs for a new time period.
+
+    This is the "predict-only" counterpart of detect_regimes_for_asset_class_timeseries.
+    It reuses the same FFT feature extraction logic, then calls
+    trained_scaler.transform() and trained_gmm.predict_proba() instead of
+    fitting a new model.
+
+    Args:
+        clc_data:              Dict[ticker, DataFrame] – raw CLC price data
+        asset_class_tickers:   List[str] tickers for this class
+        asset_class_name:      Used only for logging
+        trained_gmm:           Fitted GaussianMixture returned by detect_regimes_*
+        trained_scaler:        Fitted StandardScaler returned by detect_regimes_*
+        n_fft_components:      Must match what was used at fit time
+        min_data_length:       Minimum # of prices required per ticker
+        date_range:            Optional (start_date, end_date) strings to restrict data
+
+    Returns:
+        regime_df: DataFrame with columns
+            date, regime, regime_prob_0, regime_prob_1, regime_prob_2
+        or None if no valid data is found.
+    """
+    logger.info(f"\n[predict] {asset_class_name} soft-prob prediction...")
+    if date_range:
+        logger.info(f"  date_range: {date_range[0]} ~ {date_range[1]}")
+
+    date_start_dt = pd.to_datetime(date_range[0]) if date_range else None
+    date_end_dt   = pd.to_datetime(date_range[1]) if date_range else None
+
+    # --- Step 1: load & filter data ---
+    asset_prices = {}
+    asset_dates_list = {}
+    valid_tickers = []
+
+    for ticker in asset_class_tickers:
+        try:
+            if ticker not in clc_data:
+                continue
+            df = clc_data[ticker]
+            if not isinstance(df, pd.DataFrame):
+                continue
+
+            # detect column name style (uppercase Date/Close vs lowercase date/close)
+            date_col  = 'Date'  if 'Date'  in df.columns else 'date'
+            close_col = 'Close' if 'Close' in df.columns else 'close'
+
+            if close_col not in df.columns:
+                continue
+
+            df_filtered = df.copy()
+            if date_range and date_col in df_filtered.columns:
+                mask = (
+                    (df_filtered[date_col] >= date_start_dt) &
+                    (df_filtered[date_col] <= date_end_dt)
+                )
+                df_filtered = df_filtered[mask]
+
+            prices = df_filtered[close_col].values.astype(float)
+            prices = prices[~np.isnan(prices)]
+
+            if len(prices) < min_data_length:
+                continue
+
+            asset_prices[ticker] = prices
+
+            close_notna = ~df_filtered[close_col].isna()
+            asset_dates_list[ticker] = df_filtered.loc[close_notna, date_col].values
+            valid_tickers.append(ticker)
+
+        except Exception as e:
+            logger.warning(f"  ✗ {ticker}: {e}")
+
+    if not asset_prices:
+        logger.error(f"  {asset_class_name}: no valid data for prediction")
+        return None
+
+    # --- Step 2: align lengths ---
+    min_len = min(len(p) for p in asset_prices.values())
+
+    aligned_dates = None
+    for ticker in asset_prices:
+        if len(asset_prices[ticker]) > min_len:
+            asset_prices[ticker] = asset_prices[ticker][-min_len:]
+        if aligned_dates is None:
+            dates = asset_dates_list[ticker]
+            aligned_dates = dates[-min_len:] if len(dates) >= min_len else dates
+
+    aligned_dates = pd.DatetimeIndex(aligned_dates)
+    logger.info(
+        f"  time range: {aligned_dates[0].strftime('%Y-%m-%d')} ~ "
+        f"{aligned_dates[-1].strftime('%Y-%m-%d')} ({min_len} days)"
+    )
+
+    # --- Step 3: build FFT features ---
+    builder = StateMatrixBuilder()
+    fft_features_list = []
+    valid_time_indices = []
+
+    for time_idx in tqdm(range(60, min_len), desc=f"  {asset_class_name} (predict)"):
+        state_matrices = []
+        for ticker in valid_tickers:
+            sm = builder.build_state_matrix_for_asset(asset_prices[ticker], time_idx)
+            if sm is not None:
+                state_matrices.append(sm)
+
+        if not state_matrices:
+            continue
+
+        avg_sm = np.mean(np.array(state_matrices), axis=0)
+        feats  = extract_fft_features(avg_sm, n_fft_components)
+        if feats is not None:
+            fft_features_list.append(feats)
+            valid_time_indices.append(time_idx)
+
+    if not fft_features_list:
+        logger.error(f"  {asset_class_name}: could not generate FFT features")
+        return None
+
+    fft_features_array = np.array(fft_features_list)
+
+    # --- Step 4: apply trained scaler + GMM ---
+    fft_scaled    = trained_scaler.transform(fft_features_array)
+    regime_labels = trained_gmm.predict(fft_scaled)
+    soft_probs    = trained_gmm.predict_proba(fft_scaled)
+
+    n_components = trained_gmm.n_components
+    sample_dates = [aligned_dates[int(idx)] for idx in valid_time_indices]
+    valid_dates  = pd.DatetimeIndex(sample_dates)
+
+    prob_cols = {f"regime_prob_{i}": soft_probs[:, i] for i in range(n_components)}
+    # pad to 3 columns if n_components < 3
+    for i in range(n_components, 3):
+        prob_cols[f"regime_prob_{i}"] = 0.0
+
+    regime_df = pd.DataFrame({"date": valid_dates, "regime": regime_labels, **prob_cols})
+    regime_df = regime_df.sort_values("date").reset_index(drop=True)
+
+    logger.info(f"  ✓ {asset_class_name}: {len(regime_df)} time points predicted")
+    return regime_df
+
+
 if __name__ == "__main__":
     """
     使用示例：
