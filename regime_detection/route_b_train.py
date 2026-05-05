@@ -451,6 +451,7 @@ def _evaluate(actor, test_state_dict: Dict, sigma_target: float) -> Dict:
         "portfolio_calmar":  calmar,
         "portfolio_mdd":     mdd,
         "n_tickers":         len(daily_pnl_by_ticker),
+        "portfolio_pnl":     portfolio,   # pd.Series(daily net PnL, DatetimeIndex)
     }
 
 
