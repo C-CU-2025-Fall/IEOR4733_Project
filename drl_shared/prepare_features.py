@@ -101,11 +101,6 @@ def prepare_contract_round_features(
         prices=df_full["Close"].to_numpy(dtype=float),
         dates=df_full["Date"].to_numpy(),
         source=source,
-        open_=df_full["Open"].to_numpy(dtype=float) if "Open" in df_full.columns else None,
-        high=df_full["High"].to_numpy(dtype=float) if "High" in df_full.columns else None,
-        low=df_full["Low"].to_numpy(dtype=float) if "Low" in df_full.columns else None,
-        volume=df_full["Volume"].to_numpy(dtype=float) if "Volume" in df_full.columns else None,
-        oi=df_full["OI"].to_numpy(dtype=float) if "OI" in df_full.columns else None,
         feature_spec_override=spec,
     )
 

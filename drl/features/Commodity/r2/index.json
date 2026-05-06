@@ -34,38 +34,16 @@
   "failed_count": 0,
   "failed_tickers": [],
   "feature_spec": {
-    "feature_dim": 5,
-    "feature_line": "structural_38_pruned_v2",
-    "features": [
-      {
-        "formula": "r_t / sigma_t",
-        "index": 0,
-        "name": "ret_1d_vol_norm",
-        "note": "replaces non-stationary p_t/rolling_std(p,60)"
-      },
-      {
-        "formula": "(p_t - p_{t-21}) / (sigma_t * sqrt(21))",
-        "index": 1,
-        "name": "ret_21d_vol_norm"
-      },
-      {
-        "formula": "q_t / std_252(q_t), q_t = (EMA_8 - EMA_24) / std_63(p)",
-        "index": 2,
-        "name": "macd_8_24"
-      },
-      {
-        "formula": "q_t / std_252(q_t), q_t = (EMA_16 - EMA_48) / std_63(p)",
-        "index": 3,
-        "name": "macd_16_48"
-      },
-      {
-        "formula": "(RSI_30 - 50) / 50, Wilder smoothing",
-        "index": 4,
-        "name": "rsi_30_norm"
-      }
-    ],
+    "close_feature": {
+      "formula": "p_t / std_60(p)_t",
+      "name": "normalized_close_price_60d_rolling_std",
+      "note": "Repo convention for current 9-feature line."
+    },
+    "feature_dim": 9,
+    "feature_line": "structural_38_mainline",
     "macd_feature": {
-      "name": "two_pair_macd_stack",
+      "formula": "q_t / std_252(q_t), where q_t = (EMA_short - EMA_long) / std_63(p)",
+      "name": "three_pair_macd_stack",
       "pairs": [
         [
           8,
@@ -74,17 +52,24 @@
         [
           16,
           48
+        ],
+        [
+          32,
+          96
         ]
       ]
     },
-    "market_feature_dim": 5,
     "preset": "structural_38",
+    "return_feature_formula": "(p_t - p_{t-H}) / (sigma_t * sqrt(H))",
     "return_horizons": [
-      21
+      21,
+      42,
+      63,
+      252
     ],
     "rsi_window": 30,
     "seq_len": 60,
-    "state_spec_version": "structural_38_pruned_v2_5d",
+    "state_spec_version": "structural_38_close_norm_9d",
     "volatility_estimator": "EWMA(60) std of additive r_t"
   },
   "loaded_count": 24,
@@ -146,7 +131,7 @@
     "ZU": "REV",
     "ZW": "REV"
   },
-  "state_spec_version": "structural_38_pruned_v2_5d",
+  "state_spec_version": "structural_38_close_norm_9d",
   "test_end": "2019-12-31",
   "test_start": "2016-01-01",
   "train_end": "2015-12-31",

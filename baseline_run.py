@@ -15,6 +15,7 @@ Usage:
 import argparse
 from functools import lru_cache
 import os
+from pathlib import Path
 import numpy as np
 import pandas as pd
 from data_loader import load_clc_full
@@ -518,6 +519,7 @@ def compute_portfolio_returns_from_position_provider(
     sigma_tgt,
     position_provider,
     aggregation_mode='variable_n',
+    save_audit_to: str | None = None,
 ):
     """Eq 13 portfolio returns from explicit per-contract position arrays.
 
@@ -537,6 +539,11 @@ def compute_portfolio_returns_from_position_provider(
         port = df_all.T.mean(axis=1)
     else:
         raise ValueError(f'Unknown aggregation_mode: {aggregation_mode}')
+    if save_audit_to is not None and series:
+        Path(save_audit_to).parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(save_audit_to,
+            portfolio_returns=port.values,
+            dates=np.array(series[0].index, dtype=str))
     return port.values
 
 
@@ -548,6 +555,7 @@ def compute_strategy_metrics(
     port_vol_target=None,
     port_bridge='constant_posthoc',
     position_provider=None,
+    save_audit_to: str | None = None,
 ):
     """Compute all 9 metrics for one strategy using the unified baseline stack."""
     built_in = {'Long', 'Sign(R)', 'MACD'}
@@ -561,6 +569,7 @@ def compute_strategy_metrics(
             sigma_tgt=sigma_tgt,
             position_provider=position_provider,
             aggregation_mode=aggregation_mode,
+            save_audit_to=save_audit_to,
         )
 
     if port_vol_target is not None:

@@ -21,6 +21,8 @@ from config import ASSET_CLASSES
 from drl.dqn.logging_utils import RunLogger, make_run_id
 from drl.dqn.model import DQNAgent
 from drl.dqn.spec import (
+    BATCH_SIZE,
+    DISCRETE_ACTION_DIM,
     EARLY_STOPPING_PATIENCE,
     EPISODES,
     EPS_SCHEDULE,
@@ -444,6 +446,8 @@ def _run_interleaved_cycle(
         all_losses: list of all loss values
         global_step: updated global step counter
     """
+    buffer_fill_threshold = agent.replay.capacity  # fill buffer to capacity before learning
+
     # Reset all envs and initialize tracking
     active_states: dict[str, np.ndarray] = {}
     active_tickers: list[str] = []
@@ -460,10 +464,24 @@ def _run_interleaved_cycle(
     transition_count = 0  # count transitions for UPDATE_FREQ
 
     while active_tickers:
-        for ticker in list(active_tickers):
-            state = active_states[ticker]
+        # Batched action selection across all active contracts
+        tickers_now = list(active_tickers)
+        n_active = len(tickers_now)
+
+        if global_step < buffer_fill_threshold:
+            # Phase 1: pure random
+            actions = np.random.randint(DISCRETE_ACTION_DIM, size=n_active).tolist()
+        else:
             eps = agent.epsilon_for_step(global_step)
-            action_id = agent.act(state, eps)
+            states = np.stack([active_states[t] for t in tickers_now])
+            actions = agent.act_batch(states, eps)
+
+        # Step each env independently
+        to_remove = []
+        for i, ticker in enumerate(tickers_now):
+            action_id = actions[i]
+            state = active_states[ticker]
+
             next_state, reward, done = train_envs[ticker].step(action_id)
             agent.push(state, action_id, reward, next_state, float(done))
 
@@ -473,14 +491,17 @@ def _run_interleaved_cycle(
             global_step += 1
             transition_count += 1
 
-            # Learn every UPDATE_FREQ transitions
-            if transition_count % UPDATE_FREQ == 0:
+            # Only learn after buffer is filled
+            if global_step >= buffer_fill_threshold and transition_count % UPDATE_FREQ == 0:
                 loss = agent.learn()
                 if loss > 0:
                     all_losses.append(loss)
 
             if done:
-                active_tickers.remove(ticker)
+                to_remove.append(ticker)
+
+        for t in to_remove:
+            active_tickers.remove(t)
 
     return per_contract_rewards, per_contract_steps, all_losses, global_step
 
@@ -519,6 +540,7 @@ def train_asset_round(
     episodes: int = EPISODES,
     device: str | None = None,
     seed: int | None = None,
+    gamma: float | None = None,
     sigma_tgt: float = SIGMA_TGT_DEFAULT,
     resume: bool = False,
     tickers_override: list[str] | None = None,
@@ -531,6 +553,10 @@ def train_asset_round(
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
+
+    if gamma is not None:
+        import drl.dqn.spec as _spec
+        _spec.GAMMA = gamma
 
     tickers = tickers_override if tickers_override else _asset_tickers_from_index(asset_name, round_num)
     if not tickers:
@@ -586,7 +612,13 @@ def train_asset_round(
     n_contracts = len(contracts)
     steps_per_contract = sum(env.max_idx - env.start_idx for env in train_envs.values())
     total_expected_steps = episodes * steps_per_contract
-    memory_size = max(MEMORY_SIZE_MIN, int(total_expected_steps * MEMORY_RATIO))
+    buffer_sizes = {
+        'Forex': 5000,
+        'Equity Index': 5000,
+        'Commodity': 5000,
+        'Fixed Income': 3000,
+    }
+    memory_size = buffer_sizes.get(asset_name, 5000)
     agent = DQNAgent(device=device, total_steps=total_expected_steps, memory_size=memory_size)
     
     if resume:
@@ -810,25 +842,23 @@ def train_asset_round(
                 "t": f"{elapsed:.0f}s",
             }, refresh=False)
 
-        if cycle % report_interval == 0 or cycle == 1:
-            elapsed = time.time() - t0
-            avg_loss = float(np.mean(cycle_losses)) if cycle_losses else 0.0
-            eta = (elapsed / cycle) * max(0, episodes - cycle) if cycle > 0 else 0.0
-            
-            # Action dist str
-            total_val_actions = sum(val_action_counts.values()) or 1
-            action_dist_str = f"[L:{val_action_counts.get(2, 0)/total_val_actions*100:.0f}% S:{val_action_counts.get(0, 0)/total_val_actions*100:.0f}% F:{val_action_counts.get(1, 0)/total_val_actions*100:.0f}%]"
+        # Log every cycle for full diagnostic trail
+        elapsed = time.time() - t0
+        avg_loss = float(np.mean(cycle_losses)) if cycle_losses else 0.0
+        eta = (elapsed / cycle) * max(0, episodes - cycle) if cycle > 0 else 0.0
+        total_val_actions = sum(val_action_counts.values()) or 1
+        action_dist_str = f"[L:{val_action_counts.get(2, 0)/total_val_actions*100:.0f}% S:{val_action_counts.get(0, 0)/total_val_actions*100:.0f}% F:{val_action_counts.get(1, 0)/total_val_actions*100:.0f}%]"
 
-            logger.log(
-                f"cycle {cycle}/{episodes} reward_avg={np.mean(cycle_rewards):+.4f} "
-                f"val_reward={_last_val_reward:+.4f} val_actions={action_dist_str} "
-                f"loss={avg_loss:.6f} "
-                f"epsilon={agent.epsilon_for_step(global_step):.4f} replay={len(agent.replay)} "
-                f"target_updates={agent.target_updates} patience={patience_counter}/{EARLY_STOPPING_PATIENCE} "
-                f"elapsed={elapsed:.0f}s eta={eta:.0f}s"
-            )
-            # Training health check
-            _check_training_health(cycle, cycle_rewards, cycle_losses, agent, global_step, logger)
+        logger.log(
+            f"cycle {cycle}/{episodes} reward_avg={np.mean(cycle_rewards):+.4f} "
+            f"val_reward={_last_val_reward:+.4f} val_actions={action_dist_str} "
+            f"loss={avg_loss:.6f} "
+            f"epsilon={agent.epsilon_for_step(global_step):.4f} replay={len(agent.replay)} "
+            f"target_updates={agent.target_updates} patience={patience_counter}/{EARLY_STOPPING_PATIENCE} "
+            f"elapsed={elapsed:.0f}s eta={eta:.0f}s"
+        )
+        # Training health check
+        _check_training_health(cycle, cycle_rewards, cycle_losses, agent, global_step, logger)
         validation_rows.append({
             "cycle": cycle,
             "round": round_num,
@@ -837,6 +867,10 @@ def train_asset_round(
             "patience_counter": patience_counter,
             "contract_count": len(val_envs),
         })
+        # Flush diagnostics every 10 cycles so data survives crashes
+        if cycle % 10 == 0:
+            logger.write_csv("episode_metrics.csv", episode_rows)
+            logger.write_csv("validation_metrics.csv", validation_rows)
         degenerate = _is_degenerate(val_action_counts)
         if degenerate:
             patience_counter += 1
@@ -933,6 +967,7 @@ def main():
     parser.add_argument("--episodes", type=int, default=EPISODES, help="Training cycles; each cycle visits every contract once.")
     parser.add_argument("--device", choices=["auto", "cpu", "cuda", "mps"], default="auto")
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--gamma", type=float, default=None, help="Override GAMMA (default: use spec.py value)")
     parser.add_argument("--sigma-tgt", type=float, default=SIGMA_TGT_DEFAULT)
     parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoint for each round")
     parser.add_argument("--tickers", nargs="+", default=None, help="Specific tickers to train (e.g. --tickers AN BN). Overrides asset index.")
@@ -948,6 +983,7 @@ def main():
                 episodes=args.episodes,
                 device=args.device,
                 seed=args.seed,
+                gamma=args.gamma,
                 sigma_tgt=args.sigma_tgt,
                 resume=args.resume,
                 tickers_override=args.tickers,

@@ -16,7 +16,8 @@ from drl.dqn.spec import (
     resolve_checkpoint_path,
 )
 from drl_shared.spec import current_source_policy, feature_spec
-from drl_shared.state_space import action_id_to_position, build_feature_matrix, get_feature_window
+from drl_shared.state_space import action_id_to_position, get_feature_window
+from drl_shared.spec import SEQ_LEN as FEATURE_SEQ_LEN
 from strategy_backtester import backtest_strategy_metrics, paper_table3_reference
 
 STRATEGY_LABELS = {
@@ -129,29 +130,34 @@ def dqn_position_provider(
 
         sigma = np.asarray(rd["sigma"], dtype=float)
 
-        # Prefer precomputed features from .npz to ensure bit-exact consistency
-        # with training. Fall back to on-the-fly computation if not available.
-        npz_features = None
-        for rn_try in [rm for _, rm in round_masks]:
-            try:
-                from drl.dqn.spec import contract_data_path
-                npz_path = contract_data_path(rn_try, ticker)
-                if npz_path.exists():
-                    npz_data = np.load(npz_path, allow_pickle=True)
-                    npz_features = npz_data["features"]
-                    break
-            except Exception:
-                pass
-        if npz_features is not None and len(npz_features) == len(prices):
-            features = npz_features
-        else:
-            import warnings as _warnings
-            _warnings.warn(
-                f"Backtest for {ticker}: using on-the-fly features (npz not found or length mismatch). "
-                "This may cause minor numerical differences vs training.",
-                stacklevel=2,
+        # Load precomputed features from .npz (bit-exact with training).
+        # No fallback — npz must exist.
+        npz_features_by_round: dict[int, np.ndarray] = {}
+        npz_dates_global: pd.DatetimeIndex | None = None
+
+        for rn_try in sorted(set(rm for _, rm in round_masks)):
+            from drl.dqn.spec import contract_data_path
+            npz_path = contract_data_path(rn_try, ticker)
+            if npz_path.exists():
+                npz_data = np.load(npz_path, allow_pickle=True)
+                npz_features_by_round[rn_try] = npz_data["features"]
+                npz_dates_global = pd.to_datetime(npz_data["dates"])
+
+        if not npz_features_by_round:
+            raise FileNotFoundError(
+                f"No feature npz found for {ticker} in any round. "
+                "Features must be pre-generated with drl_shared/prepare_features.py."
             )
-            features = build_feature_matrix(prices, returns, sigma, feature_spec_override=feature_spec())
+
+        # Build baseline-prices index -> npz index mapping via date matching.
+        any_npz_dates = npz_dates_global
+        eval_dates_ts = pd.to_datetime(eval_dates[:eval_len])
+        date_to_npz = {d: i for i, d in enumerate(any_npz_dates)}
+        baseline_to_npz = {}
+        for i, ed in enumerate(eval_dates_ts):
+            npz_idx = date_to_npz.get(ed)
+            if npz_idx is not None:
+                baseline_to_npz[start + i] = npz_idx
 
         for mask, rn in round_masks:
             if rn not in cache:
@@ -181,7 +187,23 @@ def dqn_position_provider(
             valid = full_indices[(full_indices >= WARMUP) & (full_indices < len(prices))]
             if len(valid) == 0:
                 continue
-            states = np.stack([get_feature_window(features, int(full_idx)) for full_idx in valid]).astype(np.float32)
+
+            # Resolve features for this round (from npz only)
+            if rn not in npz_features_by_round:
+                raise FileNotFoundError(
+                    f"No feature npz for {ticker} r{rn}. "
+                    "Run drl_shared/prepare_features.py first."
+                )
+            round_features = npz_features_by_round[rn]
+            npz_indices = np.array([baseline_to_npz.get(int(v), -1) for v in valid], dtype=int)
+            ok = npz_indices >= FEATURE_SEQ_LEN
+            if not ok.any():
+                continue
+            states = np.stack([
+                get_feature_window(round_features, int(npz_indices[j]))
+                for j in range(len(valid)) if ok[j]
+            ]).astype(np.float32)
+            valid = valid[ok]
             action_ids = _batched_action_ids(
                 agent,
                 states,
@@ -208,6 +230,7 @@ def portfolio_metrics(
     sigma_tgt: float = SIGMA_TGT,
     excluded_contracts: list[str] | None = None,
     source_overrides: dict[str, str] | None = None,
+    save_audit_to: str | None = None,
 ) -> dict[str, float]:
     strategy_name = canonical_strategy_name(strategy)
     if strategy_name == "DQN":
@@ -237,6 +260,7 @@ def portfolio_metrics(
         position_provider=provider,
         excluded_contracts=excluded,
         source_overrides=overrides,
+        save_audit_to=save_audit_to,
     )
 
 

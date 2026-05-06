@@ -23,14 +23,15 @@ except ModuleNotFoundError as exc:  # pragma: no cover - environment-specific
 else:
     _TORCH_IMPORT_ERROR = None
 
+import drl.dqn.spec as _spec
 from drl.dqn.spec import (
     BATCH_SIZE,
     DQN_SPEC_VERSION,
     DISCRETE_ACTION_DIM,
     DROPOUT,
     EPS_SCHEDULE,
+    EPS_START,
     FEATURE_DIM,
-    GAMMA,
     GRAD_CLIP_MAX_NORM,
     HUBER_DELTA,
     LEAKY_RELU_SLOPE,
@@ -251,17 +252,19 @@ class DQNAgent:
         self.target_updates = 0
 
     def epsilon_for_step(self, step: int) -> float:
-        """3-stage piecewise-linear decay based on fraction of total training steps.
-
-        EPS_SCHEDULE = [(0.0, 0.30), (0.2, 0.05), (0.5, 0.01), (1.0, 0.005)]
-        """
-        p = step / float(self.total_steps)
-        for i in range(len(EPS_SCHEDULE) - 1):
-            p0, e0 = EPS_SCHEDULE[i]
-            p1, e1 = EPS_SCHEDULE[i + 1]
-            if p <= p1:
-                return e0 + (e1 - e0) * (p - p0) / (p1 - p0)
-        return EPS_SCHEDULE[-1][1]
+        """Look up epsilon from EPS_SCHEDULE based on fraction of total steps."""
+        frac = min(1.0, step / self.total_steps)
+        # Interpolate linearly between schedule waypoints
+        prev_frac, prev_eps = 0.0, EPS_SCHEDULE[0][1]
+        for sched_frac, sched_eps in EPS_SCHEDULE:
+            if frac <= sched_frac:
+                # Linear interpolation between prev and current waypoint
+                if sched_frac == prev_frac:
+                    return sched_eps
+                alpha = (frac - prev_frac) / (sched_frac - prev_frac)
+                return prev_eps + alpha * (sched_eps - prev_eps)
+            prev_frac, prev_eps = sched_frac, sched_eps
+        return prev_eps  # past end of schedule
 
     def act(self, state: np.ndarray, eps: float) -> int:
         if np.random.random() < eps:
@@ -270,6 +273,28 @@ class DQNAgent:
         with torch.no_grad():
             tensor = torch.from_numpy(np.asarray(state, dtype=np.float32)).unsqueeze(0).to(self.device)
             return int(self.q_net(tensor).argmax().item())
+
+    def act_batch(self, states: np.ndarray, eps: float) -> list[int]:
+        """Batched action selection: one forward pass for N states.
+
+        Each state independently gets epsilon-greedy exploration.
+        """
+        n = len(states)
+        # Determine which indices explore vs exploit
+        explore = np.random.random(n) < eps
+        actions = np.random.randint(DISCRETE_ACTION_DIM, size=n)
+
+        if not explore.all():
+            exploit_idx = np.where(~explore)[0]
+            self.q_net.eval()
+            with torch.no_grad():
+                tensor = torch.from_numpy(
+                    np.asarray(states, dtype=np.float32
+                )[exploit_idx]).to(self.device)
+                q_vals = self.q_net(tensor).argmax(dim=1).detach().cpu().numpy()
+            actions[exploit_idx] = q_vals
+
+        return actions.tolist()
 
     def predict_action_id(self, state: np.ndarray) -> int:
         return int(self.predict_action_ids(np.asarray(state, dtype=np.float32)[None, ...])[0])
@@ -297,7 +322,7 @@ class DQNAgent:
 
         next_actions = self.q_net(next_states).argmax(1).detach()
         next_q = self.target(next_states).gather(1, next_actions.unsqueeze(1)).squeeze(1).detach()
-        target_q = rewards + (1.0 - dones) * GAMMA * next_q
+        target_q = rewards + (1.0 - dones) * _spec.GAMMA * next_q
 
         current_q = self.q_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
         if self.use_huber:

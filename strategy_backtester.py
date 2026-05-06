@@ -17,6 +17,7 @@ def backtest_strategy_metrics(
     port_vol_target: float | None = None,
     port_bridge: str = "constant_posthoc",
     round_output: bool = True,
+    save_audit_to: str | None = None,
 ) -> dict[str, float]:
     excluded = EXCLUDED_CONTRACTS if excluded_contracts is None else excluded_contracts
     overrides = SOURCE_OVERRIDES if source_overrides is None else source_overrides
@@ -29,6 +30,7 @@ def backtest_strategy_metrics(
         port_vol_target=port_vol_target,
         port_bridge=port_bridge,
         position_provider=position_provider,
+        save_audit_to=save_audit_to,
     )
     if round_output:
         return {name: round(metric_map[name], 3) for name in METRIC_NAMES}

@@ -40,14 +40,14 @@ DISCRETE_ACTION_DIM = len(DISCRETE_ACTION_VALUES)
 
 # Paper Table 1 hyperparameters
 LR = 0.0001
-GAMMA = 0.3
+GAMMA = 0.6  # selected via 3-gamma comparison (0.5/0.6/0.7) on Forex r1+r2
 BATCH_SIZE = 64
 MEMORY_SIZE = 5000
 TAU = 1000
-EPS_START = 0.3
-EPS_END = 0.05
+EPS_START = 1.0
+EPS_END = 0.01
 EPS_DECAY_STEPS = "dynamic"  # legacy; superseded by EPS_SCHEDULE + total_steps percentage
-EPISODES = 200
+EPISODES = 100
 MAX_STEPS_PER_EP = 5_000  # non-binding safety guardrail for finite datasets
 SIGMA_TGT = SIGMA_TGT_DEFAULT
 LEAKY_RELU_SLOPE = 0.01
@@ -59,19 +59,30 @@ UPDATE_FREQ = 4  # learn every N transitions in interleaved training
 WARMUP = SEQ_LEN
 
 # ── Memory (percentage-based) ──
-MEMORY_RATIO = 0.2             # buffer = 20% of total expected transitions
+MEMORY_RATIO = 0.5             # buffer = max(3000, 50% of 1 episode steps)
 MEMORY_SIZE_MIN = 5000         # floor (paper default)
 REPLAY_MODE = "uniform"        # "uniform" (paper default) | "action_balanced" | "reward_stratified"
 REPLAY_DIAG_INTERVAL = 5       # log replay diagnostics every N cycles
 
-# ── Epsilon decay (warmup + decay, percentage-based) ──
-# Each tuple: (fraction_of_total_training_steps, epsilon_value)
-# Warmup 10% at eps=0.30, then decay 0.30→0.10 over 20%, then flat at 0.10
+# ── Epsilon decay (3-phase, cycle-based) ──
+# Phase 1: ε=1.0 for first 5000 transitions (fill replay buffer with random experience)
+# Phase 2: ε=0.3→0.1 over cycles 1-20 (structured exploration)
+# Phase 3: ε=0.1→0.01 over cycles 20-50 (fine-tuning)
+# Phase 4: ε=0.01 fixed for cycles 50-100 (exploitation)
+#
+# Schedule is defined as (fraction_of_total_cycles, epsilon_value) pairs.
+# With EPISODES=100:
+#   Phase 1 is handled in training loop (first 5000 transitions)
+#   Phase 2: 0%-20% of cycles, ε 0.3→0.1
+#   Phase 3: 20%-50% of cycles, ε 0.1→0.01
+#   Phase 4: 50%-100% of cycles, ε 0.01 fixed
+EPS_BUFFER_FILL = 5000          # pure random transitions before learning starts
 EPS_SCHEDULE = [
-    (0.00, 0.300),             # start:  eps = 0.30
-    (0.10, 0.300),             # 10%:   warmup ends, still 0.30
-    (0.30, 0.100),             # 30%:   decay from 0.30 → 0.10
-    (1.00, 0.100),             # 100%:  stays at 0.10
+    (0.00, 0.300),             # cycle 0:   ε = 0.30 (after buffer fill)
+    (0.20, 0.100),             # cycle 20:  ε decayed to 0.10
+    (0.50, 0.030),             # cycle 50:  ε decayed to 0.03
+    (0.90, 0.010),             # cycle 90:  ε decayed to 0.01
+    (1.00, 0.010),             # cycle 100: ε stays at 0.01
 ]
 
 # ── Stability enhancements ──
