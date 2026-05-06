@@ -19,8 +19,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from baseline_run import load_contracts, compute_portfolio_returns
-from vol_scaling import get_portfolio_bridge
+from baseline_run import load_contracts, compute_portfolio_return_series
+from drl.dqn.figures.figure_data import load_scaled_ensemble_series, scale_return_series
 
 ASSETS = ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']
 ASSET_PATH_MAP = {
@@ -43,18 +43,8 @@ DPI = 300
 def load_dqn_ensemble_returns(asset_name):
     path_name = ASSET_PATH_MAP[asset_name]
     npz_path = Path(f'drl/dqn/reports/ensemble_table2/{path_name}/top5_ensemble_R.npz')
-    
-    if not npz_path.exists():
-        raise ValueError(f"DQN ensemble data not found at {npz_path}")
-    
-    data = np.load(npz_path, allow_pickle=True)
-    returns = data['portfolio_returns']
-    dates = data['dates']
-    
-    scaler = get_portfolio_bridge('constant_posthoc', PORT_VOL_TARGET)
-    returns_scaled = scaler(returns)
-    
-    return dates, returns_scaled
+    series = load_scaled_ensemble_series(npz_path, PORT_VOL_TARGET)
+    return series.index, series.values
 
 
 def compute_long_only_returns(asset_name):
@@ -64,16 +54,9 @@ def compute_long_only_returns(asset_name):
         test_end=TEST_END
     )
     
-    returns = compute_portfolio_returns(raw_data, 'Long', SIGMA_TGT)
-    dates = raw_data[0]['dates']
-    min_len = min(len(returns), len(dates))
-    returns = returns[:min_len]
-    dates = dates[:min_len]
-    
-    scaler = get_portfolio_bridge('constant_posthoc', PORT_VOL_TARGET)
-    returns_scaled = scaler(returns)
-    
-    return dates, returns_scaled
+    series = compute_portfolio_return_series(raw_data, 'Long', SIGMA_TGT)
+    series = scale_return_series(series, PORT_VOL_TARGET)
+    return series.index, series.values
 
 
 def compute_rolling_sharpe(returns, window=252):

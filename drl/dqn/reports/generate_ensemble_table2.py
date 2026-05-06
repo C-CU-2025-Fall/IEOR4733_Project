@@ -302,7 +302,7 @@ def compute_portfolio_returns(
         raise ValueError(f"No valid contracts for {asset_name} r{round_num}")
     
     # Align and compute portfolio returns (variable_n = mean across contracts)
-    df = pd.DataFrame(contract_series).T
+    df = pd.DataFrame(contract_series).T.sort_index()
     portfolio = df.mean(axis=1)
     
     return portfolio, n_contracts
@@ -338,7 +338,7 @@ def run_asset_ensemble_backtest(
     port_r2, n2 = compute_portfolio_returns(asset_name, 2, models_r2, sigma_tgt)
     
     # Concatenate periods
-    portfolio_full = pd.concat([port_r1, port_r2])
+    portfolio_full = pd.concat([port_r1, port_r2]).sort_index()
     n_contracts_avg = (n1 + n2) / 2
     
     print(f"\n  Combined: {len(portfolio_full)} days, avg {n_contracts_avg:.1f} contracts")

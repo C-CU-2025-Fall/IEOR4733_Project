@@ -181,9 +181,9 @@ def compute_portfolio_return_series(raw_data, strat, sigma_tgt, aggregation_mode
         series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
     df_all = pd.DataFrame(series)
     if aggregation_mode == 'dropna':
-        return df_all.T.dropna().mean(axis=1)
+        return df_all.T.dropna().mean(axis=1).sort_index()
     if aggregation_mode == 'variable_n':
-        return df_all.T.mean(axis=1)
+        return df_all.T.mean(axis=1).sort_index()
     raise ValueError(f'Unknown aggregation_mode: {aggregation_mode}')
 
 
@@ -496,21 +496,12 @@ def compute_contract_returns_from_positions(rd, positions, sigma_tgt, detail=Fal
 def compute_portfolio_returns(raw_data, strat, sigma_tgt,
                               aggregation_mode='variable_n'):
     """Eq 13: R_port = (1/N) × Σ R_i  (equal-weight average)."""
-    series = []
-    for rd in raw_data:
-        Rt = compute_contract_returns(rd, strat, sigma_tgt)
-        start, t1, dates = rd['start'], rd['t1'], rd['dates']
-        slc = Rt[start:t1 + 1]
-        series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
-    df_all = pd.DataFrame(series)
-    if aggregation_mode == 'dropna':
-        port = df_all.T.dropna().mean(axis=1)
-    elif aggregation_mode == 'variable_n':
-        # Average only over contracts with data on each date. This preserves
-        # dates across exchanges with different holiday calendars.
-        port = df_all.T.mean(axis=1)
-    else:
-        raise ValueError(f'Unknown aggregation_mode: {aggregation_mode}')
+    port = compute_portfolio_return_series(
+        raw_data,
+        strat,
+        sigma_tgt,
+        aggregation_mode=aggregation_mode,
+    )
     return port.values
 
 
@@ -534,16 +525,16 @@ def compute_portfolio_returns_from_position_provider(
         series.append(pd.Series(slc[:len(dates)], index=dates[:len(slc)]))
     df_all = pd.DataFrame(series)
     if aggregation_mode == 'dropna':
-        port = df_all.T.dropna().mean(axis=1)
+        port = df_all.T.dropna().mean(axis=1).sort_index()
     elif aggregation_mode == 'variable_n':
-        port = df_all.T.mean(axis=1)
+        port = df_all.T.mean(axis=1).sort_index()
     else:
         raise ValueError(f'Unknown aggregation_mode: {aggregation_mode}')
     if save_audit_to is not None and series:
         Path(save_audit_to).parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(save_audit_to,
             portfolio_returns=port.values,
-            dates=np.array(series[0].index, dtype=str))
+            dates=np.array(port.index, dtype=str))
     return port.values
 
 
