@@ -20,6 +20,7 @@ from pathlib import Path
 
 from baseline_run import load_contracts, compute_portfolio_return_series
 from drl.dqn.figures.figure_data import load_scaled_ensemble_series, scale_return_series
+from drl_shared.spec import current_source_policy
 
 ASSETS = ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']
 ASSET_PATH_MAP = {
@@ -38,6 +39,7 @@ DQN_COLOR = '#1f77b4'
 LONG_COLOR = '#ff7f0e'
 DPI = 300
 FIGSIZE = (16, 10)
+SOURCE_POLICY = current_source_policy()
 
 
 def load_dqn_ensemble_returns(asset_name):
@@ -52,7 +54,9 @@ def compute_long_only_returns(asset_name):
     raw_data = load_contracts(
         asset_name,
         test_start=TEST_START,
-        test_end=TEST_END
+        test_end=TEST_END,
+        excluded_contracts=SOURCE_POLICY['excluded_contracts'],
+        source_overrides=SOURCE_POLICY['source_overrides'],
     )
     
     series = compute_portfolio_return_series(raw_data, 'Long', SIGMA_TGT)

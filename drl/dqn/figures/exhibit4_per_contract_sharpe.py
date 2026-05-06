@@ -37,7 +37,7 @@ from baseline_run import (
 from drl.dqn.model import DQNAgent
 from drl.dqn.spec import contract_data_path, resolve_checkpoint_path
 from drl_shared.state_space import action_id_to_position, get_feature_window
-from drl_shared.spec import SEQ_LEN as FEATURE_SEQ_LEN
+from drl_shared.spec import SEQ_LEN as FEATURE_SEQ_LEN, current_source_policy
 
 # Configuration
 ASSETS = ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']
@@ -52,6 +52,7 @@ SIGMA_TGT = 0.058
 TEST_START = '2011-01-01'
 TEST_END = '2019-12-31'
 ROUND_NUM = 1  # Use r1-trained models per task
+SOURCE_POLICY = current_source_policy()
 
 # Paths
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -271,7 +272,9 @@ def load_or_compute_all_sharpes(
         raw_data = load_contracts(
             asset,
             test_start=TEST_START,
-            test_end=TEST_END
+            test_end=TEST_END,
+            excluded_contracts=SOURCE_POLICY['excluded_contracts'],
+            source_overrides=SOURCE_POLICY['source_overrides'],
         )
         
         if not raw_data:
