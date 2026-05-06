@@ -1,0 +1,39 @@
+======================================================================
+DQN Asset-Class Training — Equity Index — r1
+Train: 2005-01-01 ~ 2010-12-31
+Test : 2011-01-01 ~ 2015-12-31
+Contracts: 11/11 loaded | Device: cuda
+Val envs: 11/11 contracts
+Model bundle: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Equity_Index/r1/bp1_20260506T174838_s45
+State spec: structural_38_close_norm_9d
+DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, Dueling DQN; target hard-copy every 1000 learn steps; dropout 0.2
+Validation: 10% split, early stopping patience=20, epsilon: 0.30→0.010 over 1,226,700 steps, epsilon_val=0.0
+--- Env construction ---
+  CA: train_dates=[2005-01-03T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1388] (1136 steps)
+  CA: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1328..1542] (214 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1542..2817]
+  EN: train_dates=[2005-01-03T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1360] (1108 steps)
+  EN: val_dates=[2010-03-03T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1300..1512] (212 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1512..2773]
+  ER: train_dates=[2005-01-03T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1361] (1109 steps)
+  ER: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1301..1513] (212 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1513..2794]
+  ES: train_dates=[2005-01-03T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1361] (1109 steps)
+  ES: val_dates=[2010-03-03T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1301..1513] (212 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1513..2774]
+  LX: train_dates=[2005-01-04T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1370] (1118 steps)
+  LX: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1310..1523] (213 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1523..2790]
+  MD: train_dates=[2005-01-03T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  MD: val_dates=[2010-03-03T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1511] (212 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1511..2771]
+  SC: train_dates=[2005-01-03T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1360] (1108 steps)
+  SC: val_dates=[2010-03-03T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1300..1512] (212 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1512..2773]
+  SP: train_dates=[2005-01-03T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  SP: val_dates=[2010-03-03T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1511] (212 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1511..2772]
+  XU: train_dates=[2005-01-03T00:00:00.000000..2010-12-30T00:00:00.000000] train_env=[252..1380] (1128 steps)
+  XU: val_dates=[2010-03-04T00:00:00.000000..2010-12-30T00:00:00.000000] val_env=[1320..1533] (213 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1533..2800]
+  XX: train_dates=[2005-01-03T00:00:00.000000..2010-12-30T00:00:00.000000] train_env=[252..1380] (1128 steps)
+  XX: val_dates=[2010-03-04T00:00:00.000000..2010-12-30T00:00:00.000000] val_env=[1320..1533] (213 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1533..2800]
+  YM: train_dates=[2005-01-03T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1361] (1109 steps)
+  YM: val_dates=[2010-03-03T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1301..1513] (212 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1513..2774]
+--- Data sanity: all contracts OK ---
+Agent: DuelingDQNLSTM | params=31,876 (trainable=31,876)
+Device: cuda | CUDA available: True
+GPU: NVIDIA GB10 | mem=130.7GB
+--- Preflight: all envs OK (reset + step + reward) ---
+======================================================================
