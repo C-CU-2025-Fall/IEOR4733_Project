@@ -113,17 +113,17 @@ python3 drl/dqn/reports/generate_ensemble_table2.py
 | **Equity Index** | E(R) | 0.629 | -0.345 | -0.974 |
 | | std(R) | 0.970 | 0.970 | 0.000 |
 | | Sharpe | 0.648 | -0.356 | -1.004 |
-| | MDD | 0.161 | 0.470 | +0.309 |
-| | Calmar | 0.381 | -0.077 | -0.458 |
+| | MDD | 0.161 | 0.460 | +0.299 |
+| | Calmar | 0.381 | -0.079 | -0.460 |
 | **Fixed Income** | E(R) | 0.908 | 0.004 | -0.904 |
 | | std(R) | 0.972 | 0.970 | -0.002 |
 | | Sharpe | 0.935 | 0.004 | -0.931 |
-| | MDD | 0.062 | 0.448 | +0.386 |
+| | MDD | 0.062 | 0.490 | +0.428 |
 | | Calmar | 0.543 | 0.002 | -0.541 |
 | **Forex** | E(R) | 0.528 | -1.522 | -2.050 |
 | | std(R) | 0.967 | 0.970 | +0.003 |
 | | Sharpe | 0.546 | -1.569 | -2.115 |
-| | MDD | 0.183 | 1.591 | +1.408 |
+| | MDD | 0.183 | 1.553 | +1.370 |
 | | Calmar | 0.313 | 0.000 | -0.313 |
 
 Full results in `drl/dqn/reports/ensemble_table2/table2_metrics.json`
@@ -153,7 +153,7 @@ std(R) aligned to 0.97. Our Sharpe ratios are negative because our models underp
 
 Our MDD/Calmar values diverge significantly from paper because:
 - Our strategies have higher realized volatility than paper
-- MDD scales with volatility — paper reports MDD ~0.04-0.18, ours are 0.37-1.59
+- MDD scales with volatility — paper reports MDD ~0.04-0.18, ours are 0.37-1.55
 - Calmar = CAGR/MDD becomes small/negative when MDD is large
 
 These metrics should be interpreted cautiously; Sharpe ratio remains the most reliable comparison metric.

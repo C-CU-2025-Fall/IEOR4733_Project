@@ -19,8 +19,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from baseline_run import load_contracts, compute_portfolio_returns
-from vol_scaling import get_portfolio_bridge
+from baseline_run import load_contracts, compute_portfolio_return_series
+from drl.dqn.figures.figure_data import load_scaled_ensemble_series, scale_return_series
+from drl_shared.spec import current_source_policy
 
 ASSETS = ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']
 ASSET_PATH_MAP = {
@@ -38,42 +39,28 @@ R1_R2_BOUNDARY = '2016-01-01'
 DQN_COLOR = '#1f77b4'
 LONG_COLOR = '#ff7f0e'
 DPI = 300
+SOURCE_POLICY = current_source_policy()
 
 
 def load_dqn_ensemble_returns(asset_name):
     path_name = ASSET_PATH_MAP[asset_name]
     npz_path = Path(f'drl/dqn/reports/ensemble_table2/{path_name}/top5_ensemble_R.npz')
-    
-    if not npz_path.exists():
-        raise ValueError(f"DQN ensemble data not found at {npz_path}")
-    
-    data = np.load(npz_path, allow_pickle=True)
-    returns = data['portfolio_returns']
-    dates = data['dates']
-    
-    scaler = get_portfolio_bridge('constant_posthoc', PORT_VOL_TARGET)
-    returns_scaled = scaler(returns)
-    
-    return dates, returns_scaled
+    series = load_scaled_ensemble_series(npz_path, PORT_VOL_TARGET)
+    return series.index, series.values
 
 
 def compute_long_only_returns(asset_name):
     raw_data = load_contracts(
         asset_name,
         test_start=TEST_START,
-        test_end=TEST_END
+        test_end=TEST_END,
+        excluded_contracts=SOURCE_POLICY['excluded_contracts'],
+        source_overrides=SOURCE_POLICY['source_overrides'],
     )
     
-    returns = compute_portfolio_returns(raw_data, 'Long', SIGMA_TGT)
-    dates = raw_data[0]['dates']
-    min_len = min(len(returns), len(dates))
-    returns = returns[:min_len]
-    dates = dates[:min_len]
-    
-    scaler = get_portfolio_bridge('constant_posthoc', PORT_VOL_TARGET)
-    returns_scaled = scaler(returns)
-    
-    return dates, returns_scaled
+    series = compute_portfolio_return_series(raw_data, 'Long', SIGMA_TGT)
+    series = scale_return_series(series, PORT_VOL_TARGET)
+    return series.index, series.values
 
 
 def compute_rolling_sharpe(returns, window=252):
@@ -87,16 +74,32 @@ def compute_rolling_sharpe(returns, window=252):
     return rolling_sharpe.values
 
 
-def compute_drawdown(returns):
+def asset_contract_count(asset_name):
+    raw_data = load_contracts(
+        asset_name,
+        test_start=TEST_START,
+        test_end=TEST_END,
+        excluded_contracts=SOURCE_POLICY['excluded_contracts'],
+        source_overrides=SOURCE_POLICY['source_overrides'],
+    )
+    return len(raw_data)
+
+
+def compute_drawdown(returns, initial_wealth):
     """
-    cum = np.cumsum(R)
-    running_max = np.maximum.accumulate(cum)
-    drawdown = (cum - running_max) / (running_max + 1e-10) * 100
+    Use the same additive wealth convention as metrics.py:
+    wealth = N_contracts + cumsum(R_port).
     """
-    cum = np.cumsum(returns)
-    running_max = np.maximum.accumulate(cum)
-    drawdown = (cum - running_max) / (running_max + 1e-10) * 100
-    return drawdown
+    values = np.asarray(returns, dtype=float)
+    values = values[np.isfinite(values)]
+    if len(values) == 0:
+        return np.asarray([], dtype=float)
+
+    wealth = float(initial_wealth) + np.cumsum(values)
+    running_peak = np.maximum.accumulate(wealth)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        drawdown = (wealth - running_peak) / running_peak * 100
+    return np.nan_to_num(drawdown, nan=0.0, posinf=0.0, neginf=0.0)
 
 
 def create_figure_rolling_sharpe():
@@ -126,7 +129,7 @@ def create_figure_rolling_sharpe():
         ax.plot(dqn_dt, dqn_sharpe, color=DQN_COLOR, linewidth=1.5, label='DQN Top-5 Ensemble')
         ax.plot(long_dt, long_sharpe, color=LONG_COLOR, linewidth=1.5, linestyle='--', label='Long Only')
         
-        ax.axhline(y=0, color='black', linestyle='-', linewidth=0.8, alpha=0.5)
+        ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.4)
         boundary_date = pd.Timestamp(R1_R2_BOUNDARY)
         ax.axvline(x=boundary_date, color='gray', linestyle=':', linewidth=1, alpha=0.7)
         
@@ -134,7 +137,6 @@ def create_figure_rolling_sharpe():
         ax.set_xlabel('Date', fontsize=10)
         ax.set_ylabel('Rolling 252-Day Sharpe', fontsize=10)
         ax.legend(loc='upper left', fontsize=9)
-        ax.grid(True, alpha=0.3)
         ax.tick_params(axis='both', labelsize=9)
         ax.tick_params(axis='x', rotation=45)
     
@@ -157,19 +159,20 @@ def create_figure_drawdown():
         ax = axes[row, col]
         
         print(f"  Processing drawdown for {asset}...")
+        n_contracts = asset_contract_count(asset)
         
         dqn_dates, dqn_returns = load_dqn_ensemble_returns(asset)
         dqn_dt = pd.to_datetime(dqn_dates)
-        dqn_drawdown = compute_drawdown(dqn_returns)
+        dqn_drawdown = compute_drawdown(dqn_returns, n_contracts)
         
         long_dates, long_returns = compute_long_only_returns(asset)
         long_dt = pd.to_datetime(long_dates)
-        long_drawdown = compute_drawdown(long_returns)
+        long_drawdown = compute_drawdown(long_returns, n_contracts)
         
-        ax.fill_between(dqn_dt, dqn_drawdown, 0, color=DQN_COLOR, alpha=0.4, label='DQN Top-5 Ensemble')
-        ax.plot(dqn_dt, dqn_drawdown, color=DQN_COLOR, linewidth=1.0)
-        ax.fill_between(long_dt, long_drawdown, 0, color=LONG_COLOR, alpha=0.4, label='Long Only')
-        ax.plot(long_dt, long_drawdown, color=LONG_COLOR, linewidth=1.0, linestyle='--')
+        ax.fill_between(dqn_dt, dqn_drawdown, 0, color=DQN_COLOR, alpha=0.12)
+        ax.plot(dqn_dt, dqn_drawdown, color=DQN_COLOR, linewidth=1.3, label='DQN Top-5 Ensemble')
+        ax.fill_between(long_dt, long_drawdown, 0, color=LONG_COLOR, alpha=0.10)
+        ax.plot(long_dt, long_drawdown, color=LONG_COLOR, linewidth=1.3, linestyle='--', label='Long Only')
         
         boundary_date = pd.Timestamp(R1_R2_BOUNDARY)
         ax.axvline(x=boundary_date, color='gray', linestyle=':', linewidth=1, alpha=0.7)
@@ -178,10 +181,9 @@ def create_figure_drawdown():
         ax.set_xlabel('Date', fontsize=10)
         ax.set_ylabel('Drawdown (%)', fontsize=10)
         ax.legend(loc='lower left', fontsize=9)
-        ax.grid(True, alpha=0.3)
         ax.tick_params(axis='both', labelsize=9)
         ax.tick_params(axis='x', rotation=45)
-        ax.set_ylim(bottom=min(dqn_drawdown.min(), long_drawdown.min()) * 1.1, top=5)
+        ax.set_ylim(bottom=min(dqn_drawdown.min(), long_drawdown.min()) * 1.1, top=0)
     
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     return fig
@@ -307,7 +309,6 @@ def create_figure_yearly_bars():
         ax.set_xticks(x)
         ax.set_xticklabels(years, fontsize=9)
         ax.legend(loc='upper right', fontsize=9)
-        ax.grid(True, alpha=0.3, axis='y')
         ax.tick_params(axis='both', labelsize=9)
     
     plt.tight_layout(rect=[0, 0, 1, 0.96])
