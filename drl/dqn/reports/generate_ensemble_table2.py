@@ -23,11 +23,11 @@ import torch
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
-from config import ASSET_CLASSES, BP, PAPER_TABLE2, METRIC_NAMES, SOURCE_OVERRIDES
+from config import BP, PAPER_TABLE2, METRIC_NAMES
 from baseline_run import load_contracts, compute_contract_returns_from_positions
 from drl.dqn.model import DQNAgent
 from drl.dqn.spec import RETRAIN_ROUNDS, SIGMA_TGT, WARMUP, contract_data_path
-from drl_shared.spec import SEQ_LEN, SIGMA_TGT_DEFAULT
+from drl_shared.spec import SEQ_LEN, SIGMA_TGT_DEFAULT, current_source_policy, universe_tickers
 from drl_shared.state_space import action_id_to_position, get_feature_window
 from vol_scaling import get_portfolio_bridge
 from metrics import compute_metrics
@@ -56,6 +56,10 @@ TOP5_SEEDS = {
         "r2": [47, 45, 48, 49, 50],
     },
 }
+
+SOURCE_POLICY = current_source_policy()
+SOURCE_OVERRIDES = dict(SOURCE_POLICY["source_overrides"])
+EXCLUDED_CONTRACTS = set(SOURCE_POLICY["excluded_contracts"])
 
 
 def find_latest_bundle(asset_slug: str, round_name: str, seed: int) -> Path | None:
@@ -280,7 +284,11 @@ def compute_portfolio_returns(
     Returns:
         (portfolio_return_series, n_contracts)
     """
-    tickers = ASSET_CLASSES.get(asset_name, [])
+    tickers = [
+        ticker
+        for ticker in universe_tickers(asset_name)
+        if ticker not in EXCLUDED_CONTRACTS
+    ]
     contract_series = []
     n_contracts = 0
     
@@ -302,7 +310,7 @@ def compute_portfolio_returns(
         raise ValueError(f"No valid contracts for {asset_name} r{round_num}")
     
     # Align and compute portfolio returns (variable_n = mean across contracts)
-    df = pd.DataFrame(contract_series).T
+    df = pd.DataFrame(contract_series).T.sort_index()
     portfolio = df.mean(axis=1)
     
     return portfolio, n_contracts
@@ -338,7 +346,7 @@ def run_asset_ensemble_backtest(
     port_r2, n2 = compute_portfolio_returns(asset_name, 2, models_r2, sigma_tgt)
     
     # Concatenate periods
-    portfolio_full = pd.concat([port_r1, port_r2])
+    portfolio_full = pd.concat([port_r1, port_r2]).sort_index()
     n_contracts_avg = (n1 + n2) / 2
     
     print(f"\n  Combined: {len(portfolio_full)} days, avg {n_contracts_avg:.1f} contracts")

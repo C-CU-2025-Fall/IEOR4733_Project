@@ -18,8 +18,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from baseline_run import load_contracts, compute_portfolio_returns
-from vol_scaling import get_portfolio_bridge
+from baseline_run import load_contracts, compute_portfolio_return_series
+from drl.dqn.figures.figure_data import load_scaled_ensemble_series, scale_return_series
+from drl_shared.spec import current_source_policy
 
 ASSETS = ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']
 ASSET_PATH_MAP = {
@@ -38,45 +39,29 @@ DQN_COLOR = '#1f77b4'
 LONG_COLOR = '#ff7f0e'
 DPI = 300
 FIGSIZE = (16, 10)
+SOURCE_POLICY = current_source_policy()
 
 
 def load_dqn_ensemble_returns(asset_name):
     """Load DQN ensemble returns from the corrected ensemble_table2 path."""
     path_name = ASSET_PATH_MAP[asset_name]
     npz_path = Path(f'drl/dqn/reports/ensemble_table2/{path_name}/top5_ensemble_R.npz')
-    
-    if not npz_path.exists():
-        raise ValueError(f"DQN ensemble data not found at {npz_path}")
-    
-    data = np.load(npz_path, allow_pickle=True)
-    returns = data['portfolio_returns']
-    dates = data['dates']
-    
-    # Apply port_vol_target scaling using constant_posthoc method
-    scaler = get_portfolio_bridge('constant_posthoc', PORT_VOL_TARGET)
-    returns_scaled = scaler(returns)
-    
-    return dates, returns_scaled
+    series = load_scaled_ensemble_series(npz_path, PORT_VOL_TARGET)
+    return series.index, series.values
 
 
 def compute_long_only_returns(asset_name):
     raw_data = load_contracts(
         asset_name,
         test_start=TEST_START,
-        test_end=TEST_END
+        test_end=TEST_END,
+        excluded_contracts=SOURCE_POLICY['excluded_contracts'],
+        source_overrides=SOURCE_POLICY['source_overrides'],
     )
     
-    returns = compute_portfolio_returns(raw_data, 'Long', SIGMA_TGT)
-    dates = raw_data[0]['dates']
-    min_len = min(len(returns), len(dates))
-    returns = returns[:min_len]
-    dates = dates[:min_len]
-    
-    # Apply same port_vol_target scaling for fair comparison
-    scaler = get_portfolio_bridge('constant_posthoc', PORT_VOL_TARGET)
-    returns_scaled = scaler(returns)
-    
-    return dates, returns_scaled
+    series = compute_portfolio_return_series(raw_data, 'Long', SIGMA_TGT)
+    series = scale_return_series(series, PORT_VOL_TARGET)
+    return series.index, series.values
 
 
 def compute_cumulative_returns(returns):
@@ -84,7 +69,7 @@ def compute_cumulative_returns(returns):
 
 
 def create_figure():
-    fig, axes = plt.subplots(2, 3, figsize=FIGSIZE, dpi=DPI)
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10), dpi=DPI)
     fig.suptitle(
         'Figure 1: Cumulative Trade Returns — DQN Top-5 Ensemble vs Long Only (2011–2019)',
         fontsize=14,
@@ -92,12 +77,9 @@ def create_figure():
         y=0.98
     )
     
-    all_dqn_returns = {}
-    all_long_returns = {}
-    
     for idx, asset in enumerate(ASSETS):
-        row = idx // 3
-        col = idx % 3
+        row = idx // 2
+        col = idx % 2
         ax = axes[row, col]
         
         print(f"Processing {asset}...")
@@ -110,9 +92,6 @@ def create_figure():
         long_dt = pd.to_datetime(long_dates)
         long_cum = compute_cumulative_returns(long_returns)
         
-        all_dqn_returns[asset] = (dqn_dt, dqn_returns)
-        all_long_returns[asset] = (long_dt, long_returns)
-        
         ax.plot(dqn_dt, dqn_cum, color=DQN_COLOR, linewidth=1.5, label='DQN Top-5 Ensemble')
         ax.plot(long_dt, long_cum, color=LONG_COLOR, linewidth=1.5, linestyle='--', label='Long Only')
         
@@ -121,52 +100,10 @@ def create_figure():
         
         ax.set_title(asset, fontsize=11, fontweight='bold')
         ax.set_xlabel('Date', fontsize=10)
-        ax.set_ylabel('Cumulative Return (σ = 0.97)', fontsize=10)
+        ax.set_ylabel('Cumulative Return ($\\sigma$ = 0.97)', fontsize=10)
         ax.legend(loc='upper left', fontsize=9)
-        ax.grid(True, alpha=0.3)
         ax.tick_params(axis='both', labelsize=9)
         ax.tick_params(axis='x', rotation=45)
-    
-    ax_all = axes[1, 1]
-    print("Processing All Portfolio...")
-    
-    all_dqn_aligned = []
-    all_long_aligned = []
-    
-    for asset in ASSETS:
-        dqn_dt, dqn_ret = all_dqn_returns[asset]
-        long_dt, long_ret = all_long_returns[asset]
-        
-        dqn_series = pd.Series(dqn_ret, index=dqn_dt)
-        long_series = pd.Series(long_ret, index=long_dt)
-        
-        all_dqn_aligned.append(dqn_series)
-        all_long_aligned.append(long_series)
-    
-    dqn_df = pd.concat(all_dqn_aligned, axis=1, sort=True)
-    long_df = pd.concat(all_long_aligned, axis=1, sort=True)
-    
-    dqn_avg = dqn_df.mean(axis=1)
-    long_avg = long_df.mean(axis=1)
-    
-    dqn_all_cum = compute_cumulative_returns(dqn_avg.values)
-    long_all_cum = compute_cumulative_returns(long_avg.values)
-
-    ax_all.plot(dqn_avg.index, dqn_all_cum, color=DQN_COLOR, linewidth=1.5, label='DQN Top-5 Ensemble')
-    ax_all.plot(long_avg.index, long_all_cum, color=LONG_COLOR, linewidth=1.5, linestyle='--', label='Long Only')
-    
-    boundary_date = pd.Timestamp(R1_R2_BOUNDARY)
-    ax_all.axvline(x=boundary_date, color='gray', linestyle=':', linewidth=1, alpha=0.7)
-    
-    ax_all.set_title('All Portfolio', fontsize=11, fontweight='bold')
-    ax_all.set_xlabel('Date', fontsize=10)
-    ax_all.set_ylabel('Cumulative Return (σ = 0.97)', fontsize=10)
-    ax_all.legend(loc='upper left', fontsize=9)
-    ax_all.grid(True, alpha=0.3)
-    ax_all.tick_params(axis='both', labelsize=9)
-    ax_all.tick_params(axis='x', rotation=45)
-    
-    axes[1, 2].axis('off')
     
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     

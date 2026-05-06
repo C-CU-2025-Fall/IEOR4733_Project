@@ -37,7 +37,7 @@ from baseline_run import (
 from drl.dqn.model import DQNAgent
 from drl.dqn.spec import contract_data_path, resolve_checkpoint_path
 from drl_shared.state_space import action_id_to_position, get_feature_window
-from drl_shared.spec import SEQ_LEN as FEATURE_SEQ_LEN
+from drl_shared.spec import SEQ_LEN as FEATURE_SEQ_LEN, current_source_policy
 
 # Configuration
 ASSETS = ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']
@@ -52,6 +52,7 @@ SIGMA_TGT = 0.058
 TEST_START = '2011-01-01'
 TEST_END = '2019-12-31'
 ROUND_NUM = 1  # Use r1-trained models per task
+SOURCE_POLICY = current_source_policy()
 
 # Paths
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -271,7 +272,9 @@ def load_or_compute_all_sharpes(
         raw_data = load_contracts(
             asset,
             test_start=TEST_START,
-            test_end=TEST_END
+            test_end=TEST_END,
+            excluded_contracts=SOURCE_POLICY['excluded_contracts'],
+            source_overrides=SOURCE_POLICY['source_overrides'],
         )
         
         if not raw_data:
@@ -364,10 +367,7 @@ def create_boxplot(all_sharpes: Dict[str, Dict]):
             data_to_plot,
             labels=labels,
             patch_artist=True,
-            showmeans=True,
-            meanline=True,
             medianprops=dict(color='black', linewidth=1.5),
-            meanprops=dict(color='red', linestyle='--', linewidth=1.5),
         )
         
         # Color boxes
@@ -378,8 +378,7 @@ def create_boxplot(all_sharpes: Dict[str, Dict]):
         # Styling
         ax.set_title(asset, fontsize=11, fontweight='bold')
         ax.set_ylabel('Annualized Sharpe', fontsize=10)
-        ax.grid(True, alpha=0.3, axis='y')
-        ax.axhline(y=0, color='gray', linestyle='-', linewidth=0.5, alpha=0.5)
+        ax.axhline(y=0, color='gray', linestyle='-', linewidth=0.5, alpha=0.4)
         
         # Rotate x labels for seeds
         if len(labels) > 1:
