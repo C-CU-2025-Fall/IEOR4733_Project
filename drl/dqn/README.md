@@ -2,50 +2,106 @@
 
 This folder contains the DQN-only part of the active DRL stack.
 
-## Experiment Setup
+## §1 Experiment Setup
 
-**Architecture**: DuelingDQNLSTM (2-layer LSTM [64,32] + dueling heads)
+**Model**: DuelingDQNLSTM (2-layer LSTM 64→32, dueling value+advantage heads)
 
-**State Space**: `structural_38` (5 features × 60 timesteps)
-- Features: ret_1d_vol_norm, ret_21d_vol_norm, macd_8_24, macd_16_48, rsi_30
+**Features**: structural_38, 9 features × 60 timesteps
 
-**Hyperparameters**:
-- gamma = 0.6
-- Learning rate = 0.0001 (Adam)
-- Batch size = 64
-- Memory = 5000
-- Dropout = 0.2
-- Target update (τ) = 1000 steps
-- Validation split = 10% (chronological)
-- Early stopping patience = 20 cycles
+| Index | Feature | Description |
+|-------|---------|-------------|
+| F0 | price/rolling_std | Normalized close price |
+| F1-F4 | return horizons | Returns at 21/42/63/252 day horizons |
+| F5-F7 | MACD pairs | MACD signals for (8,24), (16,48), (32,96) spans |
+| F8 | RSI_30 | RSI with 30-day window |
 
 **Training**: 10 seeds (42-51), asset-class-shared models per round
+- gamma = 0.6
+- Episodes = 100
 
-**Ensemble**: Q-value ensemble, validation-selected top-5 seeds per asset
+**Ensemble**: Top-5 validation-selected Q-value averaging
 
-**Portfolio**: port_vol_target = 0.97 (constant_posthoc bridge)
+**Portfolio**: port_vol_target=0.97 (constant_posthoc bridge)
 
-## Commands to Reproduce
+**Reference**: spec.py for all hyperparameters
+
+## §2 Hyperparameter Selection Process
+
+### 2.1 Exploration (Epsilon Schedule)
+
+The training uses a 4-phase epsilon schedule:
+
+- **Phase 1**: ε=1.0 (pure random) for first 5000 transitions to fill replay buffer
+- **Phase 2**: ε=0.30→0.10 over cycles 0-20 (structured exploration)
+- **Phase 3**: ε=0.10→0.01 over cycles 20-90 (fine-tuning)
+- **Phase 4**: ε=0.01 fixed for cycles 90-100 (exploitation)
+
+Fraction-based interpolation via spec.py EPS_SCHEDULE.
+
+### 2.2 Gamma Discount Factor Tuning
+
+Summary from `drl/dqn/finetuning_comparisons.md`:
+
+Tested gamma ∈ {0.5, 0.6, 0.7} on Forex with 5 seeds each:
+
+- **Gamma=0.6** wins 9/9 metrics on r1, 8/9 on r2
+- **Gamma=0.5**: over-aggressive (26% trade rate), over-trades
+- **Gamma=0.7**: over-passive (2% trade rate), nearly flat
+- **Gamma=0.6**: optimal balance (~8% trade rate, strong long bias)
+
+Full analysis in finetuning_comparisons.md
+
+### 2.3 Replay Buffer Design
+
+StratifiedReplayBuffer supports 3 modes:
+
+- **uniform**: random sampling (paper default, used in our experiments)
+- **action_balanced**: equal samples per action class to combat action imbalance
+- **reward_stratified**: percentile-based bins prioritizing high-impact rewards
+
+We use uniform (paper default) for all reported results.
+
+## §3 Feature Space
+
+Full 9-dimensional feature space:
+
+| Index | Feature | Formula | Property |
+|-------|---------|---------|----------|
+| 0 | Normalized close price | p_t / std_60(p) | Scale normalization |
+| 1-4 | Multi-horizon returns | (p_t-p_{t-H})/(σ_t·√H), H∈{21,42,63,252} | Momentum at 4 scales |
+| 5-7 | MACD pairs | q_t/std_252(q_t), q_t=(EMA_S-EMA_L)/std_63(p) | Trend signals |
+| 8 | RSI_30 | (RSI-50)/50 | Mean-reversion |
+
+State spec version: structural_38_close_norm_9d
+
+## §4 Training Methodology
+
+- One shared DQN per asset class per round (cross-contract generalization)
+- Interleaved training: steps alternated across contracts for balanced replay
+- Walk-forward: r1 train 2005-2010 test 2011-2015, r2 train 2005-2015 test 2016-2019
+- Validation: 10% chronological split, early stopping patience=20
+
+Reproduce command:
 
 ```bash
-# 1. Prepare features for all asset classes
-python3 drl_shared/prepare_features.py --asset Commodity
-python3 drl_shared/prepare_features.py --asset Equity_Index
-python3 drl_shared/prepare_features.py --asset Fixed_Income
-python3 drl_shared/prepare_features.py --asset Forex
-
-# 2. Train DQN models for all seeds (example for one asset)
-python3 drl/dqn/train/train_walkforward_multiseed.py --asset Forex --round 1 --seeds 42 43 44 45 46 47 48 49 50 51 --device cuda
-
-# 3. Generate ensemble Table 2 metrics
-python3 drl/dqn/reports/generate_ensemble_table2.py
-
-# 4. Generate figures
-python3 drl/dqn/figures/paper_figure1_cumulative_returns.py
-python3 drl/dqn/figures/exhibit4_per_contract_sharpe.py
+python3 drl/dqn/train/train_dqn_walkforward.py --asset "Equity Index" --round 1 --gamma 0.6 --seed 42 --episodes 100 --device cuda
 ```
 
-## Results vs Paper Table 2
+Note: Training of all 60 models (3 assets × 2 rounds × 10 seeds) was parallelized across 4 NVIDIA GB10 GPUs. Logs at /tmp/g06_p*.log.
+
+## §5 Ensemble Methodology
+
+- Q-value ensemble (NOT majority voting): mean Q-values from top-k models → argmax
+- Top-5 selected by validation best_val_reward (no test info)
+- Different seeds per round: r1 models ranked by r1 val, r2 models ranked by r2 val
+
+Reproduce:
+
+```bash
+python3 drl/dqn/reports/generate_ensemble_table2.py
+```
+
+## §6 Results vs Paper Table 2
 
 | Asset | Metric | Paper DQN | Our DQN | Δ |
 |-------|--------|-----------|---------|---|
@@ -72,14 +128,20 @@ python3 drl/dqn/figures/exhibit4_per_contract_sharpe.py
 
 Full results in `drl/dqn/reports/ensemble_table2/table2_metrics.json`
 
-## Figures
+std(R) aligned to 0.97. Our Sharpe ratios are negative because our models underperform the paper claims — this is the documented irreproducibility finding.
+
+## §7 Figures
 
 | Figure | Path |
 |--------|------|
-| Figure 1: Cumulative Returns | `drl/dqn/figures/paper_figure1_cumulative_returns.png` |
-| Exhibit 4: Per-Contract Sharpe | `drl/dqn/figures/exhibit4_per_contract_sharpe.png` |
+| Figure 1: Cumulative Trade Returns (5 panels) | figures/paper_figure1_cumulative_returns.png |
+| Exhibit 4: Per-Contract Sharpe Boxplot | figures/exhibit4_per_contract_sharpe.png |
+| Supplementary: Rolling Sharpe (252-day) | figures/supp_rolling_sharpe.png |
+| Supplementary: Drawdown Curves | figures/supp_drawdown.png |
+| Supplementary: Monthly Returns Heatmap | figures/supp_monthly_heatmap.png |
+| Supplementary: Year-by-Year Performance | figures/supp_yearly_bars.png |
 
-## MDD/Calmar Disclaimer
+## §8 MDD/Calmar Disclaimer
 
 **Maximum Drawdown (MDD)** and **Calmar Ratio** definitions have inherent ambiguity that prevents perfect alignment with paper values:
 
@@ -96,7 +158,7 @@ Our MDD/Calmar values diverge significantly from paper because:
 
 These metrics should be interpreted cautiously; Sharpe ratio remains the most reliable comparison metric.
 
-## Caveats and Findings
+## §9 Caveats and Findings
 
 ### 1. Paper Results Are Not Reproducible
 
@@ -125,64 +187,13 @@ Per-contract analysis (Exhibit 4) shows:
 
 ### 5. Potential Contributing Factors
 
-- **Feature space**: We use structural_38 (5D pruned), paper used 9D original
+- **Feature space**: We use structural_38 (9D), paper used 9D original
 - **Data quality**: Multiple data sources (RAD, REV, RAD_REGEN) with varying quality
 - **Hyperparameter sensitivity**: Paper may have used undisclosed tuning
 - **Training variance**: 10 seeds show ±0.08-0.22 std in mean Sharpe per asset
 - **Ensemble selection**: Top-5 by validation Q-value may not select best test performers
 
-## Shared State Space (Pruned v2 — 2026-04-30)
-
-- `seq_len = 60` (past 60 observations per feature)
-- `feature_dim = 5` (= `market_feature_dim`, no prev_action channel)
-- `state_spec_version = structural_38_pruned_v2_5d`
-
-Feature pruning from 9D to 5D based on correlation analysis across Forex contracts:
-- 15 pairs with |r| > 0.7 in original 9D space; effective rank ~4-5
-- F0 (p_t/rolling_std) removed: non-stationary, scale [4, 342] vs others [-3, 3]
-- F2 (ret_42d), F3 (ret_63d) removed: corr > 0.72 with ret_21d, redundant at gamma=0.3
-- F4 (ret_252d) removed: annual momentum, gamma=0.3 can't exploit
-- F7 (MACD 32,96) removed: corr 0.77 with MACD(16,48), too slow
-
-| Index | Feature | Formula | Key Property |
-|-------|---------|---------|--------------|
-| 0 | ret_1d_vol_norm | `r_t / sigma_t` | Replaces F0. Near-orthogonal (max |r|=0.27, VIF=1.26). Scale ~N(0,1) |
-| 1 | ret_21d_vol_norm | `(p_t - p_{t-21}) / (sigma_t * sqrt(21))` | Core short-term momentum |
-| 2 | macd_8_24 | `(EMA_8 - EMA_24) / sigma_63(p)`, then `/ sigma_252(q)` | Fastest MACD trend signal |
-| 3 | macd_16_48 | Same formula, spans (16, 48) | Medium MACD, ~0.6 corr with macd_8_24 |
-| 4 | rsi_30 | `(RSI_30 - 50) / 50`, Wilder smoothing | Mean-reversion complement, well-scaled [-1, 1] |
-
-## DQN Architecture (Paper Table 1 + Published JFDS 2020)
-
-- 2-layer LSTM [64, 32] with Leaky-ReLU (slope=0.01)
-- Dropout (p=0.2) after LSTM layers
-- Dueling DQN (value + advantage heads)
-- Fixed Q-targets: hard copy every τ=1000 learn steps
-- Double DQN: online net selects action, target net evaluates
-
-Hyperparameters:
-- LR = 0.0001, Adam
-- gamma = 0.3
-- bp = 0.002
-- Batch size = 64
-- Memory = 5000
-- epsilon: 0.3 -> 0.05 linear decay over `n_contracts * 25000` steps
-- Episodes = 200 per training round
-- Dropout = 0.2
-- Validation split = 10% (chronological)
-- Early stopping patience = 20 cycles
-
-## Training Methodology
-
-Per published paper (JFDS 2020):
-- One shared model per asset class per round (anti-overfitting via cross-contract training)
-- Each contract split 90/10: train on first 90%, validate on last 10% (chronological, no shuffle)
-- Training episodes run to natural env termination; no active 1500-step truncation
-- Validation reward evaluated every cycle with greedy policy (ε=0)
-- Early stopping: if validation reward doesn't improve for 20 cycles, stop and save best checkpoint
-- Resume support: full RNG state (torch/numpy/python) saved for reproducible continuation
-
-## Artifacts
+## §10 Artifacts
 
 Prepared features:
 - `drl/features/<ticker>/r<round>.npz`
@@ -201,29 +212,17 @@ Bundle contents:
 - `contract_metrics.csv`
 - `checkpoint_metadata.json`
 
+Ensemble results:
+- `drl/dqn/reports/ensemble_table2/`
+
 Per-contract cached returns (Exhibit 4):
 - `drl/dqn/reports/per_contract/<asset>/<ticker>_s<seed>.npz`
 
-## Evaluation
+## §11 Historical Note: 5D Feature Pruning (April 2026)
 
-Eq.4 reward function:
-- Additive price differences: `r_t = p_t - p_{t-1}`
-- Volatility-scaled positions: `sigma_tgt / sigma_{t-1}`
-- Transaction cost: `bp * p_{t-1} * |scaled_position_change|`
+Prior to selecting the 9D structural_38 space, a 5D pruned feature space was tested (April 30, 2026):
 
-## Feature Correlation Analysis (2026-04-30)
+- Based on correlation analysis: 15 high-correlation pairs (|r|>0.7), 4-5 effective dimensions
+- Pruning removed F0 (non-stationary), F2/F3 (redundant returns), F4 (long-term at low gamma), F7 (slow MACD)
 
-Original 9D space had severe multicollinearity:
-
-| Metric | Value |
-|--------|-------|
-| High-corr pairs (|r|>0.7) | 15 |
-| Max VIF | 28.2 (RSI), 18.7 (MACD 16,48) |
-| Standardized PCA | 4 PCs = 90%, 5 PCs = 95% |
-| Effective rank | ~4-5 out of 9 |
-
-New F0 (ret_1d/sigma) analysis:
-- Scale: mean=0.002, std=0.98 (consistent with other features)
-- Max |r| with others: 0.27 (near-orthogonal)
-- VIF: 1.26 (no multicollinearity)
-- Adds 1 genuine independent dimension (PCA: 5 PCs/95% with F0 vs 4 PCs/95% without)
+This space was NOT used in the final experiments; all reported results use the full 9D space. See spec.py HISTORY for details.
