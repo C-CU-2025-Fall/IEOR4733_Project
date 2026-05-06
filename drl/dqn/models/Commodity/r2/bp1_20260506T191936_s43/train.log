@@ -1,0 +1,73 @@
+======================================================================
+DQN Asset-Class Training — Commodity — r2
+Train: 2005-01-01 ~ 2015-12-31
+Test : 2016-01-01 ~ 2019-12-31
+Contracts: 24/24 loaded | Device: cuda
+Val envs: 24/24 contracts
+Model bundle: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Commodity/r2/bp1_20260506T191936_s43
+State spec: structural_38_close_norm_9d
+DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, Dueling DQN; target hard-copy every 1000 learn steps; dropout 0.2
+Validation: 10% split, early stopping patience=20, epsilon: 0.30→0.010 over 5,372,800 steps, epsilon_val=0.0
+--- Env construction ---
+  CC: train_dates=[2005-01-06T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2486] (2234 steps)
+  CC: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2426..2763] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2763..3769]
+  DA: train_dates=[2005-01-06T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2485] (2233 steps)
+  DA: val_dates=[2014-08-29T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2425..2762] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2762..3766]
+  GI: train_dates=[2005-01-03T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2493] (2241 steps)
+  GI: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2433..2770] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2770..3776]
+  JO: train_dates=[2005-01-06T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2487] (2235 steps)
+  JO: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2427..2764] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2764..3770]
+  KC: train_dates=[2005-01-06T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2486] (2234 steps)
+  KC: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2426..2763] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2763..3769]
+  KW: train_dates=[2005-01-04T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2493] (2241 steps)
+  KW: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2433..2770] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2770..3776]
+  LB: train_dates=[2005-01-04T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2490] (2238 steps)
+  LB: val_dates=[2014-08-27T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2430..2767] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2767..3773]
+  NR: train_dates=[2005-01-04T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2493] (2241 steps)
+  NR: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2433..2770] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2770..3774]
+  SB: train_dates=[2005-01-06T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2486] (2234 steps)
+  SB: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2426..2763] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2763..3769]
+  ZC: train_dates=[2005-01-04T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2493] (2241 steps)
+  ZC: val_dates=[2014-08-29T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2433..2771] (338 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2771..3777]
+  ZF: train_dates=[2005-01-04T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2493] (2241 steps)
+  ZF: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2433..2770] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2770..3776]
+  ZG: train_dates=[2005-01-06T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2492] (2240 steps)
+  ZG: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2432..2769] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2769..3775]
+  ZH: train_dates=[2005-01-06T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2490] (2238 steps)
+  ZH: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2430..2767] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2767..3773]
+  ZI: train_dates=[2005-01-06T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2492] (2240 steps)
+  ZI: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2432..2769] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2769..3775]
+  ZK: train_dates=[2005-01-06T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2491] (2239 steps)
+  ZK: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2431..2768] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2768..3774]
+  ZL: train_dates=[2005-01-04T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2493] (2241 steps)
+  ZL: val_dates=[2014-08-29T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2433..2771] (338 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2771..3777]
+  ZO: train_dates=[2005-01-04T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2492] (2240 steps)
+  ZO: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2432..2769] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2769..3775]
+  ZP: train_dates=[2005-01-06T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2492] (2240 steps)
+  ZP: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2432..2769] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2769..3775]
+  ZR: train_dates=[2005-01-04T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2493] (2241 steps)
+  ZR: val_dates=[2014-08-29T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2433..2771] (338 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2771..3777]
+  ZT: train_dates=[2005-01-04T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2493] (2241 steps)
+  ZT: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2433..2770] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2770..3776]
+  ZU: train_dates=[2005-01-06T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2488] (2236 steps)
+  ZU: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2428..2765] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2765..3771]
+  ZW: train_dates=[2005-01-04T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2493] (2241 steps)
+  ZW: val_dates=[2014-08-29T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2433..2771] (338 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2771..3777]
+  ZZ: train_dates=[2005-01-04T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2493] (2241 steps)
+  ZZ: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2433..2770] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2770..3776]
+  ZN: train_dates=[2005-01-06T00:00:00.000000..2015-12-31T00:00:00.000000] train_env=[252..2489] (2237 steps)
+  ZN: val_dates=[2014-09-02T00:00:00.000000..2015-12-31T00:00:00.000000] val_env=[2429..2766] (337 steps) test_dates=[2016-01-01..2019-12-31] test_idx=[2766..3772]
+--- Data sanity: all contracts OK ---
+Agent: DuelingDQNLSTM | params=31,876 (trainable=31,876)
+Device: cuda | CUDA available: True
+GPU: NVIDIA GB10 | mem=130.7GB
+--- Preflight: all envs OK (reset + step + reward) ---
+======================================================================
+cycle 1/100 reward_avg=-0.6168 val_reward=-0.0715 val_actions=[L:37% S:9% F:54%] loss=0.002493 epsilon=0.2900 replay=5000 target_updates=12 patience=0/20 elapsed=87s eta=8645s
+  ⚠️  cycle 1: replay buffer full (5000/5000) in first cycle
+cycle 2/100 reward_avg=+0.2503 val_reward=-0.2915 val_actions=[L:37% S:4% F:59%] loss=0.002300 epsilon=0.2800 replay=5000 target_updates=25 patience=0/20 elapsed=179s eta=8749s
+cycle 3/100 reward_avg=-0.2165 val_reward=-0.0963 val_actions=[L:14% S:18% F:68%] loss=0.002195 epsilon=0.2700 replay=5000 target_updates=39 patience=1/20 elapsed=268s eta=8672s
+cycle 4/100 reward_avg=+0.1566 val_reward=+0.5776 val_actions=[L:21% S:49% F:31%] loss=0.002172 epsilon=0.2600 replay=5000 target_updates=52 patience=2/20 elapsed=360s eta=8632s
+cycle 5/100 reward_avg=-1.1537 val_reward=+0.0839 val_actions=[L:6% S:6% F:87%] loss=0.001810 epsilon=0.2500 replay=5000 target_updates=65 patience=0/20 elapsed=452s eta=8593s
+cycle 6/100 reward_avg=-0.4829 val_reward=-0.0321 val_actions=[L:66% S:21% F:14%] loss=0.002027 epsilon=0.2400 replay=5000 target_updates=79 patience=1/20 elapsed=543s eta=8510s
+cycle 7/100 reward_avg=+0.2152 val_reward=+0.3426 val_actions=[L:22% S:21% F:57%] loss=0.002489 epsilon=0.2300 replay=5000 target_updates=92 patience=2/20 elapsed=639s eta=8487s

@@ -1,0 +1,129 @@
+======================================================================
+DQN Asset-Class Training — Commodity — r1
+Train: 2005-01-01 ~ 2010-12-31
+Test : 2011-01-01 ~ 2015-12-31
+Contracts: 24/24 loaded | Device: cuda
+Val envs: 24/24 contracts
+Model bundle: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Commodity/r1/bp1_20260506T182233_s46
+State spec: structural_38_close_norm_9d
+DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, Dueling DQN; target hard-copy every 1000 learn steps; dropout 0.2
+Validation: 10% split, early stopping patience=20, epsilon: 0.30→0.010 over 2,652,000 steps, epsilon_val=0.0
+--- Env construction ---
+  CC: train_dates=[2005-01-06T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1353] (1101 steps)
+  CC: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1293..1504] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1504..2762]
+  DA: train_dates=[2005-01-06T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1353] (1101 steps)
+  DA: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1293..1504] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1504..2761]
+  GI: train_dates=[2005-01-03T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  GI: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1510] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1510..2769]
+  JO: train_dates=[2005-01-06T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1353] (1101 steps)
+  JO: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1293..1504] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1504..2763]
+  KC: train_dates=[2005-01-06T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1353] (1101 steps)
+  KC: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1293..1504] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1504..2762]
+  KW: train_dates=[2005-01-04T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  KW: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1510] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1510..2769]
+  LB: train_dates=[2005-01-04T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  LB: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1510] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1510..2766]
+  NR: train_dates=[2005-01-04T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  NR: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1510] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1510..2769]
+  SB: train_dates=[2005-01-06T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1353] (1101 steps)
+  SB: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1293..1504] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1504..2762]
+  ZC: train_dates=[2005-01-04T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  ZC: val_dates=[2010-03-03T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1511] (212 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1511..2770]
+  ZF: train_dates=[2005-01-04T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  ZF: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1510] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1510..2769]
+  ZG: train_dates=[2005-01-06T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1358] (1106 steps)
+  ZG: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1298..1509] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1509..2768]
+  ZH: train_dates=[2005-01-06T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1356] (1104 steps)
+  ZH: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1296..1507] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1507..2766]
+  ZI: train_dates=[2005-01-06T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1358] (1106 steps)
+  ZI: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1298..1509] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1509..2768]
+  ZK: train_dates=[2005-01-06T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1357] (1105 steps)
+  ZK: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1297..1508] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1508..2767]
+  ZL: train_dates=[2005-01-04T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  ZL: val_dates=[2010-03-03T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1511] (212 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1511..2770]
+  ZO: train_dates=[2005-01-04T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1358] (1106 steps)
+  ZO: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1298..1509] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1509..2768]
+  ZP: train_dates=[2005-01-06T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1358] (1106 steps)
+  ZP: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1298..1509] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1509..2768]
+  ZR: train_dates=[2005-01-04T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  ZR: val_dates=[2010-03-03T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1511] (212 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1511..2770]
+  ZT: train_dates=[2005-01-04T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  ZT: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1510] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1510..2769]
+  ZU: train_dates=[2005-01-06T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1354] (1102 steps)
+  ZU: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1294..1505] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1505..2764]
+  ZW: train_dates=[2005-01-04T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  ZW: val_dates=[2010-03-03T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1511] (212 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1511..2770]
+  ZZ: train_dates=[2005-01-04T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1359] (1107 steps)
+  ZZ: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1299..1510] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1510..2769]
+  ZN: train_dates=[2005-01-06T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1355] (1103 steps)
+  ZN: val_dates=[2010-03-04T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1295..1506] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1506..2765]
+--- Data sanity: all contracts OK ---
+Agent: DuelingDQNLSTM | params=31,876 (trainable=31,876)
+Device: cuda | CUDA available: True
+GPU: NVIDIA GB10 | mem=130.7GB
+--- Preflight: all envs OK (reset + step + reward) ---
+======================================================================
+cycle 1/100 reward_avg=+0.3695 val_reward=+0.2098 val_actions=[L:38% S:25% F:37%] loss=0.002687 epsilon=0.2900 replay=5000 target_updates=5 patience=0/20 elapsed=39s eta=3836s
+  ⚠️  cycle 1: replay buffer full (5000/5000) in first cycle
+cycle 2/100 reward_avg=+0.7210 val_reward=-0.4203 val_actions=[L:16% S:77% F:7%] loss=0.002544 epsilon=0.2800 replay=5000 target_updates=11 patience=0/20 elapsed=85s eta=4155s
+cycle 3/100 reward_avg=+0.8206 val_reward=-0.1666 val_actions=[L:27% S:55% F:18%] loss=0.002740 epsilon=0.2700 replay=5000 target_updates=18 patience=1/20 elapsed=131s eta=4231s
+cycle 4/100 reward_avg=+0.8070 val_reward=-0.0561 val_actions=[L:44% S:28% F:27%] loss=0.002729 epsilon=0.2600 replay=5000 target_updates=25 patience=2/20 elapsed=177s eta=4253s
+cycle 5/100 reward_avg=+1.1009 val_reward=+0.1543 val_actions=[L:64% S:31% F:5%] loss=0.002711 epsilon=0.2500 replay=5000 target_updates=31 patience=3/20 elapsed=223s eta=4239s
+cycle 6/100 reward_avg=+0.9456 val_reward=+0.1102 val_actions=[L:46% S:34% F:21%] loss=0.002506 epsilon=0.2401 replay=5000 target_updates=38 patience=4/20 elapsed=270s eta=4237s
+cycle 7/100 reward_avg=+1.5466 val_reward=-0.0567 val_actions=[L:37% S:41% F:21%] loss=0.002801 epsilon=0.2301 replay=5000 target_updates=45 patience=5/20 elapsed=316s eta=4196s
+cycle 8/100 reward_avg=+2.0413 val_reward=+0.0785 val_actions=[L:43% S:16% F:41%] loss=0.002870 epsilon=0.2201 replay=5000 target_updates=51 patience=6/20 elapsed=360s eta=4144s
+cycle 9/100 reward_avg=+1.0270 val_reward=+0.1693 val_actions=[L:28% S:23% F:50%] loss=0.002641 epsilon=0.2101 replay=5000 target_updates=58 patience=7/20 elapsed=408s eta=4122s
+cycle 10/100 reward_avg=+2.7305 val_reward=+0.4884 val_actions=[L:65% S:28% F:6%] loss=0.002775 epsilon=0.2001 replay=5000 target_updates=64 patience=8/20 elapsed=452s eta=4069s
+cycle 11/100 reward_avg=+2.1352 val_reward=-0.0501 val_actions=[L:32% S:44% F:25%] loss=0.002929 epsilon=0.1901 replay=5000 target_updates=71 patience=0/20 elapsed=501s eta=4050s
+cycle 12/100 reward_avg=+2.2139 val_reward=+0.1323 val_actions=[L:31% S:58% F:11%] loss=0.002879 epsilon=0.1801 replay=5000 target_updates=78 patience=1/20 elapsed=546s eta=4003s
+cycle 13/100 reward_avg=+2.5393 val_reward=+0.0960 val_actions=[L:56% S:35% F:10%] loss=0.002935 epsilon=0.1701 replay=5000 target_updates=84 patience=2/20 elapsed=593s eta=3970s
+cycle 14/100 reward_avg=+1.7651 val_reward=-0.0198 val_actions=[L:40% S:39% F:21%] loss=0.002773 epsilon=0.1601 replay=5000 target_updates=91 patience=3/20 elapsed=641s eta=3936s
+cycle 15/100 reward_avg=+2.6055 val_reward=+0.0464 val_actions=[L:43% S:44% F:13%] loss=0.002880 epsilon=0.1501 replay=5000 target_updates=98 patience=4/20 elapsed=688s eta=3899s
+cycle 16/100 reward_avg=+2.6164 val_reward=+0.2510 val_actions=[L:37% S:34% F:29%] loss=0.002713 epsilon=0.1401 replay=5000 target_updates=104 patience=5/20 elapsed=732s eta=3845s
+cycle 17/100 reward_avg=+3.2848 val_reward=+0.1041 val_actions=[L:53% S:38% F:8%] loss=0.002957 epsilon=0.1302 replay=5000 target_updates=111 patience=6/20 elapsed=779s eta=3803s
+cycle 18/100 reward_avg=+4.1503 val_reward=+0.3308 val_actions=[L:36% S:48% F:16%] loss=0.003035 epsilon=0.1202 replay=5000 target_updates=117 patience=7/20 elapsed=826s eta=3763s
+cycle 19/100 reward_avg=+3.8686 val_reward=+0.4843 val_actions=[L:68% S:25% F:7%] loss=0.002883 epsilon=0.1102 replay=5000 target_updates=124 patience=8/20 elapsed=871s eta=3714s
+cycle 20/100 reward_avg=+4.1520 val_reward=+0.4048 val_actions=[L:65% S:32% F:3%] loss=0.003030 epsilon=0.1002 replay=5000 target_updates=131 patience=9/20 elapsed=914s eta=3658s
+cycle 21/100 reward_avg=+4.3676 val_reward=+0.2940 val_actions=[L:50% S:27% F:22%] loss=0.003068 epsilon=0.0977 replay=5000 target_updates=137 patience=10/20 elapsed=962s eta=3619s
+cycle 22/100 reward_avg=+4.5157 val_reward=+0.2920 val_actions=[L:60% S:26% F:14%] loss=0.003016 epsilon=0.0954 replay=5000 target_updates=144 patience=11/20 elapsed=1010s eta=3581s
+cycle 23/100 reward_avg=+4.3015 val_reward=+0.1753 val_actions=[L:50% S:30% F:19%] loss=0.002897 epsilon=0.0930 replay=5000 target_updates=151 patience=12/20 elapsed=1054s eta=3530s
+cycle 24/100 reward_avg=+4.6602 val_reward=+0.5513 val_actions=[L:62% S:29% F:9%] loss=0.002974 epsilon=0.0907 replay=5000 target_updates=157 patience=13/20 elapsed=1100s eta=3483s
+cycle 25/100 reward_avg=+5.4136 val_reward=+0.5316 val_actions=[L:62% S:34% F:3%] loss=0.003120 epsilon=0.0884 replay=5000 target_updates=164 patience=0/20 elapsed=1147s eta=3440s
+cycle 26/100 reward_avg=+4.9067 val_reward=+0.2422 val_actions=[L:55% S:28% F:17%] loss=0.003013 epsilon=0.0861 replay=5000 target_updates=170 patience=1/20 elapsed=1189s eta=3385s
+cycle 27/100 reward_avg=+5.4458 val_reward=+0.4194 val_actions=[L:50% S:25% F:25%] loss=0.002992 epsilon=0.0837 replay=5000 target_updates=177 patience=2/20 elapsed=1233s eta=3334s
+cycle 28/100 reward_avg=+5.5624 val_reward=+0.3170 val_actions=[L:60% S:30% F:10%] loss=0.002974 epsilon=0.0814 replay=5000 target_updates=184 patience=3/20 elapsed=1278s eta=3287s
+cycle 29/100 reward_avg=+6.4928 val_reward=+0.1901 val_actions=[L:55% S:29% F:16%] loss=0.003064 epsilon=0.0791 replay=5000 target_updates=190 patience=4/20 elapsed=1323s eta=3238s
+cycle 30/100 reward_avg=+6.2117 val_reward=+0.1371 val_actions=[L:54% S:34% F:11%] loss=0.003011 epsilon=0.0767 replay=5000 target_updates=197 patience=5/20 elapsed=1363s eta=3181s
+cycle 31/100 reward_avg=+6.4541 val_reward=+0.4400 val_actions=[L:55% S:36% F:9%] loss=0.002926 epsilon=0.0744 replay=5000 target_updates=204 patience=6/20 elapsed=1413s eta=3146s
+cycle 32/100 reward_avg=+6.8133 val_reward=+0.2893 val_actions=[L:50% S:32% F:19%] loss=0.003032 epsilon=0.0721 replay=5000 target_updates=210 patience=7/20 elapsed=1461s eta=3104s
+cycle 33/100 reward_avg=+7.0080 val_reward=+0.4492 val_actions=[L:57% S:26% F:17%] loss=0.003071 epsilon=0.0697 replay=5000 target_updates=217 patience=8/20 elapsed=1508s eta=3062s
+cycle 34/100 reward_avg=+8.0594 val_reward=+0.4356 val_actions=[L:54% S:29% F:16%] loss=0.003132 epsilon=0.0674 replay=5000 target_updates=223 patience=9/20 elapsed=1558s eta=3025s
+cycle 35/100 reward_avg=+8.1178 val_reward=+0.4993 val_actions=[L:60% S:27% F:13%] loss=0.003099 epsilon=0.0651 replay=5000 target_updates=230 patience=10/20 elapsed=1607s eta=2985s
+cycle 36/100 reward_avg=+7.5269 val_reward=+0.3346 val_actions=[L:52% S:44% F:4%] loss=0.003100 epsilon=0.0627 replay=5000 target_updates=237 patience=11/20 elapsed=1652s eta=2937s
+cycle 37/100 reward_avg=+7.8894 val_reward=+0.2077 val_actions=[L:53% S:31% F:16%] loss=0.002996 epsilon=0.0604 replay=5000 target_updates=243 patience=12/20 elapsed=1698s eta=2892s
+cycle 38/100 reward_avg=+7.8704 val_reward=+0.4539 val_actions=[L:50% S:32% F:17%] loss=0.002963 epsilon=0.0581 replay=5000 target_updates=250 patience=13/20 elapsed=1740s eta=2839s
+cycle 39/100 reward_avg=+8.0378 val_reward=+0.3274 val_actions=[L:54% S:35% F:11%] loss=0.002988 epsilon=0.0557 replay=5000 target_updates=257 patience=14/20 elapsed=1781s eta=2786s
+cycle 40/100 reward_avg=+8.2536 val_reward=+0.3009 val_actions=[L:52% S:32% F:16%] loss=0.002973 epsilon=0.0534 replay=5000 target_updates=263 patience=15/20 elapsed=1824s eta=2736s
+cycle 41/100 reward_avg=+8.8261 val_reward=+0.2480 val_actions=[L:57% S:32% F:12%] loss=0.002973 epsilon=0.0511 replay=5000 target_updates=270 patience=16/20 elapsed=1874s eta=2696s
+cycle 42/100 reward_avg=+8.2240 val_reward=+0.4013 val_actions=[L:53% S:36% F:12%] loss=0.003000 epsilon=0.0488 replay=5000 target_updates=276 patience=17/20 elapsed=1921s eta=2653s
+cycle 43/100 reward_avg=+8.6693 val_reward=+0.1825 val_actions=[L:50% S:43% F:7%] loss=0.003012 epsilon=0.0464 replay=5000 target_updates=283 patience=18/20 elapsed=1966s eta=2606s
+cycle 44/100 reward_avg=+9.0396 val_reward=+0.3247 val_actions=[L:45% S:51% F:3%] loss=0.003062 epsilon=0.0441 replay=5000 target_updates=290 patience=19/20 elapsed=2006s eta=2553s
+Early stopping at cycle 44: val_reward=+0.3247 best=+0.5513
+Saved checkpoint: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Commodity/r1/bp1_20260506T182233_s46/checkpoint.pt
+Saved logs: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Commodity/r1/bp1_20260506T182233_s46
+
+======================================================================
+Training Timing Summary
+======================================================================
+  Data loading + env construction:     1.1s
+  Preflight checks + agent init:      (included above)
+  Training loop (44 cycles):            1714.3s
+    avg per cycle:                      39.0s
+    avg per transition:                  1.5ms
+  Validation (total):                  291.6s
+    avg per cycle:                       6.6s
+  Total wall time:                    2006.9s
+  Device: cuda   | Params: 31,876
+  Transitions: 1,165,824 | Learn steps: 290,207
+  Contracts: 24 | Stopped: early
+======================================================================
