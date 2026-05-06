@@ -364,10 +364,7 @@ def create_boxplot(all_sharpes: Dict[str, Dict]):
             data_to_plot,
             labels=labels,
             patch_artist=True,
-            showmeans=True,
-            meanline=True,
             medianprops=dict(color='black', linewidth=1.5),
-            meanprops=dict(color='red', linestyle='--', linewidth=1.5),
         )
         
         # Color boxes
@@ -378,8 +375,7 @@ def create_boxplot(all_sharpes: Dict[str, Dict]):
         # Styling
         ax.set_title(asset, fontsize=11, fontweight='bold')
         ax.set_ylabel('Annualized Sharpe', fontsize=10)
-        ax.grid(True, alpha=0.3, axis='y')
-        ax.axhline(y=0, color='gray', linestyle='-', linewidth=0.5, alpha=0.5)
+        ax.axhline(y=0, color='gray', linestyle='-', linewidth=0.5, alpha=0.4)
         
         # Rotate x labels for seeds
         if len(labels) > 1:

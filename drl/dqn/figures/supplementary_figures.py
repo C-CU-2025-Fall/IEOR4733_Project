@@ -126,7 +126,7 @@ def create_figure_rolling_sharpe():
         ax.plot(dqn_dt, dqn_sharpe, color=DQN_COLOR, linewidth=1.5, label='DQN Top-5 Ensemble')
         ax.plot(long_dt, long_sharpe, color=LONG_COLOR, linewidth=1.5, linestyle='--', label='Long Only')
         
-        ax.axhline(y=0, color='black', linestyle='-', linewidth=0.8, alpha=0.5)
+        ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5, alpha=0.4)
         boundary_date = pd.Timestamp(R1_R2_BOUNDARY)
         ax.axvline(x=boundary_date, color='gray', linestyle=':', linewidth=1, alpha=0.7)
         
@@ -134,7 +134,6 @@ def create_figure_rolling_sharpe():
         ax.set_xlabel('Date', fontsize=10)
         ax.set_ylabel('Rolling 252-Day Sharpe', fontsize=10)
         ax.legend(loc='upper left', fontsize=9)
-        ax.grid(True, alpha=0.3)
         ax.tick_params(axis='both', labelsize=9)
         ax.tick_params(axis='x', rotation=45)
     
@@ -178,7 +177,6 @@ def create_figure_drawdown():
         ax.set_xlabel('Date', fontsize=10)
         ax.set_ylabel('Drawdown (%)', fontsize=10)
         ax.legend(loc='lower left', fontsize=9)
-        ax.grid(True, alpha=0.3)
         ax.tick_params(axis='both', labelsize=9)
         ax.tick_params(axis='x', rotation=45)
         ax.set_ylim(bottom=min(dqn_drawdown.min(), long_drawdown.min()) * 1.1, top=5)
@@ -307,7 +305,6 @@ def create_figure_yearly_bars():
         ax.set_xticks(x)
         ax.set_xticklabels(years, fontsize=9)
         ax.legend(loc='upper right', fontsize=9)
-        ax.grid(True, alpha=0.3, axis='y')
         ax.tick_params(axis='both', labelsize=9)
     
     plt.tight_layout(rect=[0, 0, 1, 0.96])
