@@ -6,7 +6,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from config import BP, EWMA_SPAN, MACD_PAIRS, MACD_VOL_WINDOW
+from config import EWMA_SPAN, MACD_PAIRS, MACD_VOL_WINDOW
+from config import BP as _BP
 from drl_shared.spec import (
     CONTINUOUS_ACTION_RANGE,
     DISCRETE_ACTION_VALUES,
@@ -114,7 +115,7 @@ def compute_eq4_reward(
     action: float,
     prev_action: float,
     sigma_tgt: float = SIGMA_TGT_DEFAULT,
-    bp: float = BP,
+    bp: float = _BP,
     prev_sigma: float | None = None,
 ) -> tuple[float, float, float, float]:
     """Paper Eq.4 reward for one step.
@@ -182,6 +183,7 @@ class ContractEnv:
         sigma_tgt: float = SIGMA_TGT_DEFAULT,
         start_idx: int = WARMUP,
         max_idx: int | None = None,
+        bp: float = _BP,
     ):
         self.contract = contract
         self.prices = contract.prices
@@ -189,6 +191,7 @@ class ContractEnv:
         self.sigma = contract.sigma
         self.features = contract.features
         self.sigma_tgt = sigma_tgt
+        self.bp = bp
         self.start_idx = max(WARMUP, int(start_idx))
         self.max_idx = min(len(self.prices) - 1, int(max_idx)) if max_idx is not None else len(self.prices) - 1
         self.idx = self.start_idx
@@ -217,7 +220,7 @@ class ContractEnv:
             position,
             self.last_position,
             sigma_tgt=self.sigma_tgt,
-            bp=BP,
+            bp=self.bp,
             prev_sigma=self.last_sigma,
         )
         self.last_sigma = self.sigma[self.idx - 1]

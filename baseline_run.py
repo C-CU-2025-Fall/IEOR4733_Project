@@ -431,11 +431,14 @@ def compute_contract_returns_from_positions_loop(rd, positions, sigma_tgt, detai
     return Rt
 
 
-def compute_contract_returns_from_positions(rd, positions, sigma_tgt, detail=False):
+def compute_contract_returns_from_positions(rd, positions, sigma_tgt, bp: float | None = None, detail=False):
     """Vectorized Eq.4 returns from an explicit position array.
 
     This is the production path for model adapters. ``compute_contract_returns_from_positions_loop``
     remains as the reference implementation and is covered by parity tests.
+    
+    Args:
+        bp: Optional BP override. If None, uses config.BP for backward compatibility.
     """
     rt, sigma, prices = rd['rt'], rd['sigma'], rd['prices']
     n = len(rt)
@@ -475,7 +478,7 @@ def compute_contract_returns_from_positions(rd, positions, sigma_tgt, detail=Fal
         spp[has_prev] = pos[valid_idx[has_prev] - 2] * sigma_tgt / sigma[valid_idx[has_prev] - 2]
         scaled_pos[valid_idx] = sp
         gross_pnl[valid_idx] = sp * rt[valid_idx]
-        tc_cost[valid_idx] = BP * prices[valid_idx - 1] * np.abs(sp - spp)
+        tc_cost[valid_idx] = (bp if bp is not None else BP) * prices[valid_idx - 1] * np.abs(sp - spp)
         Rt[valid_idx] = gross_pnl[valid_idx] - tc_cost[valid_idx]
 
     if detail:
