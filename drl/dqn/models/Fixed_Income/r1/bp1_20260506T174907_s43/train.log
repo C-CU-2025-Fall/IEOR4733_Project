@@ -1,0 +1,25 @@
+======================================================================
+DQN Asset-Class Training — Fixed Income — r1
+Train: 2005-01-01 ~ 2010-12-31
+Test : 2011-01-01 ~ 2015-12-31
+Contracts: 4/4 loaded | Device: cuda
+Val envs: 4/4 contracts
+Model bundle: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Fixed_Income/r1/bp1_20260506T174907_s43
+State spec: structural_38_close_norm_9d
+DQN stabilizers [49]/[18]/[50]: fixed Q-targets, Double DQN, Dueling DQN; target hard-copy every 1000 learn steps; dropout 0.2
+Validation: 10% split, early stopping patience=20, epsilon: 0.30→0.010 over 446,600 steps, epsilon_val=0.0
+--- Env construction ---
+  DT: train_dates=[2005-01-03T00:00:00.000000..2010-12-30T00:00:00.000000] train_env=[252..1380] (1128 steps)
+  DT: val_dates=[2010-03-04T00:00:00.000000..2010-12-30T00:00:00.000000] val_env=[1320..1533] (213 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1533..2800]
+  TY: train_dates=[2005-01-05T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1357] (1105 steps)
+  TY: val_dates=[2010-03-05T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1297..1508] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1508..2769]
+  UB: train_dates=[2005-01-03T00:00:00.000000..2010-12-30T00:00:00.000000] train_env=[252..1380] (1128 steps)
+  UB: val_dates=[2010-03-04T00:00:00.000000..2010-12-30T00:00:00.000000] val_env=[1320..1533] (213 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1533..2800]
+  US: train_dates=[2005-01-05T00:00:00.000000..2010-12-31T00:00:00.000000] train_env=[252..1357] (1105 steps)
+  US: val_dates=[2010-03-05T00:00:00.000000..2010-12-31T00:00:00.000000] val_env=[1297..1508] (211 steps) test_dates=[2011-01-01..2015-12-31] test_idx=[1508..2769]
+--- Data sanity: all contracts OK ---
+Agent: DuelingDQNLSTM | params=31,876 (trainable=31,876)
+Device: cuda | CUDA available: True
+GPU: NVIDIA GB10 | mem=130.7GB
+--- Preflight: all envs OK (reset + step + reward) ---
+======================================================================
