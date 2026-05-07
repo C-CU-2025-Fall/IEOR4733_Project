@@ -8,6 +8,22 @@ import pandas as pd
 
 from vol_scaling import get_portfolio_bridge
 
+ASSET_PATH_MAP = {
+    'Commodity': 'Commodity',
+    'Equity Index': 'Equity_Index',
+    'Fixed Income': 'Fixed_Income',
+    'Forex': 'Forex',
+}
+
+
+def get_ensemble_npz_path(asset_name, bp=None):
+    """Return path to top5_ensemble_R.npz for an asset, optionally BP-filtered."""
+    slug = ASSET_PATH_MAP[asset_name]
+    if bp is not None:
+        bp_label = f"bp{int(bp * 10000)}"
+        return Path(f"drl/dqn/reports/ensemble_table2_bp/{slug}/{bp_label}/top5_ensemble_R.npz")
+    return Path(f"drl/dqn/reports/ensemble_table2/{slug}/top5_ensemble_R.npz")
+
 
 def sorted_return_series(dates, returns) -> pd.Series:
     """Build a dated return series and enforce chronological order."""
