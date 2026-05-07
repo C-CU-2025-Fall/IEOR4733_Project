@@ -28,7 +28,7 @@
 - Asset classes: ALL 4 (Commodity, Equity Index, Fixed Income, Forex)
 - **BP levels**: 10 levels matching paper — 1, 5, 10, 15, 20, 25, 30, 35, 40, 45 bps
    (config values: 0.0001, 0.0005, 0.0010, 0.0015, 0.0020, 0.0025, 0.0030, 0.0035, 0.0040, 0.0045)
-  - **Phase 1** (priority): 1, 10, 30, 45 bps — prove cost changes agent behavior
+  - **Phase 1** (priority): 1, 20, 45, 10, 30 bps — bp20 恢复训练（原 checkpoint 已丢失）
   - **Phase 2**: 5, 15, 25, 35, 40 bps — fill in for full paper reproduction
   - BP=20 already done — reuse existing models
 - Seeds: full 10 seeds (42-51), top-5 validation-selected ensemble

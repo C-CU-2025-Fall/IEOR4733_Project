@@ -4,7 +4,7 @@ Generate Paper Figure 1 — Cumulative Trade Returns (5 panels)
 DQN Top-5 Q-ensemble vs Long Only (2011-2019)
 
 Usage:
-    python3 drl/dqn/figures/paper_figure1_cumulative_returns.py
+    python3 drl/dqn/figures/paper_figure1_cumulative_returns.py --tc-bp 0.0020
 
 Output:
     drl/dqn/figures/paper_figure1_cumulative_returns.png
@@ -19,18 +19,12 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from baseline_run import load_contracts, compute_portfolio_return_series
-from drl.dqn.figures.figure_data import load_scaled_ensemble_series, scale_return_series
+from drl.dqn.figures.figure_data import load_scaled_ensemble_series, scale_return_series, get_ensemble_npz_path
 from drl_shared.spec import current_source_policy
 
 ASSETS = ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']
-ASSET_PATH_MAP = {
-    'Commodity': 'Commodity',
-    'Equity Index': 'Equity_Index',
-    'Fixed Income': 'Fixed_Income',
-    'Forex': 'Forex'
-}
 SIGMA_TGT = 0.058
-PORT_VOL_TARGET = 0.97  # Corrected target volatility matching paper Table 2
+PORT_VOL_TARGET = 0.97
 TEST_START = '2011-01-01'
 TEST_END = '2019-12-31'
 R1_R2_BOUNDARY = '2016-01-01'
@@ -41,15 +35,11 @@ DPI = 300
 FIGSIZE = (16, 10)
 SOURCE_POLICY = current_source_policy()
 
+BP_LEVEL = None  # set by --tc-bp
 
-def load_dqn_ensemble_returns(asset_name, bp=None):
-    """Load DQN ensemble returns from BP-aware path."""
-    path_name = ASSET_PATH_MAP[asset_name]
-    if bp is not None:
-        bp_label = f"bp{int(bp * 10000)}"
-        npz_path = Path(f'drl/dqn/reports/ensemble_table2_bp/{path_name}/{bp_label}/top5_ensemble_R.npz')
-    else:
-        npz_path = Path(f'drl/dqn/reports/ensemble_table2/{path_name}/top5_ensemble_R.npz')
+
+def load_dqn_ensemble_returns(asset_name):
+    npz_path = get_ensemble_npz_path(asset_name, bp=BP_LEVEL)
     series = load_scaled_ensemble_series(npz_path, PORT_VOL_TARGET)
     return series.index, series.values
 
@@ -72,8 +62,8 @@ def compute_cumulative_returns(returns):
     return np.cumsum(returns)
 
 
-def create_figure(bp=None):
-    bp_str = f" (BP={int(bp*10000)}bps)" if bp is not None else ""
+def create_figure():
+    bp_str = f" (BP={int(BP_LEVEL*10000)}bps)" if BP_LEVEL else ""
     fig, axes = plt.subplots(2, 2, figsize=(14, 10), dpi=DPI)
     fig.suptitle(
         f'Figure 1: Cumulative Trade Returns — DQN Top-5 Ensemble vs Long Only (2011–2019){bp_str}',
@@ -89,7 +79,7 @@ def create_figure(bp=None):
         
         print(f"Processing {asset}...")
         
-        dqn_dates, dqn_returns = load_dqn_ensemble_returns(asset, bp=bp)
+        dqn_dates, dqn_returns = load_dqn_ensemble_returns(asset)
         dqn_dt = pd.to_datetime(dqn_dates)
         dqn_cum = compute_cumulative_returns(dqn_returns)
         
@@ -117,23 +107,24 @@ def create_figure(bp=None):
 
 def main():
     import argparse
+    global BP_LEVEL
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tc-bp", type=float, default=None, help="BP level (e.g. 0.0001)")
+    parser.add_argument("--tc-bp", type=float, default=None)
     args = parser.parse_args()
+    BP_LEVEL = args.tc_bp
     
-    bp_suffix = f"_bp{int(args.tc_bp*10000)}" if args.tc_bp is not None else ""
-    output_path = Path(f'drl/dqn/figures/paper_figure1_cumulative_returns{bp_suffix}.png')
+    output_path = Path('drl/dqn/figures/paper_figure1_cumulative_returns.png')
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     print("Generating Figure 1: Cumulative Trade Returns")
     print("=" * 50)
     print(f"Using port_vol_target = {PORT_VOL_TARGET}")
-    if args.tc_bp is not None:
-        print(f"BP Level: {args.tc_bp} (bp{int(args.tc_bp*10000)})")
+    if BP_LEVEL:
+        print(f"BP Level: bp{int(BP_LEVEL * 10000)}")
     else:
         print("Loading from: drl/dqn/reports/ensemble_table2/ (default)")
     
-    fig = create_figure(bp=args.tc_bp)
+    fig = create_figure()
     
     fig.savefig(output_path, dpi=DPI, bbox_inches='tight', facecolor='white')
     print(f"\nFigure saved to: {output_path}")

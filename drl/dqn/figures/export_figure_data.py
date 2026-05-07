@@ -14,7 +14,7 @@ import pandas as pd
 from pathlib import Path
 
 from baseline_run import load_contracts, compute_portfolio_return_series
-from drl.dqn.figures.figure_data import load_scaled_ensemble_series, scale_return_series
+from drl.dqn.figures.figure_data import load_scaled_ensemble_series, scale_return_series, get_ensemble_npz_path
 from drl_shared.spec import current_source_policy
 
 # ─── Configuration ────────────────────────────────────────────────────────────
@@ -35,6 +35,7 @@ TEST_START = '2011-01-01'
 TEST_END = '2019-12-31'
 R1_R2_BOUNDARY = '2016-01-01'
 SOURCE_POLICY = current_source_policy()
+BP_LEVEL = None
 
 # Exhibit 4
 SEEDS = list(range(42, 52))  # 42-51
@@ -47,8 +48,7 @@ REPORTS_BP_ROOT = REPO_ROOT / 'drl' / 'dqn' / 'reports' / 'ensemble_table2_bp'
 # ─── Shared helpers (same as figure scripts) ──────────────────────────────────
 
 def load_dqn_ensemble_returns(asset_name):
-    path_name = ASSET_PATH_MAP[asset_name]
-    npz_path = Path(f'drl/dqn/reports/ensemble_table2/{path_name}/top5_ensemble_R.npz')
+    npz_path = get_ensemble_npz_path(asset_name, bp=BP_LEVEL)
     series = load_scaled_ensemble_series(npz_path, PORT_VOL_TARGET)
     return series.index, series.values
 
@@ -100,7 +100,8 @@ def asset_contract_count(asset_name):
 # ─── Figure 1: Cumulative Returns ─────────────────────────────────────────────
 
 def export_paper_figure1():
-    print("Exporting paper_figure1_data.csv ...")
+    bp_suffix = f"_bp{int(BP_LEVEL * 10000)}" if BP_LEVEL else ""
+    print(f"Exporting paper_figure1_data{bp_suffix}.csv ...")
     records = []
     for asset in ASSETS:
         dqn_dates, dqn_returns = load_dqn_ensemble_returns(asset)
@@ -109,24 +110,32 @@ def export_paper_figure1():
         long_dates, long_returns = compute_long_only_returns(asset)
         long_cum = np.cumsum(long_returns)
 
-        # Align on dates (use DQN dates as reference)
         dqn_dt = pd.to_datetime(dqn_dates)
         long_dt = pd.to_datetime(long_dates)
         long_series = pd.Series(long_cum, index=long_dt)
 
+        asset_records = []
         for i, (dt, dqn_val) in enumerate(zip(dqn_dt, dqn_cum)):
             long_val = long_series.loc[dt] if dt in long_series.index else np.nan
-            records.append({
+            row = {
                 'date': dt.strftime('%Y-%m-%d'),
                 'asset': asset,
                 'DQN_cum_return': round(dqn_val, 6),
                 'Long_cum_return': round(long_val, 6),
-            })
+            }
+            records.append(row)
+            asset_records.append(row)
+
+        # Per-asset CSV (match existing naming: "equity index" with space)
+        asset_slug = asset.lower()
+        per_csv = DATA_DIR / f'paper_figure1_{asset_slug}{bp_suffix}.csv'
+        pd.DataFrame(asset_records).to_csv(per_csv, index=False)
+        print(f"  {asset}: {len(asset_records)} rows → {per_csv.name}")
 
     df = pd.DataFrame(records)
-    out_path = DATA_DIR / 'paper_figure1_data.csv'
+    out_path = DATA_DIR / f'paper_figure1_data{bp_suffix}.csv'
     df.to_csv(out_path, index=False)
-    print(f"  Saved {len(df)} rows → {out_path}")
+    print(f"  Combined: {len(df)} rows → {out_path.name}")
     return df
 
 
@@ -429,4 +438,9 @@ def main():
 
 
 if __name__ == '__main__':
+    import argparse, sys
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--tc-bp", type=float, default=None)
+    args = parser.parse_args()
+    sys.modules['__main__'].BP_LEVEL = args.tc_bp
     main()
