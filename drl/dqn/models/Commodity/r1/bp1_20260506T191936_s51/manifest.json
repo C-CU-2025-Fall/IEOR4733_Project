@@ -20,8 +20,10 @@
   },
   "asset_class": "Commodity",
   "asset_class_count": 24,
+  "best_val_reward": 0.5334208347159864,
   "bp": 0.0001,
   "bundle_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Commodity/r1/bp1_20260506T191936_s51",
+  "completed_cycles": 30,
   "continuous_action_range": [
     -1.0,
     1.0
@@ -275,6 +277,7 @@
     0.0,
     1.0
   ],
+  "early_stopped": true,
   "episodes_per_cycle": 24,
   "ewma_span": 60,
   "excluded_contracts": [
@@ -397,6 +400,7 @@
     "use_huber_loss": false,
     "validation_split": 0.1
   },
+  "learn_steps": 197471,
   "loaded_contracts": [
     "CC",
     "DA",
@@ -525,6 +529,7 @@
   },
   "spec_version": "asset_class_structural38_mainline",
   "state_spec_version": "structural_38_close_norm_9d",
+  "target_updates": 197,
   "ticker": null,
   "total_planned_contract_episodes": 2400,
   "training_mode": "asset_class_shared"

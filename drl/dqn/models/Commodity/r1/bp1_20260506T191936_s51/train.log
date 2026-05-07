@@ -78,3 +78,38 @@ cycle 11/100 reward_avg=+1.8444 val_reward=-0.1755 val_actions=[L:15% S:35% F:50
 cycle 12/100 reward_avg=+2.4947 val_reward=+0.3163 val_actions=[L:72% S:18% F:10%] loss=0.002381 epsilon=0.1801 replay=5000 target_updates=78 patience=9/20 elapsed=553s eta=4055s
 cycle 13/100 reward_avg=+2.3534 val_reward=-0.3594 val_actions=[L:12% S:39% F:49%] loss=0.002705 epsilon=0.1701 replay=5000 target_updates=84 patience=10/20 elapsed=601s eta=4020s
 cycle 14/100 reward_avg=+2.5455 val_reward=-0.0623 val_actions=[L:21% S:26% F:52%] loss=0.002505 epsilon=0.1601 replay=5000 target_updates=91 patience=11/20 elapsed=644s eta=3956s
+cycle 15/100 reward_avg=+3.1069 val_reward=+0.1785 val_actions=[L:67% S:25% F:8%] loss=0.002397 epsilon=0.1501 replay=5000 target_updates=98 patience=12/20 elapsed=691s eta=3915s
+cycle 16/100 reward_avg=+2.8013 val_reward=+0.2584 val_actions=[L:60% S:25% F:14%] loss=0.002521 epsilon=0.1401 replay=5000 target_updates=104 patience=13/20 elapsed=732s eta=3841s
+cycle 17/100 reward_avg=+2.4315 val_reward=-0.1254 val_actions=[L:19% S:26% F:55%] loss=0.002346 epsilon=0.1302 replay=5000 target_updates=111 patience=14/20 elapsed=780s eta=3808s
+cycle 18/100 reward_avg=+2.7552 val_reward=-0.0239 val_actions=[L:24% S:33% F:43%] loss=0.002475 epsilon=0.1202 replay=5000 target_updates=117 patience=15/20 elapsed=824s eta=3755s
+cycle 19/100 reward_avg=+3.2501 val_reward=+0.1754 val_actions=[L:29% S:25% F:46%] loss=0.002426 epsilon=0.1102 replay=5000 target_updates=124 patience=16/20 elapsed=875s eta=3731s
+cycle 20/100 reward_avg=+3.1382 val_reward=+0.0838 val_actions=[L:35% S:25% F:40%] loss=0.002336 epsilon=0.1002 replay=5000 target_updates=131 patience=17/20 elapsed=917s eta=3669s
+cycle 21/100 reward_avg=+3.7418 val_reward=+0.0692 val_actions=[L:61% S:27% F:12%] loss=0.002394 epsilon=0.0977 replay=5000 target_updates=137 patience=18/20 elapsed=964s eta=3626s
+cycle 22/100 reward_avg=+3.4839 val_reward=+0.4077 val_actions=[L:55% S:29% F:15%] loss=0.002518 epsilon=0.0954 replay=5000 target_updates=144 patience=19/20 elapsed=1011s eta=3585s
+cycle 23/100 reward_avg=+3.9890 val_reward=+0.3935 val_actions=[L:66% S:32% F:2%] loss=0.002407 epsilon=0.0930 replay=5000 target_updates=151 patience=20/20 elapsed=1061s eta=3554s
+cycle 24/100 reward_avg=+3.8802 val_reward=+0.4007 val_actions=[L:66% S:22% F:12%] loss=0.002664 epsilon=0.0907 replay=5000 target_updates=157 patience=21/20 elapsed=1102s eta=3490s
+cycle 25/100 reward_avg=+4.5382 val_reward=+0.3748 val_actions=[L:60% S:26% F:14%] loss=0.002784 epsilon=0.0884 replay=5000 target_updates=164 patience=22/20 elapsed=1152s eta=3456s
+cycle 26/100 reward_avg=+4.2513 val_reward=-0.0076 val_actions=[L:31% S:48% F:21%] loss=0.002338 epsilon=0.0861 replay=5000 target_updates=170 patience=23/20 elapsed=1198s eta=3411s
+cycle 27/100 reward_avg=+4.0026 val_reward=+0.2040 val_actions=[L:43% S:23% F:34%] loss=0.002527 epsilon=0.0837 replay=5000 target_updates=177 patience=24/20 elapsed=1243s eta=3362s
+cycle 28/100 reward_avg=+4.9273 val_reward=+0.2203 val_actions=[L:29% S:43% F:28%] loss=0.002490 epsilon=0.0814 replay=5000 target_updates=184 patience=25/20 elapsed=1289s eta=3315s
+cycle 29/100 reward_avg=+4.8101 val_reward=+0.1771 val_actions=[L:41% S:31% F:28%] loss=0.002570 epsilon=0.0791 replay=5000 target_updates=190 patience=26/20 elapsed=1334s eta=3267s
+cycle 30/100 reward_avg=+5.2925 val_reward=+0.1797 val_actions=[L:34% S:26% F:40%] loss=0.002627 epsilon=0.0767 replay=5000 target_updates=197 patience=27/20 elapsed=1380s eta=3220s
+Early stopping at cycle 30: val_reward=+0.1797 best=+0.5334
+Saved checkpoint: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Commodity/r1/bp1_20260506T191936_s51/checkpoint.pt
+Saved logs: /home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Commodity/r1/bp1_20260506T191936_s51
+
+======================================================================
+Training Timing Summary
+======================================================================
+  Data loading + env construction:     1.1s
+  Preflight checks + agent init:      (included above)
+  Training loop (30 cycles):            1174.7s
+    avg per cycle:                      39.2s
+    avg per transition:                  1.5ms
+  Validation (total):                  205.2s
+    avg per cycle:                       6.8s
+  Total wall time:                    1381.0s
+  Device: cuda   | Params: 31,876
+  Transitions: 794,880 | Learn steps: 197,471
+  Contracts: 24 | Stopped: early
+======================================================================

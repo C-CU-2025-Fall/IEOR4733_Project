@@ -42,10 +42,14 @@ FIGSIZE = (16, 10)
 SOURCE_POLICY = current_source_policy()
 
 
-def load_dqn_ensemble_returns(asset_name):
-    """Load DQN ensemble returns from the corrected ensemble_table2 path."""
+def load_dqn_ensemble_returns(asset_name, bp=None):
+    """Load DQN ensemble returns from BP-aware path."""
     path_name = ASSET_PATH_MAP[asset_name]
-    npz_path = Path(f'drl/dqn/reports/ensemble_table2/{path_name}/top5_ensemble_R.npz')
+    if bp is not None:
+        bp_label = f"bp{int(bp * 10000)}"
+        npz_path = Path(f'drl/dqn/reports/ensemble_table2_bp/{path_name}/{bp_label}/top5_ensemble_R.npz')
+    else:
+        npz_path = Path(f'drl/dqn/reports/ensemble_table2/{path_name}/top5_ensemble_R.npz')
     series = load_scaled_ensemble_series(npz_path, PORT_VOL_TARGET)
     return series.index, series.values
 
@@ -68,10 +72,11 @@ def compute_cumulative_returns(returns):
     return np.cumsum(returns)
 
 
-def create_figure():
+def create_figure(bp=None):
+    bp_str = f" (BP={int(bp*10000)}bps)" if bp is not None else ""
     fig, axes = plt.subplots(2, 2, figsize=(14, 10), dpi=DPI)
     fig.suptitle(
-        'Figure 1: Cumulative Trade Returns — DQN Top-5 Ensemble vs Long Only (2011–2019)',
+        f'Figure 1: Cumulative Trade Returns — DQN Top-5 Ensemble vs Long Only (2011–2019){bp_str}',
         fontsize=14,
         fontweight='bold',
         y=0.98
@@ -84,7 +89,7 @@ def create_figure():
         
         print(f"Processing {asset}...")
         
-        dqn_dates, dqn_returns = load_dqn_ensemble_returns(asset)
+        dqn_dates, dqn_returns = load_dqn_ensemble_returns(asset, bp=bp)
         dqn_dt = pd.to_datetime(dqn_dates)
         dqn_cum = compute_cumulative_returns(dqn_returns)
         
@@ -111,15 +116,24 @@ def create_figure():
 
 
 def main():
-    output_path = Path('drl/dqn/figures/paper_figure1_cumulative_returns.png')
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--tc-bp", type=float, default=None, help="BP level (e.g. 0.0001)")
+    args = parser.parse_args()
+    
+    bp_suffix = f"_bp{int(args.tc_bp*10000)}" if args.tc_bp is not None else ""
+    output_path = Path(f'drl/dqn/figures/paper_figure1_cumulative_returns{bp_suffix}.png')
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     print("Generating Figure 1: Cumulative Trade Returns")
     print("=" * 50)
     print(f"Using port_vol_target = {PORT_VOL_TARGET}")
-    print(f"Loading from: drl/dqn/reports/ensemble_table2/")
+    if args.tc_bp is not None:
+        print(f"BP Level: {args.tc_bp} (bp{int(args.tc_bp*10000)})")
+    else:
+        print("Loading from: drl/dqn/reports/ensemble_table2/ (default)")
     
-    fig = create_figure()
+    fig = create_figure(bp=args.tc_bp)
     
     fig.savefig(output_path, dpi=DPI, bbox_inches='tight', facecolor='white')
     print(f"\nFigure saved to: {output_path}")

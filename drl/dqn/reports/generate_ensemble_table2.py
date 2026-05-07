@@ -5,6 +5,11 @@ generate_ensemble_table2.py — Top-5 Q-value ensemble backtest for Table 2 metr
 Generates ensemble portfolio returns using Q-value averaging (NOT majority voting)
 and computes Table 2 metrics with port_vol_target=0.97.
 
+"All" portfolio: equal-weighted across ALL contracts (not equal-weighted by asset).
+Formula: (1/N) * sum(R_t^i) where N = total contracts across all 4 asset classes.
+Implemented as contract-count-weighted average of per-asset portfolios:
+    all_port = (sum(n_asset * portfolio_asset)) / total_contracts
+
 Usage:
     python drl/dqn/reports/generate_ensemble_table2.py
 """
@@ -141,8 +146,6 @@ def load_ensemble_models(asset_name: str, round_num: int, device: str = "cpu", b
     """
     asset_slug = asset_name.replace(" ", "_")
     round_name = f"r{round_num}"
-
-    bp = BP
 
     print(f"  Looking for available models for {asset_name} {round_name}...")
     available_seeds = find_available_seeds(asset_slug, round_name, range(42, 52), bp=bp)
@@ -445,6 +448,68 @@ def run_asset_ensemble_backtest(
     }
 
 
+def compute_all_portfolio(
+    results_dict: dict,
+    port_vol_target: float = 0.97,
+) -> dict:
+    """Compute the 'All' portfolio: equal-weighted across ALL contracts.
+
+    Per paper Section 4.3-4.4, "All" = (1/N) * sum(R_t^i) where N is the
+    total number of contracts across all 4 asset classes. This weights each
+    contract equally, NOT each asset class equally.
+
+    Since per-asset portfolios are already (1/n_asset) averages of their
+    contracts, we reconstruct the all-contracts average by weighting each
+    per-asset portfolio by its contract count:
+        all_port = (sum(n_asset * portfolio_asset)) / total_contracts
+
+    Args:
+        results_dict: dict mapping asset_name -> result dict with keys
+            "metrics", "portfolio" (pd.Series), "n_contracts" (float)
+        port_vol_target: portfolio volatility target for constant_posthoc bridge
+
+    Returns:
+        dict with keys "metrics", "portfolio", "n_contracts"
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    asset_names = ["Commodity", "Equity Index", "Fixed Income", "Forex"]
+
+    portfolios = {}
+    weights = {}
+    for asset_name in asset_names:
+        if asset_name not in results_dict:
+            logger.warning("All portfolio: %s missing from results, skipping", asset_name)
+            continue
+        result = results_dict[asset_name]
+        n = result["n_contracts"]
+        if n == 0:
+            logger.warning("All portfolio: %s has 0 contracts, skipping", asset_name)
+            continue
+        portfolios[asset_name] = result["portfolio"]
+        weights[asset_name] = n
+
+    if not portfolios:
+        raise ValueError("No valid asset results for 'All' portfolio computation")
+
+    total_contracts = sum(weights.values())
+
+    port_df = pd.DataFrame(portfolios).dropna()
+    weight_series = pd.Series(weights)
+    all_port = port_df.dot(weight_series.reindex(port_df.columns).fillna(0)) / total_contracts
+
+    R_scaled = get_portfolio_bridge("constant_posthoc", port_vol_target)(all_port.values)
+    metrics = compute_metrics(R_scaled, n_contracts=int(total_contracts))
+    metrics_dict = dict(zip(METRIC_NAMES, metrics))
+
+    return {
+        "metrics": metrics_dict,
+        "portfolio": all_port,
+        "n_contracts": total_contracts,
+    }
+
+
 def format_comparison_table(results: dict) -> str:
     """Format results as a comparison table."""
     lines = []
@@ -457,10 +522,10 @@ def format_comparison_table(results: dict) -> str:
     lines.append(header)
     lines.append("-"*100)
     
-    # Metrics to display (subset of Table 2 metrics)
     display_metrics = ["E(R)", "std(R)", "Sharpe", "Sortino", "MDD", "% +ve", "Ave P/L"]
     
-    for asset_name in ["Commodity", "Equity Index", "Fixed Income", "Forex"]:
+    asset_order = ["Commodity", "Equity Index", "Fixed Income", "Forex", "All"]
+    for asset_name in asset_order:
         if asset_name not in results:
             continue
         
@@ -532,7 +597,16 @@ def main():
                 print(f"\n  ERROR: Failed to process {asset_name}: {e}")
                 import traceback
                 traceback.print_exc()
-        
+
+        # Compute "All" portfolio: equal-weighted across all contracts
+        if len(all_results) > 0:
+            try:
+                all_result = compute_all_portfolio(all_results, port_vol_target=0.97)
+                all_results["All"] = all_result
+                print(f"\n  All portfolio: {all_result['n_contracts']:.0f} total contracts")
+            except Exception as e:
+                print(f"\n  WARNING: Could not compute 'All' portfolio: {e}")
+
         if len(bp_levels) > 1:
             metrics_path = REPORTS_ROOT / f"bp{int(bp_level*10000)}" / "table2_metrics.json"
             metrics_to_save = {
@@ -550,22 +624,25 @@ def main():
             print(format_comparison_table(all_results))
             all_results = {}
     
-    if bp_levels[0] is None or len(bp_levels) == 1:
+    # Single BP: save to bp{XX}/table2_metrics.json (per-BP isolation)
+    bp_label = int(bp_levels[0] * 10000) if bp_levels[0] is not None else None
+    if bp_label:
+        metrics_path = REPORTS_ROOT / f"bp{bp_label}" / "table2_metrics.json"
+    else:
         metrics_path = REPORTS_ROOT / "table2_metrics.json"
-        metrics_to_save = {
-            asset: {
-                "metrics": result["metrics"],
-                "n_contracts": result["n_contracts"],
-            }
-            for asset, result in all_results.items()
+    metrics_to_save = {
+        asset: {
+            "metrics": result["metrics"],
+            "n_contracts": result["n_contracts"],
         }
-        
-        with open(metrics_path, "w") as f:
-            json.dump(metrics_to_save, f, indent=2)
-        print(f"\n  Saved metrics: {metrics_path}")
-        
-        print(format_comparison_table(all_results))
-    
+        for asset, result in all_results.items()
+    }
+    with open(metrics_path, "w") as f:
+        json.dump(metrics_to_save, f, indent=2)
+    print(f"\n  Saved metrics: {metrics_path}")
+
+    print(format_comparison_table(all_results))
+
     print("\n" + "="*100)
     print("DONE")
     print("="*100)

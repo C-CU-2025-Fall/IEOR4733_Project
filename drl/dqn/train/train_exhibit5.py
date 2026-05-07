@@ -187,8 +187,6 @@ def generate_job_list(phase: int) -> list[tuple]:
 
     jobs = []
     for bp in bp_levels:
-        if bp == 0.0020:
-            continue
         for asset in ASSET_CLASSES:
             for round_num in RETRAIN_ROUNDS:
                 for seed in LOCKED_SEEDS:
