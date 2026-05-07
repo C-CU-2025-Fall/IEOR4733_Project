@@ -21,8 +21,9 @@ from pathlib import Path
 from baseline_run import load_contracts, compute_portfolio_return_series
 from drl.dqn.figures.figure_data import load_scaled_ensemble_series, scale_return_series, get_ensemble_npz_path
 from drl_shared.spec import current_source_policy
+from vol_scaling import get_portfolio_bridge
 
-ASSETS = ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']
+ASSETS = ['Commodity', 'Equity Index', 'Fixed Income', 'Forex', 'All']
 SIGMA_TGT = 0.058
 PORT_VOL_TARGET = 0.97
 TEST_START = '2011-01-01'
@@ -39,12 +40,39 @@ BP_LEVEL = None  # set by --tc-bp
 
 
 def load_dqn_ensemble_returns(asset_name):
+    if asset_name == 'All':
+        # Compute All = contract-weighted average of 4 per-asset portfolios
+        all_series = []
+        for a in ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']:
+            npz_path = get_ensemble_npz_path(a, bp=BP_LEVEL)
+            series = load_scaled_ensemble_series(npz_path, PORT_VOL_TARGET)
+            all_series.append(series)
+        # Align on common index and average
+        df = pd.concat(all_series, axis=1).dropna()
+        combined = df.mean(axis=1)
+        # Re-scale to port vol target
+        scaler = get_portfolio_bridge("constant_posthoc", PORT_VOL_TARGET)
+        scaled = scaler(combined.values)
+        combined = pd.Series(scaled, index=combined.index)
+        return combined.index, combined.values
     npz_path = get_ensemble_npz_path(asset_name, bp=BP_LEVEL)
     series = load_scaled_ensemble_series(npz_path, PORT_VOL_TARGET)
     return series.index, series.values
 
 
 def compute_long_only_returns(asset_name):
+    if asset_name == 'All':
+        all_series = []
+        for a in ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']:
+            raw_data = load_contracts(a, test_start=TEST_START, test_end=TEST_END,
+                                      excluded_contracts=SOURCE_POLICY['excluded_contracts'],
+                                      source_overrides=SOURCE_POLICY['source_overrides'])
+            series = compute_portfolio_return_series(raw_data, 'Long', SIGMA_TGT)
+            series = scale_return_series(series, PORT_VOL_TARGET)
+            all_series.append(series)
+        df = pd.concat(all_series, axis=1).dropna()
+        combined = df.mean(axis=1)
+        return combined.index, combined.values
     raw_data = load_contracts(
         asset_name,
         test_start=TEST_START,
@@ -64,7 +92,8 @@ def compute_cumulative_returns(returns):
 
 def create_figure():
     bp_str = f" (BP={int(BP_LEVEL*10000)}bps)" if BP_LEVEL else ""
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10), dpi=DPI)
+    fig, axes = plt.subplots(2, 3, figsize=(20, 12), dpi=DPI)
+    axes = axes.flatten()
     fig.suptitle(
         f'Figure 1: Cumulative Trade Returns — DQN Top-5 Ensemble vs Long Only (2011–2019){bp_str}',
         fontsize=14,
@@ -73,9 +102,7 @@ def create_figure():
     )
     
     for idx, asset in enumerate(ASSETS):
-        row = idx // 2
-        col = idx % 2
-        ax = axes[row, col]
+        ax = axes[idx]
         
         print(f"Processing {asset}...")
         
@@ -99,6 +126,8 @@ def create_figure():
         ax.legend(loc='upper left', fontsize=9)
         ax.tick_params(axis='both', labelsize=9)
         ax.tick_params(axis='x', rotation=45)
+    
+    axes[-1].set_visible(False)
     
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     
