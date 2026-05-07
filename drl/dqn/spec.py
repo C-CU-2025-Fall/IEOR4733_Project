@@ -94,6 +94,11 @@ HUBER_DELTA = 1.0              # Huber loss delta (threshold between L1/L2)
 # These 5 seeds are fixed. All experiments, ablations, and reports use LOCKED_SEEDS.
 LOCKED_SEEDS = [42, 43, 44, 45, 46, 47, 48, 49, 50, 51]
 
+# ── Transaction cost BP levels for experiment grid ──
+TC_BP_LEVELS = [0.0001, 0.0005, 0.0010, 0.0015, 0.0020, 0.0025, 0.0030, 0.0035, 0.0040, 0.0045]
+TC_BP_PHASE1 = [0.0001, 0.0020, 0.0045, 0.0010, 0.0030]  # 1, 20(恢复), 45, 10, 30 bps
+TC_BP_PHASE2 = [0.0005, 0.0015, 0.0025, 0.0035, 0.0040]  # 5, 15, 25, 35, 40 bps
+
 
 def contract_data_path(round_num: int, ticker: str) -> Path:
     return feature_data_path(round_num, ticker)
@@ -254,5 +259,9 @@ def checkpoint_metadata(
         },
     }
     if extra:
+        bp_value = extra.get("bp")
+        if bp_value is not None:
+            meta["reward_spec"]["bp"] = bp_value
+            meta["reward_spec"]["bp_bps"] = int(bp_value * 10000)
         meta.update(extra)
     return meta
