@@ -5,6 +5,11 @@ generate_ensemble_table2.py — Top-5 Q-value ensemble backtest for Table 2 metr
 Generates ensemble portfolio returns using Q-value averaging (NOT majority voting)
 and computes Table 2 metrics with port_vol_target=0.97.
 
+"All" portfolio: equal-weighted across ALL contracts (not equal-weighted by asset).
+Formula: (1/N) * sum(R_t^i) where N = total contracts across all 4 asset classes.
+Implemented as contract-count-weighted average of per-asset portfolios:
+    all_port = (sum(n_asset * portfolio_asset)) / total_contracts
+
 Usage:
     python drl/dqn/reports/generate_ensemble_table2.py
 """
@@ -34,26 +39,28 @@ from metrics import compute_metrics
 
 # Model root directory
 MODEL_ROOT = ROOT / "drl" / "dqn" / "models"
-REPORTS_ROOT = ROOT / "drl" / "dqn" / "reports" / "ensemble_table2"
+REPORTS_ROOT = ROOT / "drl" / "dqn" / "reports" / "ensemble_table2_bp"
+
+TC_BP_LEVELS = [0.0020, 0.0010, 0.0005]
 
 # Top-5 seeds by validation ranking from earlier analysis
 # Format: asset -> {r1: [seeds], r2: [seeds]}
 TOP5_SEEDS = {
     "Commodity": {
-        "r1": [42, 48, 45, 50, 44],  # Top 5 from r1 validation
-        "r2": [49, 46, 43, 45, 48],  # Top 5 from r2 validation
+        "r1": [42, 43, 44, 45, 46],  # Top 5 from r1 validation
+        "r2": [42, 43, 44, 45, 46],  # Top 5 from r2 validation
     },
     "Equity Index": {
-        "r1": [42, 45, 50, 48, 43],
-        "r2": [42, 47, 50, 43, 46],
+        "r1": [42, 43, 44, 45, 46],
+        "r2": [42, 43, 44, 45, 46],
     },
     "Fixed Income": {
-        "r1": [47, 44, 51, 48, 50],
-        "r2": [42, 47, 49, 43, 44],
+        "r1": [42, 43, 44, 45, 46],
+        "r2": [42, 43, 44, 45, 46],
     },
     "Forex": {
-        "r1": [46, 47, 44, 48, 50],
-        "r2": [47, 45, 48, 49, 50],
+        "r1": [42, 43, 44, 45, 46],
+        "r2": [42, 43, 44, 45, 46],
     },
 }
 
@@ -62,24 +69,41 @@ SOURCE_OVERRIDES = dict(SOURCE_POLICY["source_overrides"])
 EXCLUDED_CONTRACTS = set(SOURCE_POLICY["excluded_contracts"])
 
 
-def find_latest_bundle(asset_slug: str, round_name: str, seed: int) -> Path | None:
-    """Find the latest model bundle for a given asset, round, and seed."""
+def find_latest_bundle(asset_slug: str, round_name: str, seed: int, bp: float | None = None) -> Path | None:
+    """Find the latest model bundle for a given asset, round, and seed.
+
+    Args:
+        asset_slug: Asset identifier (e.g., 'Commodity')
+        round_name: Round identifier (e.g., 'r1')
+        seed: Random seed
+        bp: If specified, only match bundles with this bp prefix (e.g., 0.0020 -> 'bp20_')
+           If None, match any bundle ending with _s{seed}
+    """
     asset_dir = MODEL_ROOT / asset_slug / round_name
     if not asset_dir.exists():
         return None
-    
+
     # Find all bundles for this seed
     seed_bundles = []
     for child in asset_dir.iterdir():
-        if child.is_dir() and f"_s{seed}" in child.name:
-            checkpoint = child / "checkpoint.pt"
-            manifest = child / "manifest.json"
-            if checkpoint.exists():
-                seed_bundles.append(child)
-    
+        if not child.is_dir():
+            continue
+        # Must end with _s{seed}
+        if f"_s{seed}" not in child.name:
+            continue
+        # BP filter: if bp specified, must have bp{XX}_ prefix
+        if bp is not None:
+            bp_prefix = f"bp{int(bp * 10000)}_"
+            if not child.name.startswith(bp_prefix):
+                continue
+        checkpoint = child / "checkpoint.pt"
+        manifest = child / "manifest.json"
+        if checkpoint.exists():
+            seed_bundles.append(child)
+
     if not seed_bundles:
         return None
-    
+
     # Sort by name (timestamp) and return the latest
     return sorted(seed_bundles)[-1]
 
@@ -100,28 +124,66 @@ def load_model_from_bundle(bundle_dir: Path, device: str = "cpu") -> DQNAgent | 
         return None
 
 
-def load_ensemble_models(asset_name: str, round_num: int, device: str = "cpu") -> list[DQNAgent]:
-    """Load the top-5 models for an asset and round."""
+def find_available_seeds(asset_slug: str, round_name: str, seed_range: range, bp: float | None = None) -> list[int]:
+    """Find which seeds have available bundles for a given asset/round."""
+    asset_dir = MODEL_ROOT / asset_slug / round_name
+    if not asset_dir.exists():
+        return []
+
+    available = []
+    for seed in seed_range:
+        bundle = find_latest_bundle(asset_slug, round_name, seed, bp=bp)
+        if bundle is not None:
+            available.append(seed)
+    return available
+
+
+def load_ensemble_models(asset_name: str, round_num: int, device: str = "cpu", bp: float | None = None) -> tuple[list[DQNAgent], float]:
+    """Load the top-5 models for an asset and round.
+
+    Returns:
+        (models, bp) where bp is read from the first model's manifest.json
+    """
     asset_slug = asset_name.replace(" ", "_")
     round_name = f"r{round_num}"
-    
-    seeds = TOP5_SEEDS[asset_name][round_name]
+
+    print(f"  Looking for available models for {asset_name} {round_name}...")
+    available_seeds = find_available_seeds(asset_slug, round_name, range(42, 52), bp=bp)
+    print(f"    Available seeds: {available_seeds}")
+
+    if len(available_seeds) < 5:
+        print(f"    Warning: Only {len(available_seeds)} seeds available (need 5)")
+        seeds = available_seeds
+    else:
+        seeds = available_seeds[:5]
+
+    if len(seeds) == 0:
+        print(f"    ERROR: No bundles found for {asset_name} {round_name}")
+        return [], bp
+
+    print(f"  Loading {len(seeds)} models for {asset_name} {round_name} (seeds: {seeds})...")
+
     models = []
-    
-    print(f"  Loading {len(seeds)} models for {asset_name} {round_name}...")
-    
     for seed in seeds:
-        bundle = find_latest_bundle(asset_slug, round_name, seed)
+        bundle = find_latest_bundle(asset_slug, round_name, seed, bp=bp)
         if bundle is None:
             print(f"    Warning: No bundle found for seed {seed}")
             continue
-        
+
+        manifest_path = bundle / "manifest.json"
+        if manifest_path.exists():
+            with open(manifest_path) as f:
+                manifest = json.load(f)
+            bp_manifest = manifest.get("reward_spec", {}).get("bp")
+            if bp_manifest is not None:
+                bp = bp_manifest
+
         agent = load_model_from_bundle(bundle, device=device)
         if agent is not None:
             models.append(agent)
             print(f"    ✓ Seed {seed}: {bundle.name}")
-    
-    return models
+
+    return models, bp
 
 
 def ensemble_q_value_predict(models: list[DQNAgent], states: np.ndarray) -> np.ndarray:
@@ -159,6 +221,7 @@ def backtest_contract_ensemble(
     round_num: int,
     models: list[DQNAgent],
     sigma_tgt: float = SIGMA_TGT_DEFAULT,
+    bp: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
     """
     Backtest a single contract using Q-ensemble.
@@ -257,7 +320,7 @@ def backtest_contract_ensemble(
         "dates": df["Date"].values,
     }
     
-    Rt = compute_contract_returns_from_positions(prepared, positions, sigma_tgt)
+    Rt = compute_contract_returns_from_positions(prepared, positions, sigma_tgt, bp=bp)
     
     # Extract test period returns and dates
     test_returns = Rt[test_indices]
@@ -277,6 +340,7 @@ def compute_portfolio_returns(
     round_num: int,
     models: list[DQNAgent],
     sigma_tgt: float = SIGMA_TGT_DEFAULT,
+    bp: float | None = None,
 ) -> tuple[pd.Series, int]:
     """
     Compute portfolio returns for an asset and round using Q-ensemble.
@@ -293,7 +357,7 @@ def compute_portfolio_returns(
     n_contracts = 0
     
     for ticker in tickers:
-        result = backtest_contract_ensemble(ticker, round_num, models, sigma_tgt)
+        result = backtest_contract_ensemble(ticker, round_num, models, sigma_tgt, bp=bp)
         if result is None:
             continue
         
@@ -320,40 +384,44 @@ def run_asset_ensemble_backtest(
     asset_name: str,
     sigma_tgt: float = SIGMA_TGT_DEFAULT,
     port_vol_target: float = 0.97,
+    bp_level: float | None = None,
 ) -> dict:
     """
     Run full ensemble backtest for an asset across both rounds.
     
-    Returns dict with metrics and portfolio returns.
+    Args:
+        bp_level: If specified, save results to bp{int(bp_level*10000)} subdirectory
     """
     print(f"\n{'='*70}")
     print(f"Asset: {asset_name}")
     print(f"{'='*70}")
     
-    # Load models for both rounds
-    models_r1 = load_ensemble_models(asset_name, 1)
-    models_r2 = load_ensemble_models(asset_name, 2)
+    models_r1, bp_r1 = load_ensemble_models(asset_name, 1, bp=bp_level)
+    models_r2, bp_r2 = load_ensemble_models(asset_name, 2, bp=bp_level)
     
     if len(models_r1) == 0 or len(models_r2) == 0:
         raise ValueError(f"Could not load enough models for {asset_name}")
     
-    # Backtest round 1 (2011-2015)
+    bp = bp_r1 if bp_r1 != BP else bp_r2
+    
     print(f"\n  Round 1 (2011-2015):")
-    port_r1, n1 = compute_portfolio_returns(asset_name, 1, models_r1, sigma_tgt)
+    port_r1, n1 = compute_portfolio_returns(asset_name, 1, models_r1, sigma_tgt, bp=bp)
     
-    # Backtest round 2 (2016-2019)
     print(f"\n  Round 2 (2016-2019):")
-    port_r2, n2 = compute_portfolio_returns(asset_name, 2, models_r2, sigma_tgt)
+    port_r2, n2 = compute_portfolio_returns(asset_name, 2, models_r2, sigma_tgt, bp=bp)
     
-    # Concatenate periods
     portfolio_full = pd.concat([port_r1, port_r2]).sort_index()
     n_contracts_avg = (n1 + n2) / 2
     
     print(f"\n  Combined: {len(portfolio_full)} days, avg {n_contracts_avg:.1f} contracts")
     
-    # Save R data
     asset_slug = asset_name.replace(" ", "_")
-    save_dir = REPORTS_ROOT / asset_slug
+    
+    if bp_level is not None:
+        save_dir = REPORTS_ROOT / asset_slug / f"bp{int(bp_level * 10000)}"
+    else:
+        save_dir = REPORTS_ROOT / asset_slug
+    
     save_dir.mkdir(parents=True, exist_ok=True)
     
     npz_path = save_dir / "top5_ensemble_R.npz"
@@ -364,15 +432,81 @@ def run_asset_ensemble_backtest(
     )
     print(f"  Saved: {npz_path}")
     
-    # Apply port_vol_target scaling and compute metrics
     R_scaled = get_portfolio_bridge("constant_posthoc", port_vol_target)(portfolio_full.values)
     metrics = compute_metrics(R_scaled, n_contracts=int(n_contracts_avg))
     metrics_dict = dict(zip(METRIC_NAMES, metrics))
+    
+    metrics_path = save_dir / "metrics.json"
+    with open(metrics_path, "w") as f:
+        json.dump({"metrics": metrics_dict, "n_contracts": n_contracts_avg, "bp": bp}, f, indent=2)
+    print(f"  Saved: {metrics_path}")
     
     return {
         "metrics": metrics_dict,
         "portfolio": portfolio_full,
         "n_contracts": n_contracts_avg,
+    }
+
+
+def compute_all_portfolio(
+    results_dict: dict,
+    port_vol_target: float = 0.97,
+) -> dict:
+    """Compute the 'All' portfolio: equal-weighted across ALL contracts.
+
+    Per paper Section 4.3-4.4, "All" = (1/N) * sum(R_t^i) where N is the
+    total number of contracts across all 4 asset classes. This weights each
+    contract equally, NOT each asset class equally.
+
+    Since per-asset portfolios are already (1/n_asset) averages of their
+    contracts, we reconstruct the all-contracts average by weighting each
+    per-asset portfolio by its contract count:
+        all_port = (sum(n_asset * portfolio_asset)) / total_contracts
+
+    Args:
+        results_dict: dict mapping asset_name -> result dict with keys
+            "metrics", "portfolio" (pd.Series), "n_contracts" (float)
+        port_vol_target: portfolio volatility target for constant_posthoc bridge
+
+    Returns:
+        dict with keys "metrics", "portfolio", "n_contracts"
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    asset_names = ["Commodity", "Equity Index", "Fixed Income", "Forex"]
+
+    portfolios = {}
+    weights = {}
+    for asset_name in asset_names:
+        if asset_name not in results_dict:
+            logger.warning("All portfolio: %s missing from results, skipping", asset_name)
+            continue
+        result = results_dict[asset_name]
+        n = result["n_contracts"]
+        if n == 0:
+            logger.warning("All portfolio: %s has 0 contracts, skipping", asset_name)
+            continue
+        portfolios[asset_name] = result["portfolio"]
+        weights[asset_name] = n
+
+    if not portfolios:
+        raise ValueError("No valid asset results for 'All' portfolio computation")
+
+    total_contracts = sum(weights.values())
+
+    port_df = pd.DataFrame(portfolios).dropna()
+    weight_series = pd.Series(weights)
+    all_port = port_df.dot(weight_series.reindex(port_df.columns).fillna(0)) / total_contracts
+
+    R_scaled = get_portfolio_bridge("constant_posthoc", port_vol_target)(all_port.values)
+    metrics = compute_metrics(R_scaled, n_contracts=int(total_contracts))
+    metrics_dict = dict(zip(METRIC_NAMES, metrics))
+
+    return {
+        "metrics": metrics_dict,
+        "portfolio": all_port,
+        "n_contracts": total_contracts,
     }
 
 
@@ -388,10 +522,10 @@ def format_comparison_table(results: dict) -> str:
     lines.append(header)
     lines.append("-"*100)
     
-    # Metrics to display (subset of Table 2 metrics)
     display_metrics = ["E(R)", "std(R)", "Sharpe", "Sortino", "MDD", "% +ve", "Ave P/L"]
     
-    for asset_name in ["Commodity", "Equity Index", "Fixed Income", "Forex"]:
+    asset_order = ["Commodity", "Equity Index", "Fixed Income", "Forex", "All"]
+    for asset_name in asset_order:
         if asset_name not in results:
             continue
         
@@ -416,8 +550,16 @@ def format_comparison_table(results: dict) -> str:
     return "\n".join(lines)
 
 
+import argparse
+
 def main():
-    """Main entry point."""
+    parser = argparse.ArgumentParser(description="Top-5 Q-Value Ensemble Backtest")
+    parser.add_argument("--tc-bp", type=float, default=None,
+                        help="Run backtest at specific BP level (e.g., 0.0020)")
+    parser.add_argument("--all-bp", action="store_true",
+                        help="Run backtest for all BP levels in TC_BP_LEVELS")
+    args = parser.parse_args()
+    
     print("="*100)
     print("Top-5 Q-Value Ensemble Backtest for Table 2 Metrics")
     print("="*100)
@@ -426,25 +568,68 @@ def main():
     print(f"  Ensemble method: Q-value averaging → argmax")
     print(f"  σ_tgt: {SIGMA_TGT_DEFAULT}")
     print(f"  port_vol_target: 0.97")
-    print(f"  Output: {REPORTS_ROOT}")
     
-    # Create output directory
-    REPORTS_ROOT.mkdir(parents=True, exist_ok=True)
+    if args.tc_bp is not None:
+        bp_levels = [args.tc_bp]
+        print(f"  BP Level: {args.tc_bp}")
+    elif args.all_bp:
+        bp_levels = TC_BP_LEVELS
+        print(f"  BP Levels: {TC_BP_LEVELS}")
+    else:
+        bp_levels = [None]
+        print(f"  BP Level: from manifest (default)")
     
-    # Run backtest for all assets
     all_results = {}
     
-    for asset_name in ["Commodity", "Equity Index", "Fixed Income", "Forex"]:
-        try:
-            result = run_asset_ensemble_backtest(asset_name)
-            all_results[asset_name] = result
-        except Exception as e:
-            print(f"\n  ERROR: Failed to process {asset_name}: {e}")
-            import traceback
-            traceback.print_exc()
+    for bp_level in bp_levels:
+        if bp_level is not None:
+            print(f"\n{'='*70}")
+            print(f"BP Level: {bp_level} (bp{int(bp_level*10000)})")
+            print(f"{'='*70}")
+        
+        REPORTS_ROOT.mkdir(parents=True, exist_ok=True)
+        
+        for asset_name in ["Commodity", "Equity Index", "Fixed Income", "Forex"]:
+            try:
+                result = run_asset_ensemble_backtest(asset_name, bp_level=bp_level)
+                all_results[asset_name] = result
+            except Exception as e:
+                print(f"\n  ERROR: Failed to process {asset_name}: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # Compute "All" portfolio: equal-weighted across all contracts
+        if len(all_results) > 0:
+            try:
+                all_result = compute_all_portfolio(all_results, port_vol_target=0.97)
+                all_results["All"] = all_result
+                print(f"\n  All portfolio: {all_result['n_contracts']:.0f} total contracts")
+            except Exception as e:
+                print(f"\n  WARNING: Could not compute 'All' portfolio: {e}")
+
+        if len(bp_levels) > 1:
+            metrics_path = REPORTS_ROOT / f"bp{int(bp_level*10000)}" / "table2_metrics.json"
+            metrics_to_save = {
+                asset: {
+                    "metrics": result["metrics"],
+                    "n_contracts": result["n_contracts"],
+                }
+                for asset, result in all_results.items()
+            }
+            
+            with open(metrics_path, "w") as f:
+                json.dump(metrics_to_save, f, indent=2)
+            print(f"\n  Saved metrics: {metrics_path}")
+            
+            print(format_comparison_table(all_results))
+            all_results = {}
     
-    # Save metrics
-    metrics_path = REPORTS_ROOT / "table2_metrics.json"
+    # Single BP: save to bp{XX}/table2_metrics.json (per-BP isolation)
+    bp_label = int(bp_levels[0] * 10000) if bp_levels[0] is not None else None
+    if bp_label:
+        metrics_path = REPORTS_ROOT / f"bp{bp_label}" / "table2_metrics.json"
+    else:
+        metrics_path = REPORTS_ROOT / "table2_metrics.json"
     metrics_to_save = {
         asset: {
             "metrics": result["metrics"],
@@ -452,14 +637,12 @@ def main():
         }
         for asset, result in all_results.items()
     }
-    
     with open(metrics_path, "w") as f:
         json.dump(metrics_to_save, f, indent=2)
     print(f"\n  Saved metrics: {metrics_path}")
-    
-    # Print comparison table
+
     print(format_comparison_table(all_results))
-    
+
     print("\n" + "="*100)
     print("DONE")
     print("="*100)

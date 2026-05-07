@@ -17,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from config import ASSET_CLASSES
+from config import ASSET_CLASSES, BP
 from drl.dqn.logging_utils import RunLogger, make_run_id
 from drl.dqn.model import DQNAgent
 from drl.dqn.spec import (
@@ -542,6 +542,7 @@ def train_asset_round(
     seed: int | None = None,
     gamma: float | None = None,
     sigma_tgt: float = SIGMA_TGT_DEFAULT,
+    bp: float = BP,
     resume: bool = False,
     tickers_override: list[str] | None = None,
 ) -> tuple[Path, Path]:
@@ -586,14 +587,14 @@ def train_asset_round(
             n = len(contract.prices)
 
             # Train env
-            train_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, start_idx=train_env_start, max_idx=split_idx)
+            train_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, bp=bp, start_idx=train_env_start, max_idx=split_idx)
             env_log_lines.append(
                 f"  {ticker}: train_dates=[{contract.dates[int(feature_meta['train_start_idx'])]}..{contract.dates[-1]}] "
                 f"train_env=[{train_env_start}..{split_idx}] ({split_idx - train_env_start} steps)"
             )
 
             # Val env
-            val_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, start_idx=val_start, max_idx=n)
+            val_envs[ticker] = ContractEnv(contract, sigma_tgt=sigma_tgt, bp=bp, start_idx=val_start, max_idx=n)
             env_log_lines.append(
                 f"  {ticker}: val_dates=[{contract.dates[val_start]}..{contract.dates[-1]}] "
                 f"val_env=[{val_start}..{n}] ({n - val_start} steps) "
@@ -639,7 +640,7 @@ def train_asset_round(
                 agent.load(ckpt_path, resume=True)
                 print(f"Resumed from {ckpt_path} (train_steps={agent.train_steps}, replay={len(agent.replay)})")
                 break
-    run_id = make_run_id()
+    run_id = make_run_id(bp=bp)
     if seed is not None:
         run_id = f"{run_id}_s{seed}"
     bundle_dir = model_bundle_root(round_num, asset_name, run_id=run_id)
@@ -660,6 +661,7 @@ def train_asset_round(
             "bundle_dir": str(bundle_dir),
             "seed": seed,
             "sigma_tgt": sigma_tgt,
+            "bp": bp,
             "member_tickers": list(contracts),
             "loaded_contracts": list(contracts),
             "skipped_contracts": skipped,
@@ -691,6 +693,7 @@ def train_asset_round(
         "eps_schedule": [list(s) for s in EPS_SCHEDULE],
         "memory_size": agent.replay.capacity,
         "memory_ratio": MEMORY_RATIO,
+        "bp": bp,
     })
     logger.write_json("feature_spec.json", metadata["feature_spec"])
 
@@ -969,6 +972,7 @@ def main():
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--gamma", type=float, default=None, help="Override GAMMA (default: use spec.py value)")
     parser.add_argument("--sigma-tgt", type=float, default=SIGMA_TGT_DEFAULT)
+    parser.add_argument("--tc-bp", type=float, default=BP, help="Transaction cost BP rate (default: BP from config)")
     parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoint for each round")
     parser.add_argument("--tickers", nargs="+", default=None, help="Specific tickers to train (e.g. --tickers AN BN). Overrides asset index.")
     args = parser.parse_args()
@@ -985,6 +989,7 @@ def main():
                 seed=args.seed,
                 gamma=args.gamma,
                 sigma_tgt=args.sigma_tgt,
+                bp=args.tc_bp,
                 resume=args.resume,
                 tickers_override=args.tickers,
             )

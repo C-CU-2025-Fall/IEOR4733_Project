@@ -10,8 +10,12 @@ from pathlib import Path
 from drl.dqn.spec import run_log_dir
 
 
-def make_run_id() -> str:
-    return datetime.now().strftime("%Y%m%dT%H%M%S")
+def make_run_id(bp: float | None = None) -> str:
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    if bp is not None:
+        prefix = f"bp{int(bp * 10000)}_"
+        return f"{prefix}{timestamp}"
+    return timestamp
 
 
 @dataclass
