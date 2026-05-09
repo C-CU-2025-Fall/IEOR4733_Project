@@ -103,7 +103,8 @@ def export_paper_figure1():
     bp_suffix = f"_bp{int(BP_LEVEL * 10000)}" if BP_LEVEL else ""
     print(f"Exporting paper_figure1_data{bp_suffix}.csv ...")
     records = []
-    for asset in ASSETS:
+    all_assets = ASSETS + (['All'] if BP_LEVEL else [])
+    for asset in all_assets:
         dqn_dates, dqn_returns = load_dqn_ensemble_returns(asset)
         dqn_cum = np.cumsum(dqn_returns)
 

@@ -1,0 +1,26 @@
+BP_Level,Asset,Ave_P_L,Pct_Positive
+1,Commodity,0.995,49.4
+1,Equity Index,1.058,49.2
+1,Fixed Income,1.047,50.2
+1,Forex,0.997,49.2
+1,All,1.012,49.4
+10,Commodity,0.93,46.9
+10,Equity Index,1.006,47.199999999999996
+10,Fixed Income,1.079,48.6
+10,Forex,0.949,45.800000000000004
+10,All,0.932,45.6
+20,Commodity,0.926,47.9
+20,Equity Index,1.09,45.9
+20,Fixed Income,1.026,26.1
+20,Forex,0.927,36.6
+20,All,0.937,45.6
+30,Commodity,1.048,35.0
+30,Equity Index,0.985,44.6
+30,Fixed Income,0.923,10.9
+30,Forex,1.018,24.9
+30,All,0.96,44.7
+45,Commodity,1.071,32.6
+45,Equity Index,0.976,31.8
+45,Fixed Income,0.928,6.3
+45,Forex,1.046,14.7
+45,All,0.926,40.400000000000006

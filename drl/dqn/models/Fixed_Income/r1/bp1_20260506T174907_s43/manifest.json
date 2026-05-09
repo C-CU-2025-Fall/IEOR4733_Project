@@ -21,7 +21,7 @@
   "asset_class": "Fixed Income",
   "asset_class_count": 4,
   "bp": 0.0001,
-  "bundle_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Fixed_Income/r1/bp1_20260506T174907_s43",
+  "bundle_dir": "drl/dqn/models/Fixed_Income/r1/bp1_20260506T174907_s43",
   "continuous_action_range": [
     -1.0,
     1.0
@@ -83,10 +83,10 @@
   ],
   "feature_artifact_path": null,
   "feature_artifact_paths": {
-    "DT": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/DT/r1.npz",
-    "TY": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/TY/r1.npz",
-    "UB": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/UB/r1.npz",
-    "US": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/US/r1.npz"
+    "DT": "drl/features/DT/r1.npz",
+    "TY": "drl/features/TY/r1.npz",
+    "UB": "drl/features/UB/r1.npz",
+    "US": "drl/features/US/r1.npz"
   },
   "feature_dim": 9,
   "feature_line": "structural_38_mainline",
@@ -183,7 +183,7 @@
     "UB",
     "US"
   ],
-  "log_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Fixed_Income/r1/bp1_20260506T174907_s43",
+  "log_dir": "drl/dqn/models/Fixed_Income/r1/bp1_20260506T174907_s43",
   "macd_pairs": [
     [
       8,

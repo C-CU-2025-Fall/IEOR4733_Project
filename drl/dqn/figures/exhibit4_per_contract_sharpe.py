@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
 """
-Exhibit 4: Per-Contract Annualized Sharpe — DQN Seeds vs Long Only
+Exhibit 4: Per-Contract Analysis — Sharpe and Trade Return/Turnover by BP Level
 
-Generates a boxplot comparing per-contract annualized Sharpe ratios across
-4 asset classes. For each asset:
-- Long Only baseline (single box)
-- DQN 10 seeds (42-51), each a box showing distribution of per-contract Sharpes
+Generates a two-panel figure:
+- Panel A (top): Per-contract annualized Sharpe boxplot by asset and BP
+- Panel B (bottom): Trade Return/Turnover = sum(returns) / sum(|position_t - position_{t-1}|)
 
-Data pipeline uses same contracts as Long Only (baseline_run.load_contracts),
-which applies default preset (structural_38) with source_overrides/excluded_contracts.
+Data source: ensemble_table2_bp positions.csv files (already aggregated across top-5 seeds)
+BP levels: 1, 10, 20, 30, 45 (basis points)
 
 Usage:
     python3 drl/dqn/figures/exhibit4_per_contract_sharpe.py
 
 Output:
     drl/dqn/figures/exhibit4_per_contract_sharpe.png (300 DPI)
+    drl/dqn/figures/exhibit4_per_contract_sharpe.pdf
 """
 import sys
 sys.path.insert(0, '.')
 
 import os
-import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -28,16 +27,6 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 import warnings
 warnings.filterwarnings('ignore')
-
-from baseline_run import (
-    load_contracts,
-    compute_contract_returns,
-    compute_contract_returns_from_positions,
-)
-from drl.dqn.model import DQNAgent
-from drl.dqn.spec import contract_data_path, resolve_checkpoint_path
-from drl_shared.state_space import action_id_to_position, get_feature_window
-from drl_shared.spec import SEQ_LEN as FEATURE_SEQ_LEN, current_source_policy
 
 # Configuration
 ASSETS = ['Commodity', 'Equity Index', 'Fixed Income', 'Forex']
@@ -47,18 +36,21 @@ ASSET_SLUGS = {
     'Fixed Income': 'Fixed_Income',
     'Forex': 'Forex',
 }
-SEEDS = list(range(42, 52))  # 42-51
-SIGMA_TGT = 0.058
-TEST_START = '2011-01-01'
-TEST_END = '2019-12-31'
-ROUND_NUM = 1  # Use r1-trained models per task
-SOURCE_POLICY = current_source_policy()
+BP_LEVELS = [1, 10, 20, 30, 45]  # Basis points
+BP_COLORS = {
+    1: '#1f77b4',    # Blue
+    10: '#ff7f0e',   # Orange
+    20: '#2ca02c',   # Green
+    30: '#d62728',   # Red
+    45: '#9467bd',   # Purple
+}
 
 # Paths
 REPO_ROOT = Path(__file__).resolve().parents[3]
-CACHE_DIR = REPO_ROOT / 'drl' / 'dqn' / 'reports' / 'per_contract'
+REPORTS_DIR = REPO_ROOT / 'drl' / 'dqn' / 'reports' / 'ensemble_table2_bp'
 OUTPUT_PATH = REPO_ROOT / 'drl' / 'dqn' / 'figures' / 'exhibit4_per_contract_sharpe.png'
 DPI = 300
+
 
 def compute_annualized_sharpe(returns: np.ndarray) -> float:
     """Compute annualized Sharpe ratio from daily returns."""
@@ -72,373 +64,520 @@ def compute_annualized_sharpe(returns: np.ndarray) -> float:
     return mean_daily * 252 / (std_daily * np.sqrt(252))
 
 
-def get_cache_path(asset: str, ticker: str, seed: int) -> Path:
-    """Get cache path for per-contract DQN returns."""
-    asset_slug = ASSET_SLUGS[asset]
-    return CACHE_DIR / asset_slug / f"{ticker}_s{seed}.npz"
-
-
-def run_dqn_inference(
-    asset: str,
-    seed: int,
-    rd: Dict,
-    device: str = 'cpu'
-) -> np.ndarray:
-    """Run DQN inference for a single contract and return positions."""
-    ticker = rd['tk']
-    prices = np.asarray(rd['prices'], dtype=float)
-    start, t1 = int(rd['start']), int(rd['t1'])
-    eval_dates = pd.to_datetime(rd['dates'])
-    eval_len = min(len(eval_dates), max(0, t1 - start + 1))
-    
-    positions = np.zeros(len(prices), dtype=float)
-    if eval_len <= 0:
-        return positions
-    
-    # Load checkpoint for this asset/seed
-    ckpt_path = resolve_checkpoint_path(ROUND_NUM, asset, run_id='latest')
-    # Find the specific seed bundle
-    asset_slug = ASSET_SLUGS[asset]
-    r1_dir = REPO_ROOT / 'drl' / 'dqn' / 'models' / asset_slug / 'r1'
-    
-    if not r1_dir.exists():
-        raise FileNotFoundError(f"R1 directory not found: {r1_dir}")
-    
-    # Find bundle for this seed
-    seed_bundle = None
-    for bundle in sorted(r1_dir.iterdir()):
-        if bundle.is_dir() and f'_s{seed}' in bundle.name:
-            seed_bundle = bundle
-            break
-    
-    if seed_bundle is None:
-        raise FileNotFoundError(f"No r1 bundle found for {asset} seed {seed}")
-    
-    ckpt_path = seed_bundle / 'checkpoint.pt'
-    if not ckpt_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
-    
-    # Load agent
-    agent = DQNAgent(device=device)
-    agent.load(ckpt_path)
-    agent.q_net.eval()
-    
-    # Load precomputed features from npz
-    npz_path = contract_data_path(ROUND_NUM, ticker)
-    if not npz_path.exists():
-        raise FileNotFoundError(f"Features not found: {npz_path}")
-    
-    npz_data = np.load(npz_path, allow_pickle=True)
-    round_features = npz_data['features']
-    npz_dates = pd.to_datetime(npz_data['dates'])
-    
-    # Build date mapping
-    date_to_npz = {d: i for i, d in enumerate(npz_dates)}
-    baseline_to_npz = {}
-    eval_dates_ts = pd.to_datetime(eval_dates[:eval_len])
-    for i, ed in enumerate(eval_dates_ts):
-        npz_idx = date_to_npz.get(ed)
-        if npz_idx is not None:
-            baseline_to_npz[start + i] = npz_idx
-    
-    # Get valid indices (need warmup)
-    from drl.dqn.spec import WARMUP
-    full_indices = np.arange(start, start + eval_len)
-    valid = full_indices[(full_indices >= WARMUP) & (full_indices < len(prices))]
-    
-    if len(valid) == 0:
-        return positions
-    
-    # Resolve features
-    npz_indices = np.array([baseline_to_npz.get(int(v), -1) for v in valid], dtype=int)
-    ok = npz_indices >= FEATURE_SEQ_LEN
-    if not ok.any():
-        return positions
-    
-    # Build states
-    states = np.stack([
-        get_feature_window(round_features, int(npz_indices[j]))
-        for j in range(len(valid)) if ok[j]
-    ]).astype(np.float32)
-    valid = valid[ok]
-    
-    # Run inference in batches
-    batch_size = 2048
-    action_ids = []
-    import torch
-    for i in range(0, len(states), batch_size):
-        batch = states[i:i+batch_size]
-        tensor = torch.from_numpy(batch).to(agent.device)
-        with torch.no_grad():
-            batch_actions = agent.q_net(tensor).argmax(dim=1).cpu().numpy()
-        action_ids.extend(batch_actions)
-    
-    # Convert action IDs to positions
-    positions[valid] = [action_id_to_position(int(aid)) for aid in action_ids]
-    
-    return positions
-
-
-def get_dqn_per_contract_returns(
-    asset: str,
-    seed: int,
-    raw_data: List[Dict],
-    device: str = 'cpu',
-    use_cache: bool = True
-) -> Dict[str, np.ndarray]:
-    returns_dict = {}
-    
-    for rd in raw_data:
-        ticker = rd['tk']
-        cache_path = get_cache_path(asset, ticker, seed)
-        
-        if use_cache and cache_path.exists():
-            cached = np.load(cache_path, allow_pickle=True)
-            returns_dict[ticker] = cached['returns']
-            continue
-        
-        npz_path = contract_data_path(ROUND_NUM, ticker)
-        if not npz_path.exists():
-            print(f"    Skipping {ticker}: features not found at {npz_path}")
-            continue
-        
-        try:
-            positions = run_dqn_inference(asset, seed, rd, device=device)
-            Rt = compute_contract_returns_from_positions(rd, positions, SIGMA_TGT)
-            start, t1 = rd['start'], rd['t1']
-            returns_sliced = Rt[start:t1+1]
-            
-            if use_cache:
-                cache_path.parent.mkdir(parents=True, exist_ok=True)
-                np.savez_compressed(cache_path, returns=returns_sliced, ticker=ticker, seed=seed)
-            
-            returns_dict[ticker] = returns_sliced
-        except Exception as e:
-            print(f"    ERROR for {ticker}: {e}")
-            continue
-    
-    return returns_dict
-
-
-def get_long_only_per_contract_returns(
-    raw_data: List[Dict]
-) -> Dict[str, np.ndarray]:
-    """Get per-contract returns for Long Only baseline."""
-    returns_dict = {}
-    
-    for rd in raw_data:
-        ticker = rd['tk']
-        Rt = compute_contract_returns(rd, 'Long', SIGMA_TGT)
-        start, t1 = rd['start'], rd['t1']
-        returns_sliced = Rt[start:t1+1]
-        returns_dict[ticker] = returns_sliced
-    
-    return returns_dict
-
-
-def compute_per_contract_sharpes(returns_dict: Dict[str, np.ndarray]) -> List[float]:
-    """Compute annualized Sharpe ratio for each contract."""
-    sharpes = []
-    for ticker, returns in returns_dict.items():
-        if len(returns) > 0 and np.std(returns) > 0:
-            sharpe = compute_annualized_sharpe(returns)
-            sharpes.append(sharpe)
-    return sharpes
-
-
-def load_or_compute_all_sharpes(
-    device: str = 'cpu',
-    use_cache: bool = True
-) -> Dict[str, Dict]:
+def compute_trade_return_per_turnover(positions: np.ndarray, returns: np.ndarray) -> float:
     """
-    Load or compute all per-contract Sharpe ratios.
+    Compute Trade Return / Turnover ratio.
+    
+    Formula: sum(returns) / sum(|position_t - position_{t-1}|)
+    
+    This measures the return generated per unit of position turnover.
+    """
+    if len(returns) == 0 or len(positions) < 2:
+        return 0.0
+    
+    total_return = np.sum(returns)
+    
+    # Compute turnover as sum of absolute position changes
+    position_changes = np.abs(np.diff(positions))
+    total_turnover = np.sum(position_changes)
+    
+    if total_turnover == 0:
+        return 0.0
+    
+    return total_return / total_turnover
+
+
+def load_positions_csv(asset: str, bp: int) -> pd.DataFrame:
+    """Load positions.csv for a given asset and BP level."""
+    asset_slug = ASSET_SLUGS[asset]
+    csv_path = REPORTS_DIR / asset_slug / f"bp{bp}" / "positions.csv"
+    
+    if not csv_path.exists():
+        print(f"  Warning: File not found: {csv_path}")
+        return pd.DataFrame()
+    
+    df = pd.read_csv(csv_path)
+    df['date'] = pd.to_datetime(df['date'])
+    return df
+
+
+def compute_per_contract_metrics(df: pd.DataFrame) -> Dict[str, Dict]:
+    """
+    Compute per-contract metrics from positions DataFrame.
+    
+    Returns:
+        {
+            contract: {
+                'sharpe': float,
+                'trade_return_per_turnover': float,
+                'total_return': float,
+                'turnover': float,
+            }
+        }
+    """
+    metrics = {}
+    
+    for contract in df['contract'].unique():
+        contract_df = df[df['contract'] == contract].sort_values('date')
+        
+        if len(contract_df) == 0:
+            continue
+        
+        returns = contract_df['return'].values
+        positions = contract_df['position'].values
+        
+        # Compute Sharpe
+        sharpe = compute_annualized_sharpe(returns)
+        
+        # Compute Trade Return / Turnover
+        trade_ret_per_turnover = compute_trade_return_per_turnover(positions, returns)
+        
+        # Also store total return and turnover separately
+        total_return = np.sum(returns)
+        turnover = np.sum(np.abs(np.diff(positions))) if len(positions) > 1 else 0.0
+        
+        metrics[contract] = {
+            'sharpe': sharpe,
+            'trade_return_per_turnover': trade_ret_per_turnover,
+            'total_return': total_return,
+            'turnover': turnover,
+        }
+    
+    return metrics
+
+
+def load_all_metrics() -> Dict:
+    """
+    Load and compute metrics for all assets and BP levels.
     
     Returns:
         {
             asset: {
-                'Long': [sharpe1, sharpe2, ...],
-                42: [sharpe1, sharpe2, ...],
-                43: [sharpe1, sharpe2, ...],
-                ...
+                bp: {
+                    'sharpes': [sharpe1, sharpe2, ...],
+                    'trade_ret_per_turnover': [trpt1, trpt2, ...],
+                }
             }
         }
     """
-    all_sharpes = {}
+    all_metrics = {}
     
     for asset in ASSETS:
         print(f"\nProcessing {asset}...")
+        all_metrics[asset] = {}
         
-        # Load contracts for this asset
-        raw_data = load_contracts(
-            asset,
-            test_start=TEST_START,
-            test_end=TEST_END,
-            excluded_contracts=SOURCE_POLICY['excluded_contracts'],
-            source_overrides=SOURCE_POLICY['source_overrides'],
-        )
-        
-        if not raw_data:
-            print(f"  Warning: No contracts found for {asset}")
-            continue
-        
-        print(f"  Loaded {len(raw_data)} contracts")
-        
-        asset_sharpes = {}
-        
-        # Long Only baseline
-        print(f"  Computing Long Only returns...")
-        long_returns = get_long_only_per_contract_returns(raw_data)
-        asset_sharpes['Long'] = compute_per_contract_sharpes(long_returns)
-        print(f"    Long Only: {len(asset_sharpes['Long'])} contracts, "
-              f"mean Sharpe = {np.mean(asset_sharpes['Long']):.3f}")
-        
-        # DQN seeds
-        for seed in SEEDS:
-            print(f"  Computing DQN seed {seed}...")
-            try:
-                dqn_returns = get_dqn_per_contract_returns(
-                    asset, seed, raw_data, device=device, use_cache=use_cache
-                )
-                asset_sharpes[seed] = compute_per_contract_sharpes(dqn_returns)
-                print(f"    Seed {seed}: {len(asset_sharpes[seed])} contracts, "
-                      f"mean Sharpe = {np.mean(asset_sharpes[seed]):.3f}")
-            except Exception as e:
-                print(f"    ERROR for seed {seed}: {e}")
-                asset_sharpes[seed] = []
-        
-        all_sharpes[asset] = asset_sharpes
+        for bp in BP_LEVELS:
+            print(f"  Loading BP={bp}...")
+            df = load_positions_csv(asset, bp)
+            
+            if df.empty:
+                print(f"    No data for BP={bp}")
+                all_metrics[asset][bp] = {
+                    'sharpes': [],
+                    'trade_ret_per_turnover': [],
+                }
+                continue
+            
+            # Compute per-contract metrics
+            contract_metrics = compute_per_contract_metrics(df)
+            
+            # Extract lists
+            sharpes = [m['sharpe'] for m in contract_metrics.values()]
+            trpt_values = [m['trade_return_per_turnover'] for m in contract_metrics.values()]
+            
+            all_metrics[asset][bp] = {
+                'sharpes': sharpes,
+                'trade_ret_per_turnover': trpt_values,
+            }
+            
+            print(f"    Contracts: {len(sharpes)}, "
+                  f"Mean Sharpe: {np.mean(sharpes):.3f}, "
+                  f"Mean TR/Turnover: {np.mean(trpt_values):.6f}")
     
-    return all_sharpes
+    return all_metrics
 
 
-def create_boxplot(all_sharpes: Dict[str, Dict]):
-    """Create the boxplot figure."""
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10), dpi=DPI)
+def create_two_panel_figure(all_metrics: Dict):
+    """Create the two-panel boxplot figure."""
+    fig, axes = plt.subplots(2, 1, figsize=(14, 12), dpi=DPI)
+    
     fig.suptitle(
-        'Exhibit 4: Per-Contract Annualized Sharpe — DQN Seeds vs Long Only',
+        'Exhibit 4: Per-Contract Performance Metrics by Transaction Cost Level',
         fontsize=14,
         fontweight='bold',
         y=0.98
     )
     
-    # Colors
-    long_color = '#ff7f0e'  # Orange for Long Only
-    dqn_color = '#1f77b4'   # Blue for DQN seeds
+    # Panel A: Sharpe ratios
+    ax_sharpe = axes[0]
+    ax_sharpe.set_title('Panel A: Per-Contract Annualized Sharpe Ratio', fontsize=12, fontweight='bold', pad=10)
     
+    # Panel B: Trade Return / Turnover
+    ax_trpt = axes[1]
+    ax_trpt.set_title('Panel B: Trade Return per Unit Turnover', fontsize=12, fontweight='bold', pad=10)
+    
+    # Prepare data for both panels
+    # For each asset, we'll have grouped boxplots by BP level
+    asset_positions = []
+    asset_labels = []
+    current_pos = 1
+    
+    for asset in ASSETS:
+        asset_positions.append(current_pos + len(BP_LEVELS) / 2)
+        asset_labels.append(asset.replace(' ', '\n'))
+        current_pos += len(BP_LEVELS) + 2  # +2 for spacing between assets
+    
+    # Plot Panel A: Sharpe
     for idx, asset in enumerate(ASSETS):
-        row = idx // 2
-        col = idx % 2
-        ax = axes[row, col]
+        base_pos = 1 + idx * (len(BP_LEVELS) + 2)
         
-        if asset not in all_sharpes:
-            ax.set_title(asset, fontsize=11, fontweight='bold')
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
-            continue
+        for bp_idx, bp in enumerate(BP_LEVELS):
+            pos = base_pos + bp_idx
+            sharpes = all_metrics[asset][bp]['sharpes']
+            
+            if sharpes:
+                bp_data = ax_sharpe.boxplot(
+                    [sharpes],
+                    positions=[pos],
+                    widths=0.6,
+                    patch_artist=True,
+                    showfliers=True,
+                    flierprops=dict(marker='o', markersize=3, alpha=0.5),
+                    medianprops=dict(color='black', linewidth=1.5),
+                    boxprops=dict(facecolor=BP_COLORS[bp], alpha=0.7),
+                )
+    
+    # Plot Panel B: Trade Return / Turnover
+    for idx, asset in enumerate(ASSETS):
+        base_pos = 1 + idx * (len(BP_LEVELS) + 2)
         
-        asset_sharpes = all_sharpes[asset]
-        
-        # Prepare data for boxplot
-        # Box 0: Long Only
-        # Boxes 1-10: Seeds 42-51
-        data_to_plot = []
-        labels = []
-        colors = []
-        
-        # Long Only
-        if 'Long' in asset_sharpes and len(asset_sharpes['Long']) > 0:
-            data_to_plot.append(asset_sharpes['Long'])
-            labels.append('Long')
-            colors.append(long_color)
-        
-        # DQN seeds
-        for seed in SEEDS:
-            if seed in asset_sharpes and len(asset_sharpes[seed]) > 0:
-                data_to_plot.append(asset_sharpes[seed])
-                labels.append(f's{seed}')
-                colors.append(dqn_color)
-        
-        if not data_to_plot:
-            ax.set_title(asset, fontsize=11, fontweight='bold')
-            ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
-            continue
-        
-        # Create boxplot
-        bp = ax.boxplot(
-            data_to_plot,
-            labels=labels,
-            patch_artist=True,
-            medianprops=dict(color='black', linewidth=1.5),
-        )
-        
-        # Color boxes
-        for patch, color in zip(bp['boxes'], colors):
-            patch.set_facecolor(color)
-            patch.set_alpha(0.7)
-        
-        # Styling
-        ax.set_title(asset, fontsize=11, fontweight='bold')
-        ax.set_ylabel('Annualized Sharpe', fontsize=10)
-        ax.axhline(y=0, color='gray', linestyle='-', linewidth=0.5, alpha=0.4)
-        
-        # Rotate x labels for seeds
-        if len(labels) > 1:
-            ax.tick_params(axis='x', rotation=45)
+        for bp_idx, bp in enumerate(BP_LEVELS):
+            pos = base_pos + bp_idx
+            trpt_values = all_metrics[asset][bp]['trade_ret_per_turnover']
+            
+            if trpt_values:
+                bp_data = ax_trpt.boxplot(
+                    [trpt_values],
+                    positions=[pos],
+                    widths=0.6,
+                    patch_artist=True,
+                    showfliers=True,
+                    flierprops=dict(marker='o', markersize=3, alpha=0.5),
+                    medianprops=dict(color='black', linewidth=1.5),
+                    boxprops=dict(facecolor=BP_COLORS[bp], alpha=0.7),
+                )
+    
+    # Styling for Panel A
+    ax_sharpe.set_ylabel('Annualized Sharpe Ratio', fontsize=11)
+    ax_sharpe.axhline(y=0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+    ax_sharpe.set_xticks(asset_positions)
+    ax_sharpe.set_xticklabels(asset_labels, fontsize=10)
+    ax_sharpe.grid(axis='y', alpha=0.3, linestyle=':')
+    ax_sharpe.set_xlim(0, current_pos - 1)
+    
+    # Styling for Panel B
+    ax_trpt.set_ylabel('Trade Return / Turnover', fontsize=11)
+    ax_trpt.axhline(y=0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+    ax_trpt.set_xticks(asset_positions)
+    ax_trpt.set_xticklabels(asset_labels, fontsize=10)
+    ax_trpt.grid(axis='y', alpha=0.3, linestyle=':')
+    ax_trpt.set_xlim(0, current_pos - 1)
+    
+    # Add legend for BP levels
+    legend_elements = [
+        plt.Rectangle((0,0), 1, 1, facecolor=BP_COLORS[bp], alpha=0.7, label=f'BP={bp}')
+        for bp in BP_LEVELS
+    ]
+    ax_sharpe.legend(
+        handles=legend_elements,
+        loc='upper right',
+        title='Transaction Cost',
+        fontsize=9,
+        title_fontsize=9,
+    )
     
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     return fig
 
 
-def main():
-    print("=" * 70)
-    print("Exhibit 4: Per-Contract Annualized Sharpe — DQN Seeds vs Long Only")
-    print("=" * 70)
-    print(f"Assets: {ASSETS}")
-    print(f"DQN Seeds: {SEEDS}")
-    print(f"Sigma Target: {SIGMA_TGT}")
-    print(f"Test Period: {TEST_START} to {TEST_END}")
-    print(f"Cache Directory: {CACHE_DIR}")
-    print(f"Output Path: {OUTPUT_PATH}")
-    print("=" * 70)
+def create_alternative_two_panel(all_metrics: Dict):
+    """
+    Create alternative two-panel layout with side-by-side BP boxplots per asset.
+    This shows the distribution of metrics across contracts for each BP level.
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12), dpi=DPI)
     
-    # Load or compute all Sharpe ratios
-    all_sharpes = load_or_compute_all_sharpes(device='cpu', use_cache=True)
+    fig.suptitle(
+        'Exhibit 4: Per-Contract Performance Metrics by Transaction Cost Level',
+        fontsize=14,
+        fontweight='bold',
+        y=0.98
+    )
     
-    # Print summary
-    print("\n" + "=" * 70)
-    print("Summary Statistics")
-    print("=" * 70)
-    for asset in ASSETS:
-        if asset not in all_sharpes:
+    # Create subplots for each asset
+    for idx, asset in enumerate(ASSETS):
+        row = idx // 2
+        col = idx % 2
+        ax = axes[row, col]
+        
+        # Prepare data for boxplots
+        sharpe_data = []
+        trpt_data = []
+        colors = []
+        labels = []
+        
+        for bp in BP_LEVELS:
+            sharpes = all_metrics[asset][bp]['sharpes']
+            trpt_values = all_metrics[asset][bp]['trade_ret_per_turnover']
+            
+            if sharpes:
+                sharpe_data.append(sharpes)
+                trpt_data.append(trpt_values)
+                colors.append(BP_COLORS[bp])
+                labels.append(f'BP={bp}')
+        
+        if not sharpe_data:
+            ax.set_title(asset, fontsize=11, fontweight='bold')
+            ax.text(0.5, 0.5, 'No data', ha='center', va='center', transform=ax.transAxes)
             continue
+        
+        # Create grouped boxplots for Sharpe ratios
+        positions = np.arange(1, len(labels) + 1)
+        bp_sharpe = ax.boxplot(
+            sharpe_data,
+            positions=positions - 0.25,
+            widths=0.4,
+            patch_artist=True,
+            showfliers=True,
+            flierprops=dict(marker='o', markersize=3, alpha=0.4),
+            medianprops=dict(color='black', linewidth=1.5),
+        )
+        
+        # Color the boxes
+        for patch, color in zip(bp_sharpe['boxes'], colors):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.7)
+        
+        # Create second y-axis for Trade Return/Turnover
+        ax2 = ax.twinx()
+        bp_trpt = ax2.boxplot(
+            trpt_data,
+            positions=positions + 0.25,
+            widths=0.4,
+            patch_artist=True,
+            showfliers=True,
+            flierprops=dict(marker='s', markersize=3, alpha=0.4),
+            medianprops=dict(color='darkred', linewidth=1.5),
+        )
+        
+        # Color the boxes (lighter shade)
+        for patch, color in zip(bp_trpt['boxes'], colors):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.3)
+        
+        # Styling
+        ax.set_title(asset, fontsize=11, fontweight='bold')
+        ax.set_ylabel('Annualized Sharpe', fontsize=9, color='black')
+        ax2.set_ylabel('Trade Return / Turnover', fontsize=9, color='darkred')
+        ax.set_xticks(positions)
+        ax.set_xticklabels(labels, fontsize=8, rotation=0)
+        ax.axhline(y=0, color='gray', linestyle='-', linewidth=0.5, alpha=0.4)
+        ax2.axhline(y=0, color='gray', linestyle='-', linewidth=0.5, alpha=0.4)
+        
+        # Color the y-axis labels
+        ax.tick_params(axis='y', labelcolor='black')
+        ax2.tick_params(axis='y', labelcolor='darkred')
+    
+    # Add overall legend
+    legend_elements = [
+        plt.Rectangle((0,0), 1, 1, facecolor=BP_COLORS[bp], alpha=0.7, label=f'BP={bp} (Sharpe)')
+        for bp in BP_LEVELS
+    ]
+    legend_elements.append(plt.Rectangle((0,0), 1, 1, facecolor='gray', alpha=0.3, label='Trade Ret/Turnover'))
+    
+    fig.legend(
+        handles=legend_elements,
+        loc='lower center',
+        ncol=3,
+        fontsize=9,
+        title='Transaction Cost Levels',
+        title_fontsize=9,
+        bbox_to_anchor=(0.5, 0.02),
+    )
+    
+    plt.tight_layout(rect=[0, 0.06, 1, 0.96])
+    return fig
+
+
+def create_vertical_two_panel(all_metrics: Dict):
+    """
+    Create two-panel layout with one panel per metric type.
+    Each panel shows all assets with grouped BP levels.
+    """
+    fig, axes = plt.subplots(2, 1, figsize=(14, 12), dpi=DPI)
+    
+    fig.suptitle(
+        'Exhibit 4: Per-Contract Performance Analysis by Transaction Cost',
+        fontsize=14,
+        fontweight='bold',
+        y=0.98
+    )
+    
+    # Panel A: Sharpe Ratios
+    ax1 = axes[0]
+    ax1.set_title('Panel A: Distribution of Per-Contract Annualized Sharpe Ratios', 
+                  fontsize=12, fontweight='bold', pad=10)
+    
+    # Panel B: Trade Return / Turnover
+    ax2 = axes[1]
+    ax2.set_title('Panel B: Distribution of Trade Return per Turnover Ratios', 
+                  fontsize=12, fontweight='bold', pad=10)
+    
+    # For each asset, create grouped boxplots
+    spacing = 1.5
+    group_width = len(BP_LEVELS) * 0.8
+    
+    for idx, asset in enumerate(ASSETS):
+        base_pos = idx * (group_width + spacing) + 1
+        positions = [base_pos + i * 0.8 for i in range(len(BP_LEVELS))]
+        
+        # Get data for each BP level
+        sharpe_data = []
+        trpt_data = []
+        valid_bps = []
+        valid_colors = []
+        
+        for bp_idx, bp in enumerate(BP_LEVELS):
+            sharpes = all_metrics[asset][bp]['sharpes']
+            trpt_values = all_metrics[asset][bp]['trade_ret_per_turnover']
+            
+            if sharpes:
+                sharpe_data.append(sharpes)
+                trpt_data.append(trpt_values)
+                valid_bps.append(bp)
+                valid_colors.append(BP_COLORS[bp])
+        
+        if sharpe_data:
+            # Plot Sharpe boxplots
+            bp1 = ax1.boxplot(
+                sharpe_data,
+                positions=positions[:len(sharpe_data)],
+                widths=0.6,
+                patch_artist=True,
+                showfliers=True,
+                flierprops=dict(marker='o', markersize=3, alpha=0.4),
+                medianprops=dict(color='black', linewidth=1.5),
+            )
+            
+            for patch, color in zip(bp1['boxes'], valid_colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+            
+            # Plot TR/Turnover boxplots
+            bp2 = ax2.boxplot(
+                trpt_data,
+                positions=positions[:len(trpt_data)],
+                widths=0.6,
+                patch_artist=True,
+                showfliers=True,
+                flierprops=dict(marker='o', markersize=3, alpha=0.4),
+                medianprops=dict(color='black', linewidth=1.5),
+            )
+            
+            for patch, color in zip(bp2['boxes'], valid_colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+    
+    # Styling Panel A
+    ax1.set_ylabel('Annualized Sharpe Ratio', fontsize=11)
+    ax1.axhline(y=0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+    ax1.grid(axis='y', alpha=0.3, linestyle=':')
+    
+    # Styling Panel B
+    ax2.set_ylabel('Trade Return / Turnover', fontsize=11)
+    ax2.axhline(y=0, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+    ax2.grid(axis='y', alpha=0.3, linestyle=':')
+    
+    # Set x-axis labels
+    asset_centers = []
+    for idx in range(len(ASSETS)):
+        base_pos = idx * (group_width + spacing) + 1
+        center = base_pos + (len(BP_LEVELS) - 1) * 0.8 / 2
+        asset_centers.append(center)
+    
+    ax1.set_xticks(asset_centers)
+    ax1.set_xticklabels([a.replace(' ', '\n') for a in ASSETS], fontsize=10)
+    ax2.set_xticks(asset_centers)
+    ax2.set_xticklabels([a.replace(' ', '\n') for a in ASSETS], fontsize=10)
+    
+    # Add legend
+    legend_elements = [
+        plt.Rectangle((0,0), 1, 1, facecolor=BP_COLORS[bp], alpha=0.7, label=f'BP={bp}')
+        for bp in BP_LEVELS
+    ]
+    ax1.legend(
+        handles=legend_elements,
+        loc='upper right',
+        title='Transaction Cost',
+        fontsize=9,
+        title_fontsize=9,
+        framealpha=0.9,
+    )
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    return fig
+
+
+def print_summary_statistics(all_metrics: Dict):
+    """Print summary statistics for all metrics."""
+    print("\n" + "=" * 80)
+    print("Summary Statistics")
+    print("=" * 80)
+    
+    for asset in ASSETS:
         print(f"\n{asset}:")
-        asset_sharpes = all_sharpes[asset]
+        print("-" * 40)
         
-        if 'Long' in asset_sharpes and len(asset_sharpes['Long']) > 0:
-            long_sharpes = asset_sharpes['Long']
-            print(f"  Long Only: n={len(long_sharpes)}, "
-                  f"mean={np.mean(long_sharpes):.3f}, std={np.std(long_sharpes):.3f}, "
-                  f"min={np.min(long_sharpes):.3f}, max={np.max(long_sharpes):.3f}")
-        
-        dqn_means = []
-        for seed in SEEDS:
-            if seed in asset_sharpes and len(asset_sharpes[seed]) > 0:
-                seed_sharpes = asset_sharpes[seed]
-                dqn_means.append(np.mean(seed_sharpes))
-        
-        if dqn_means:
-            print(f"  DQN Seeds (mean of means): {np.mean(dqn_means):.3f} "
-                  f"± {np.std(dqn_means):.3f}")
+        for bp in BP_LEVELS:
+            sharpes = all_metrics[asset][bp]['sharpes']
+            trpt_values = all_metrics[asset][bp]['trade_ret_per_turnover']
+            
+            if sharpes:
+                print(f"  BP={bp:2d}: n={len(sharpes):2d} | "
+                      f"Sharpe: {np.mean(sharpes):6.3f} ± {np.std(sharpes):5.3f} | "
+                      f"TR/Turn: {np.mean(trpt_values):9.6f} ± {np.std(trpt_values):9.6f}")
+            else:
+                print(f"  BP={bp:2d}: No data")
+
+
+def main():
+    print("=" * 80)
+    print("Exhibit 4: Per-Contract Analysis — Sharpe and Trade Return/Turnover")
+    print("=" * 80)
+    print(f"Assets: {ASSETS}")
+    print(f"BP Levels: {BP_LEVELS}")
+    print(f"Reports Directory: {REPORTS_DIR}")
+    print(f"Output Path: {OUTPUT_PATH}")
+    print("=" * 80)
     
-    # Create figure
-    print("\nGenerating boxplot...")
-    fig = create_boxplot(all_sharpes)
+    # Load and compute all metrics
+    all_metrics = load_all_metrics()
     
-    # Save
+    # Print summary statistics
+    print_summary_statistics(all_metrics)
+    
+    # Create figure (using vertical two-panel layout)
+    print("\nGenerating two-panel figure...")
+    fig = create_vertical_two_panel(all_metrics)
+    
+    # Save outputs
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(OUTPUT_PATH, dpi=DPI, bbox_inches='tight', facecolor='white')
-    print(f"\nFigure saved to: {OUTPUT_PATH}")
     
-    # Also save PDF
+    # Save PNG
+    fig.savefig(OUTPUT_PATH, dpi=DPI, bbox_inches='tight', facecolor='white')
+    print(f"\nPNG saved to: {OUTPUT_PATH}")
+    
+    # Save PDF
     pdf_path = OUTPUT_PATH.with_suffix('.pdf')
     fig.savefig(pdf_path, bbox_inches='tight', facecolor='white')
     print(f"PDF saved to: {pdf_path}")

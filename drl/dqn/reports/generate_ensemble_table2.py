@@ -341,10 +341,11 @@ def compute_portfolio_returns(
     models: list[DQNAgent],
     sigma_tgt: float = SIGMA_TGT_DEFAULT,
     bp: float | None = None,
+    save_dir: Path | None = None,
 ) -> tuple[pd.Series, int]:
     """
     Compute portfolio returns for an asset and round using Q-ensemble.
-    
+
     Returns:
         (portfolio_return_series, n_contracts)
     """
@@ -355,20 +356,44 @@ def compute_portfolio_returns(
     ]
     contract_series = []
     n_contracts = 0
-    
+
+    csv_rows = []
+
     for ticker in tickers:
         result = backtest_contract_ensemble(ticker, round_num, models, sigma_tgt, bp=bp)
         if result is None:
             continue
-        
+
         returns, dates, positions = result
         series = pd.Series(returns, index=pd.to_datetime(dates))
         contract_series.append(series)
         n_contracts += 1
-        
+
         # Print position statistics
         non_zero_pct = (positions != 0).mean()
         print(f"    {ticker}: {len(returns)} days, {non_zero_pct*100:.1f}% non-zero positions")
+
+        # Save positions data if save_dir is provided
+        if save_dir is not None:
+            save_dir.mkdir(parents=True, exist_ok=True)
+            npz_path = save_dir / f"positions_{ticker}_r{round_num}.npz"
+
+            # Append to CSV: contract, round, date, position, return
+            for d, pos, ret in zip(dates, positions, returns):
+                csv_rows.append({"contract": ticker, "round": round_num, "date": d, "position": pos, "return": ret})
+
+            # Save NPZ for this contract
+            np.savez(
+                npz_path,
+                positions=positions.astype(np.float64),
+                dates=np.array([str(d) for d in dates]),
+            )
+
+    # Save combined CSV after loop completes
+    if save_dir is not None and csv_rows:
+        csv_path = save_dir / "positions.csv"
+        df_csv = pd.DataFrame(csv_rows)
+        df_csv.to_csv(csv_path, mode="w", header=True, index=False)
     
     if n_contracts == 0:
         raise ValueError(f"No valid contracts for {asset_name} r{round_num}")
@@ -401,29 +426,29 @@ def run_asset_ensemble_backtest(
     
     if len(models_r1) == 0 or len(models_r2) == 0:
         raise ValueError(f"Could not load enough models for {asset_name}")
-    
+
     bp = bp_r1 if bp_r1 != BP else bp_r2
-    
+
+    asset_slug = asset_name.replace(" ", "_")
+
+    if bp_level is not None:
+        save_dir = REPORTS_ROOT / asset_slug / f"bp{int(bp_level * 10000)}"
+    else:
+        save_dir = REPORTS_ROOT / asset_slug
+
+    save_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"\n  Round 1 (2011-2015):")
-    port_r1, n1 = compute_portfolio_returns(asset_name, 1, models_r1, sigma_tgt, bp=bp)
-    
+    port_r1, n1 = compute_portfolio_returns(asset_name, 1, models_r1, sigma_tgt, bp=bp, save_dir=save_dir)
+
     print(f"\n  Round 2 (2016-2019):")
-    port_r2, n2 = compute_portfolio_returns(asset_name, 2, models_r2, sigma_tgt, bp=bp)
+    port_r2, n2 = compute_portfolio_returns(asset_name, 2, models_r2, sigma_tgt, bp=bp, save_dir=save_dir)
     
     portfolio_full = pd.concat([port_r1, port_r2]).sort_index()
     n_contracts_avg = (n1 + n2) / 2
     
     print(f"\n  Combined: {len(portfolio_full)} days, avg {n_contracts_avg:.1f} contracts")
-    
-    asset_slug = asset_name.replace(" ", "_")
-    
-    if bp_level is not None:
-        save_dir = REPORTS_ROOT / asset_slug / f"bp{int(bp_level * 10000)}"
-    else:
-        save_dir = REPORTS_ROOT / asset_slug
-    
-    save_dir.mkdir(parents=True, exist_ok=True)
-    
+
     npz_path = save_dir / "top5_ensemble_R.npz"
     np.savez(
         npz_path,
@@ -609,6 +634,7 @@ def main():
 
         if len(bp_levels) > 1:
             metrics_path = REPORTS_ROOT / f"bp{int(bp_level*10000)}" / "table2_metrics.json"
+            metrics_path.parent.mkdir(parents=True, exist_ok=True)
             metrics_to_save = {
                 asset: {
                     "metrics": result["metrics"],

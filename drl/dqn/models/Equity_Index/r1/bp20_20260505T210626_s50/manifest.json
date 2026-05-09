@@ -22,7 +22,7 @@
   "asset_class_count": 11,
   "best_val_reward": 1.8254826832861504,
   "bp": 0.002,
-  "bundle_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Equity_Index/r1/20260505T210626_s50",
+  "bundle_dir": "drl/dqn/models/Equity_Index/r1/20260505T210626_s50",
   "completed_cycles": 65,
   "continuous_action_range": [
     -1.0,
@@ -156,17 +156,17 @@
   ],
   "feature_artifact_path": null,
   "feature_artifact_paths": {
-    "CA": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/CA/r1.npz",
-    "EN": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/EN/r1.npz",
-    "ER": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/ER/r1.npz",
-    "ES": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/ES/r1.npz",
-    "LX": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/LX/r1.npz",
-    "MD": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/MD/r1.npz",
-    "SC": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/SC/r1.npz",
-    "SP": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/SP/r1.npz",
-    "XU": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/XU/r1.npz",
-    "XX": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/XX/r1.npz",
-    "YM": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/YM/r1.npz"
+    "CA": "drl/features/CA/r1.npz",
+    "EN": "drl/features/EN/r1.npz",
+    "ER": "drl/features/ER/r1.npz",
+    "ES": "drl/features/ES/r1.npz",
+    "LX": "drl/features/LX/r1.npz",
+    "MD": "drl/features/MD/r1.npz",
+    "SC": "drl/features/SC/r1.npz",
+    "SP": "drl/features/SP/r1.npz",
+    "XU": "drl/features/XU/r1.npz",
+    "XX": "drl/features/XX/r1.npz",
+    "YM": "drl/features/YM/r1.npz"
   },
   "feature_dim": 9,
   "feature_line": "structural_38_mainline",
@@ -271,7 +271,7 @@
     "XX",
     "YM"
   ],
-  "log_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Equity_Index/r1/20260505T210626_s50",
+  "log_dir": "drl/dqn/models/Equity_Index/r1/20260505T210626_s50",
   "macd_pairs": [
     [
       8,

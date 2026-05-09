@@ -44,8 +44,27 @@ def load_data():
                 data[a][bp] = entry
     return {a: d for a, d in data.items() if d}
 
+
+def load_daily_cost_data():
+    """Load daily cost data from exhibit5_daily_cost_all.csv."""
+    data = {a: {} for a in ASSET_ORDER}
+    cf = DATA_DIR / "exhibit5_daily_cost_all.csv"
+    if not cf.exists():
+        print("No daily cost data found.")
+        return data
+    with open(cf, newline="") as f:
+        for row in csv.DictReader(f):
+            a = row["Asset"].strip()
+            bp = int(row["BP"])
+            try:
+                data[a][bp] = float(row["avg_daily_cost"]) if row["avg_daily_cost"] else None
+            except ValueError:
+                data[a][bp] = None
+    return data
+
 def plot():
     data = load_data()
+    daily_cost_data = load_daily_cost_data()
     if not data:
         print("No data.")
         return
@@ -60,9 +79,11 @@ def plot():
         xs_s, ys_s, xs_c, ys_c = [], [], [], []
         for bp in bps:
             m = data[asset][bp]
-            s, e = m.get("Sharpe"), m.get("E(R)")
+            s = m.get("Sharpe")
             if s is not None: xs_s.append(bp); ys_s.append(s)
-            if e is not None: xs_c.append(bp); ys_c.append(-e)
+            # Use real daily cost data for Panel B
+            daily_cost = daily_cost_data.get(asset, {}).get(bp)
+            if daily_cost is not None: xs_c.append(bp); ys_c.append(daily_cost)
         if xs_s:
             ax_a.plot(xs_s, ys_s, color=COLORS[asset], marker=MARKERS[asset],
                       markersize=7, linewidth=2, label=asset)
@@ -71,7 +92,7 @@ def plot():
                       markersize=7, linewidth=2, label=asset)
     for ax, title, ylabel in [
         (ax_a, "Panel A: Sharpe Ratio vs Transaction Cost", "Sharpe Ratio"),
-        (ax_b, "Panel B: Avg Daily Cost Per Contract vs Transaction Cost", "Cost Proxy (\u2212E(R))")]:
+        (ax_b, "Panel B: Avg Daily Cost Per Contract vs Transaction Cost", "Avg Daily Cost")]:
         ax.set_title(title, fontsize=12, fontweight="bold")
         ax.set_xlabel("BP Level (bps)", fontsize=11)
         ax.set_ylabel(ylabel, fontsize=11)
