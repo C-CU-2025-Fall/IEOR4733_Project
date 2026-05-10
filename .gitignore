@@ -55,3 +55,4 @@ drl/dqn/models/[A-Z][A-Z]/
 drl/dqn/train/train_loop.sh
 results/**/*.pt
 *.DS_Store
+dqn_model_backups/
