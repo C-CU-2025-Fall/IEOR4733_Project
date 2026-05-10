@@ -1,0 +1,152 @@
+{
+  "cycles": [
+    {
+      "cycle": 1,
+      "train_reward": -7.277179610717004,
+      "val_reward": -0.004070347779985067,
+      "best_val": -Infinity,
+      "patience": 0
+    },
+    {
+      "cycle": 2,
+      "train_reward": 11.715596037601667,
+      "val_reward": -0.005240545433506577,
+      "best_val": -0.004070347779985067,
+      "patience": 0
+    },
+    {
+      "cycle": 3,
+      "train_reward": 19.543967157546994,
+      "val_reward": -0.0013859762463562162,
+      "best_val": -0.004070347779985067,
+      "patience": 1
+    },
+    {
+      "cycle": 4,
+      "train_reward": 25.645213437792158,
+      "val_reward": -0.0016235737655333048,
+      "best_val": -0.0013859762463562162,
+      "patience": 0
+    },
+    {
+      "cycle": 5,
+      "train_reward": 34.512456505560614,
+      "val_reward": -0.0011489926644306396,
+      "best_val": -0.0013859762463562162,
+      "patience": 1
+    },
+    {
+      "cycle": 6,
+      "train_reward": 44.278171703834914,
+      "val_reward": -0.0028537533784230317,
+      "best_val": -0.0011489926644306396,
+      "patience": 0
+    },
+    {
+      "cycle": 7,
+      "train_reward": 50.477113289216305,
+      "val_reward": -0.003179432899386071,
+      "best_val": -0.0011489926644306396,
+      "patience": 1
+    },
+    {
+      "cycle": 8,
+      "train_reward": 54.641278522064404,
+      "val_reward": 0.005237784030198867,
+      "best_val": -0.0011489926644306396,
+      "patience": 2
+    },
+    {
+      "cycle": 9,
+      "train_reward": 54.802886739296255,
+      "val_reward": 4.1727304804525995e-05,
+      "best_val": 0.005237784030198867,
+      "patience": 0
+    },
+    {
+      "cycle": 10,
+      "train_reward": 62.92166360108362,
+      "val_reward": 0.004543671496480005,
+      "best_val": 0.005237784030198867,
+      "patience": 1
+    },
+    {
+      "cycle": 11,
+      "train_reward": 67.17163731647044,
+      "val_reward": 0.007209364800111167,
+      "best_val": 0.005237784030198867,
+      "patience": 2
+    },
+    {
+      "cycle": 12,
+      "train_reward": 69.18143258175667,
+      "val_reward": 0.006285912080792744,
+      "best_val": 0.007209364800111167,
+      "patience": 0
+    },
+    {
+      "cycle": 13,
+      "train_reward": 75.69615315400674,
+      "val_reward": 0.004433475098826289,
+      "best_val": 0.007209364800111167,
+      "patience": 1
+    },
+    {
+      "cycle": 14,
+      "train_reward": 77.47119105243539,
+      "val_reward": 0.005107454900167174,
+      "best_val": 0.007209364800111167,
+      "patience": 2
+    },
+    {
+      "cycle": 15,
+      "train_reward": 81.67191126867196,
+      "val_reward": 0.006587553933857861,
+      "best_val": 0.007209364800111167,
+      "patience": 3
+    },
+    {
+      "cycle": 16,
+      "train_reward": 87.70404760990955,
+      "val_reward": 0.006796759595591973,
+      "best_val": 0.007209364800111167,
+      "patience": 4
+    },
+    {
+      "cycle": 17,
+      "train_reward": 84.84558906928062,
+      "val_reward": 0.008118643540389279,
+      "best_val": 0.007209364800111167,
+      "patience": 5
+    },
+    {
+      "cycle": 18,
+      "train_reward": 85.23114641745067,
+      "val_reward": 0.009051824590725364,
+      "best_val": 0.008118643540389279,
+      "patience": 0
+    },
+    {
+      "cycle": 19,
+      "train_reward": 93.03332594994438,
+      "val_reward": 0.007821056420264453,
+      "best_val": 0.009051824590725364,
+      "patience": 0
+    },
+    {
+      "cycle": 20,
+      "train_reward": 85.7118861523869,
+      "val_reward": 0.007492979691689705,
+      "best_val": 0.009051824590725364,
+      "patience": 1
+    }
+  ],
+  "summary": {
+    "dq_sharpe": -3.8625355173139306,
+    "dq_sortino": -6.557194257117332,
+    "lo_sharpe": 0.9954221227227397,
+    "time": 686.590573310852,
+    "best_val": 0.009051824590725364,
+    "best_cycle": 18
+  }
+}

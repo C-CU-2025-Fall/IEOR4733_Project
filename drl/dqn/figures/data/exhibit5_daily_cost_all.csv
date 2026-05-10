@@ -1,0 +1,26 @@
+Asset,BP,avg_daily_cost,n_contracts,n_trading_days
+Commodity,1,0.096346,25,5512
+Equity Index,1,0.558259,11,4037
+Fixed Income,1,0.032950,5,713
+Forex,1,0.541574,9,1390
+All,1,0.307282,50,11652
+Commodity,10,1.064501,25,5954
+Equity Index,10,5.376072,11,3244
+Fixed Income,10,0.292045,5,434
+Forex,10,3.176026,9,1422
+All,10,2.477161,50,11054
+Commodity,20,1.830461,25,4161
+Equity Index,20,9.941129,11,2915
+Fixed Income,20,0.502959,5,154
+Forex,20,8.657653,9,771
+All,20,5.233050,50,8001
+Commodity,30,0.836951,25,277
+Equity Index,30,16.747816,11,723
+Fixed Income,30,1.074424,5,30
+Forex,30,19.044393,9,68
+All,30,9.425896,50,1098
+Commodity,45,1.779902,25,686
+Equity Index,45,18.799869,11,1672
+Fixed Income,45,1.319052,5,29
+Forex,45,27.102467,9,122
+All,45,12.250323,50,2509

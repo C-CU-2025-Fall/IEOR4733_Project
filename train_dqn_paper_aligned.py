@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-论文对齐 DQN 训练 - 完整实现论文所有稳定机制
+Paper-aligned DQN training - full implementation of all paper stability mechanisms
 
 ✅ Fixed Q-targets (Target Network)
 ✅ Double DQN
 ✅ Gradient Clipping
 ✅ Learning Rate Decay
 ✅ LSTM [64, 32] + Leaky-ReLU
-✅ Table 1 所有超参数
+✅ All Table 1 hyperparameters
 """
 
 import pandas as pd
@@ -24,16 +24,16 @@ import os
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # =============================================================================
-# 论文 Table 1 超参数
+# Paper Table 1 hyperparameters
 # =============================================================================
 
-LR = 0.0001          # 论文：0.0001
-GAMMA = 0.3          # 论文：0.3
-BATCH_SIZE = 64      # 论文：64
-MEMORY_SIZE = 5000   # 论文：5000
-TAU = 1000           # 论文：target update 每 1000 步
-BP = 0.0020          # 论文：20 bps
-VOL_TARGET = 0.10    # 10% 年化波动率目标
+LR = 0.0001          # Paper: 0.0001
+GAMMA = 0.3          # Paper: 0.3
+BATCH_SIZE = 64      # Paper: 64
+MEMORY_SIZE = 5000   # Paper: 5000
+TAU = 1000           # Paper: target update every 1000 steps
+BP = 0.0020          # Paper: 20 bps
+VOL_TARGET = 0.10    # 10% annualized volatility target
 
 CONTRACTS_BY_CLASS = {
     'Commodity': ['CL=F', 'GC=F', 'SI=F', 'HG=F', 'NG=F', 'ZC=F', 'ZS=F', 'ZW=F', 
@@ -44,7 +44,7 @@ CONTRACTS_BY_CLASS = {
 }
 
 # =============================================================================
-# 环境
+# Environment
 # =============================================================================
 
 class Env:
@@ -73,7 +73,7 @@ class Env:
         return self.fe.build_features(self.prices, self.returns, self.idx), reward, False
 
 # =============================================================================
-# LSTM 网络 (论文：LSTM [64, 32] + Leaky-ReLU)
+# LSTM network (Paper: LSTM [64, 32] + Leaky-ReLU)
 # =============================================================================
 
 class LSTM(nn.Module):
@@ -83,7 +83,7 @@ class LSTM(nn.Module):
         self.lstm2 = nn.LSTM(hidden_sizes[0], hidden_sizes[1], batch_first=True)
         self.fc = nn.Linear(hidden_sizes[1], output_dim)
         
-        # 权重初始化 (正交初始化，适合 LSTM)
+        # Weight initialization (orthogonal init, suitable for LSTM)
         self._init_weights()
         
     def _init_weights(self):
@@ -97,13 +97,13 @@ class LSTM(nn.Module):
         
     def forward(self, x):
         o1, _ = self.lstm1(x)
-        o1 = F.leaky_relu(o1, 0.01)  # 论文：Leaky-ReLU
+        o1 = F.leaky_relu(o1, 0.01)  # Paper: Leaky-ReLU
         o2, _ = self.lstm2(o1)
         o2 = F.leaky_relu(o2, 0.01)
         return self.fc(o2[:, -1, :])
 
 # =============================================================================
-# 经验回放
+# Experience replay
 # =============================================================================
 
 class ReplayBuffer:
@@ -132,27 +132,27 @@ class ReplayBuffer:
         return len(self.buffer)
 
 # =============================================================================
-# ✅ 论文对齐 DQN (Fixed Q-targets + Double DQN)
+# ✅ Paper-aligned DQN (Fixed Q-targets + Double DQN)
 # =============================================================================
 
 class DQN:
     def __init__(self):
-        # 主网络
+        # Main network
         self.q_net = LSTM(8, [64, 32], 3).to(DEVICE)
         
-        # ⭐ 目标网络 (论文：Fixed Q-targets)
+        # ⭐ Target network (Paper: Fixed Q-targets)
         self.target_net = LSTM(8, [64, 32], 3).to(DEVICE)
         self.target_net.load_state_dict(self.q_net.state_dict())
         
         self.optimizer = torch.optim.Adam(self.q_net.parameters(), lr=LR)
         
-        # ⭐ 学习率衰减
+        # ⭐ Learning rate decay
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=50, gamma=0.9)
         
         self.memory = ReplayBuffer(MEMORY_SIZE)
         self.steps = 0
         
-        # 记录训练历史
+        # Record training history
         self.rewards = []
         self.losses = []
         
@@ -178,11 +178,11 @@ class DQN:
         next_states = torch.FloatTensor(next_states).to(DEVICE)
         dones = torch.FloatTensor(dones).to(DEVICE)
         
-        # ⭐ Double DQN (论文要求)
-        # 主网络选动作，目标网络算 Q 值
+        # ⭐ Double DQN (paper requirement)
+        # Main network selects action, target network computes Q value
         with torch.no_grad():
-            next_actions = self.q_net(next_states).argmax(1)  # 主网络选
-            next_q = self.target_net(next_states).gather(1, next_actions.unsqueeze(1)).squeeze()  # 目标网络算
+            next_actions = self.q_net(next_states).argmax(1)  # Main network selects
+            next_q = self.target_net(next_states).gather(1, next_actions.unsqueeze(1)).squeeze()  # Target network computes
             target_q = rewards + (1 - dones) * GAMMA * next_q
         
         current_q = self.q_net(states).gather(1, actions.unsqueeze(1)).squeeze()
@@ -191,13 +191,13 @@ class DQN:
         self.optimizer.zero_grad()
         loss.backward()
         
-        # ⭐ 梯度裁剪 (防止爆炸)
+        # ⭐ Gradient clipping (prevent explosion)
         torch.nn.utils.clip_grad_norm_(self.q_net.parameters(), 0.5)
         
         self.optimizer.step()
         self.scheduler.step()
         
-        # ⭐ 更新目标网络 (论文：τ=1000)
+        # ⭐ Update target network (Paper: τ=1000)
         self.steps += 1
         if self.steps % TAU == 0:
             self.target_net.load_state_dict(self.q_net.state_dict())
@@ -206,7 +206,7 @@ class DQN:
         return loss.item()
 
 # =============================================================================
-# 数据加载
+# Data loading
 # =============================================================================
 
 def load_data(tickers):
@@ -227,23 +227,23 @@ def load_data(tickers):
     return np.concatenate(prices), np.concatenate(returns) if prices else (None, None)
 
 # =============================================================================
-# 训练函数
+# Training function
 # =============================================================================
 
 def train_class(name, tickers, episodes=200):
     print(f"\n{'='*70}")
-    print(f"📊 训练 {name} - DQN (论文对齐版)")
+    print(f"📊 Training {name} - DQN (Paper-aligned)")
     print('='*70)
     
     prices, returns = load_data(tickers)
     if prices is None:
-        print("  ⚠️ 无数据")
+        print("  ⚠️ No data")
         return None
     
-    print(f"  合约数：{len(tickers)}")
-    print(f"  总样本：{len(returns):,}")
+    print(f"  Contracts: {len(tickers)}")
+    print(f"  Total samples: {len(returns):,}")
     print(f"  Episodes: {episodes}")
-    print(f"  开始训练...")
+    print(f"  Starting training...")
     
     env = Env(prices, returns)
     dqn = DQN()
@@ -268,20 +268,20 @@ def train_class(name, tickers, episodes=200):
             print(f"    Episode {ep+1}/{episodes}: Avg Reward={avg:.4f}")
     
     dqn.rewards = rewards
-    print(f"  ✅ 完成，平均奖励：{np.mean(rewards):.4f}")
+    print(f"  ✅ Done, avg reward: {np.mean(rewards):.4f}")
     return dqn
 
 # =============================================================================
-# 主函数
+# Main function
 # =============================================================================
 
 def main():
     print("="*80)
-    print("🔥 论文对齐 DQN 训练 - Fixed Q-targets + Double DQN")
+    print("🔥 Paper-aligned DQN training - Fixed Q-targets + Double DQN")
     print("="*80)
-    print(f"设备：{DEVICE}")
-    print(f"数据：2011-2015")
-    print(f"超参数：lr={LR}, γ={GAMMA}, batch={BATCH_SIZE}, τ={TAU}")
+    print(f"Device: {DEVICE}")
+    print(f"Data: 2011-2015")
+    print(f"Hyperparameters: lr={LR}, γ={GAMMA}, batch={BATCH_SIZE}, τ={TAU}")
     print("="*80)
     
     start = time.time()
@@ -297,9 +297,9 @@ def main():
         pickle.dump(models, f)
     
     print(f"\n{'='*80}")
-    print(f"✅ 训练完成！")
-    print(f"⏱️ 总时间：{elapsed:.1f} 分钟")
-    print(f"💾 模型：models_dqn_paper_{ts}.pkl")
+    print(f"✅ Training complete!")
+    print(f"⏱️ Total time: {elapsed:.1f} minutes")
+    print(f"💾 Model: models_dqn_paper_{ts}.pkl")
     print("="*80)
 
 if __name__ == '__main__':

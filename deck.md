@@ -32,7 +32,7 @@ The paper addresses portfolio optimization using three DRL algorithms:
 
 Deep Q-learning Networks (DQN) [34, 49], Policy Gradients (PG) [52] and Advantage Actor-Critic (A2C) [33]
 
-原文文献综述
+Original Literature Review
 | **Fundamental analysis** | CAN-SLIM [43] compare current price with expectation to see if it is undervalued or overvalued | timing of enter and exit of trades is not specified|
 | **Technical analysis** | Combination of indicators (e.g. Relative Strength Index (RSI), Bollinger Bands) | weak predictability due to lack of analysis of market|
 | **Algorithum Trading** | Time series momentum strategies (baseline) | weak predictability due to market move sideways|

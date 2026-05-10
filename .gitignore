@@ -11,7 +11,14 @@ venv/
 # Data files — CLC futures data committed to repo
 data/futures/
 data/futures_processed/
-models/
+
+# Old model format (v0)
+models/dqn/*.pt
+
+# Track v0 walkforward and v2+ versioned models
+!models/dqn_walkforward/
+!models/dqn_walkforward/**
+!drl/dqn/models/
 
 # Logs
 *.log
@@ -29,3 +36,23 @@ results_lstm_*.csv
 # Images (optional - can include if small)
 # *.png
 simulation_data/
+
+# DQN model artifacts (checkpoints, logs) — too large for git
+drl/dqn/models/**/*.pt
+drl/dqn/models/**/*.csv
+drl/dqn/models/**/*.json
+drl/dqn/models/**/*.log
+drl/dqn/models/**/
+# But keep the directory structure
+!drl/dqn/models/.gitkeep
+# Saved evaluation results (reward arrays), versioned by RESULTS_VERSION
+results/v*/
+# Batch results
+batch_train_results_*.json
+# Old per-contract models
+drl/dqn/models/[A-Z][A-Z]/
+# Shell scripts
+drl/dqn/train/train_loop.sh
+results/**/*.pt
+*.DS_Store
+dqn_model_backups/

@@ -1,37 +1,29 @@
 """
-metrics.py — 9 portfolio metrics (single source of truth)
+metrics.py — Portfolio metrics for the active trade-world baseline
 
 Paper: Zhang, Zohren, Roberts (2019) Section 4.4
 Reference: [27] Lim et al. (Deep Momentum Networks)
 
-Framework: ADDITIVE profits on p0-normalized prices.
+Framework: ADDITIVE profits on raw prices.
   r_t = p_t - p_{t-1}  (additive)
-  Wealth = N × W_0 + cumsum(R_eq)
+  R_t = Eq 4 trade return (contract-level, volatility-scaled)
+  R_port = (1/N) Σ R_i  (Eq 13, equal-weight portfolio)
+  All metrics computed on R_port directly.
 
-Metrics (per paper Section 4.4, "as suggested in [27]"):
-  1. E(R)     — mean(R) × 252
-  2. std(R)   — std(R) × √252
-  3. DD       — sqrt(mean(min(R,0)²)) × √252  [zero-target downside deviation]
+Metrics:
+  1. E(R)     — mean(R_port) × 252
+  2. std(R)   — std(R_port) × √252
+  3. DD       — std(R_port[R<0]) × √252  [paper: "annualised std of negative returns"]
   4. Sharpe   — E(R) / std(R)
   5. Sortino  — E(R) / DD
-  6. MDD      — max drawdown from additive wealth path
-  7. Calmar   — realised annual return / MDD
-  8. % +ve    — fraction of positive return days
+  6. MDD      — max drawdown from additive wealth = W₀ + cumsum(R_port)
+  7. Calmar   — additive-wealth CAGR / MDD on the same additive wealth path
+  8. % +ve    — fraction of positive R_port days
   9. Ave P/L  — mean(R>0) / |mean(R<0)|
-
-Notes:
-  - DD uses zero-target LPM(2) per standard Sortino framework (MAR=0).
-    This is more orthodox than std(R[R<0]) per CFA guidance.
-  - Calmar uses realised_ann/MDD. While [27] says "compares expected annual return
-    with MDD", using E(R)/MDD with N×W0 init_wealth produces values 10x off paper.
-    realised_ann/MDD keeps numerator and denominator on the same wealth scale.
-  - MDD uses N×W_0 as init_wealth (empirically closest to paper values).
 """
 import numpy as np
-from config import TRADING_DAYS
 
-T = TRADING_DAYS
-W0 = 1.0  # initial wealth per contract
+TRADING_DAYS = 252
 
 METRIC_NAMES = [
     'E(R)', 'std(R)', 'DD', 'Sharpe', 'Sortino',
@@ -39,52 +31,96 @@ METRIC_NAMES = [
 ]
 
 
-def compute_metrics(R_eq, n_contracts, w0=1.0):
-    """Compute all 9 metrics from portfolio daily returns.
+def _wealth_cagr_from_additive_path(wealth, w0):
+    """Annualize additive-wealth growth as a CAGR-like rate."""
+    wealth = np.asarray(wealth, dtype=float)
+    wealth = wealth[np.isfinite(wealth)]
+    if len(wealth) == 0 or w0 <= 0:
+        return 0.0
+    final_wealth = wealth[-1]
+    if final_wealth <= 0:
+        return 0.0
+    n_periods = len(wealth)
+    return (final_wealth / w0) ** (TRADING_DAYS / n_periods) - 1.0
+
+
+def additive_wealth_path(pnl_series, w0=1.0):
+    """Build an additive wealth path from additive PnL increments."""
+    pnl = np.asarray(pnl_series, dtype=float)
+    pnl = pnl[np.isfinite(pnl)]
+    if len(pnl) == 0:
+        return np.asarray([], dtype=float)
+    return float(w0) + np.cumsum(pnl)
+
+def cagr_from_path(path, periods_per_year=TRADING_DAYS):
+    """Annualized CAGR from a positive wealth/NAV path."""
+    arr = np.asarray(path, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    if len(arr) == 0:
+        return 0.0
+    start = arr[0]
+    end = arr[-1]
+    if start <= 0 or end <= 0:
+        return 0.0
+    return (end / start) ** (periods_per_year / len(arr)) - 1.0
+
+
+def max_drawdown_from_path(path):
+    """Classical peak-to-trough drawdown on any positive wealth/NAV path."""
+    arr = np.asarray(path, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    if len(arr) == 0:
+        return 0.0
+    peak = np.maximum.accumulate(arr)
+    drawdown = (peak - arr) / peak
+    return float(np.nanmax(drawdown))
+
+def compute_metrics(R_port, n_contracts=None, w0=None, N_contracts=None, round_output=True):
+    """Compute all 9 metrics from portfolio daily returns (additive).
 
     Args:
-        R_eq:         1D array of equal-weight portfolio daily returns (additive)
-        n_contracts:  number of contracts in portfolio
-        w0:           initial wealth per contract
+        R_port:  1D array of equal-weight portfolio daily returns
+        n_contracts: number of sleeves/contracts in the portfolio
+        w0:      initial wealth for MDD calculation. If omitted, use
+                 n_contracts so additive wealth starts at one unit per sleeve.
 
     Returns:
-        list of 9 rounded values [E(R), std, DD, Sharpe, Sortino, MDD, Calmar, %+ve, AveP/L]
+        list of 9 metric values [E(R), std, DD, Sharpe, Sortino, MDD, Calmar, %+ve, AveP/L]
     """
-    R_eq = np.asarray(R_eq, dtype=float)
-    n_years = len(R_eq) / T
+    R = np.asarray(R_port, dtype=float)
+    R = R[np.isfinite(R)]
+    T = TRADING_DAYS
+    if n_contracts is None and N_contracts is not None:
+        n_contracts = N_contracts
+    if w0 is None:
+        w0 = float(n_contracts) if n_contracts is not None else 1.0
 
-    er = R_eq.mean() * T
-    std = R_eq.std(ddof=0) * np.sqrt(T)
+    # ── Tier A: core return & risk metrics ──
+    er = R.mean() * T
+    vol = R.std(ddof=0) * np.sqrt(T)
+    sharpe = er / vol if vol > 0 else 0.0
 
-    # DD: zero-target downside deviation (LPM(2) with MAR=0)
-    # Per standard Sortino framework and [27] "Downside Deviation"
-    shortfall = np.minimum(R_eq, 0.0)
-    dd = np.sqrt(np.mean(shortfall ** 2)) * np.sqrt(T)
-
-    sharpe = er / std if std > 0 else 0.0
+    # DD: paper-literal "annualised standard deviation of trade returns that are negative"
+    neg = R[R < 0]
+    dd = neg.std(ddof=0) * np.sqrt(T) if len(neg) > 1 else 0.0
     sortino = er / dd if dd > 0 else 0.0
 
-    pct_pos = (R_eq > 0).mean()
+    # ── Tier B: distribution metrics ──
+    pos = R[R > 0]
+    pct_pos = len(pos) / len(R) if len(R) > 0 else 0.0
+    avg_pl = (pos.mean() / abs(neg.mean())) if len(pos) > 0 and len(neg) > 0 else 0.0
 
-    pos_r = R_eq[R_eq > 0]
-    neg_r = R_eq[R_eq < 0]
-    avg_pl = (
-        pos_r.mean() / abs(neg_r.mean())
-        if len(pos_r) > 0 and len(neg_r) > 0 else 0.0
-    )
+    # ── MDD: additive wealth path ──
+    # wealth = W₀ + cumsum(R_port); MDD = max((peak - wealth) / peak)
+    # Use W₀ = N_contracts by default so the additive path starts with
+    # one unit of wealth per equal-weight sleeve.
+    wealth = additive_wealth_path(R, w0=w0)
+    mdd = max_drawdown_from_path(wealth)
 
-    # MDD: from additive wealth path with init_wealth = N × W_0
-    cumret = np.cumsum(R_eq)
-    wealth = n_contracts * w0 + cumret
-    peak = np.maximum.accumulate(wealth)
-    mdd = float(np.max((peak - wealth) / peak))
+    annual_return = _wealth_cagr_from_additive_path(wealth, w0)
+    calmar = annual_return / mdd if mdd > 0 else 0.0
 
-    # Calmar: realised annual return / MDD
-    # Using realised_ann (not E(R)) so numerator scales with init_wealth like MDD.
-    # This empirically matches paper values; E(R)/MDD would be 10x off due to
-    # init_wealth scaling mismatch.
-    realised_ann = (wealth[-1] - wealth[0]) / wealth[0] / n_years
-    calmar = realised_ann / mdd if mdd > 0 else 0.0
-
-    return [round(v, 3) for v in
-            [er, std, dd, sharpe, sortino, mdd, calmar, pct_pos, avg_pl]]
+    values = [er, vol, dd, sharpe, sortino, mdd, calmar, pct_pos, avg_pl]
+    if round_output:
+        return [round(v, 3) for v in values]
+    return values

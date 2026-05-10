@@ -1,0 +1,39 @@
+{
+  "best_gamma": 0.7,
+  "by_gamma": {
+    "0.5": {
+      "top_3_seeds": [
+        42,
+        44,
+        43
+      ],
+      "top_3_median_r1_sharpe": -1.023,
+      "top_3_median_r2_sharpe": -1.047,
+      "all_seed_median_r1_sharpe": -1.838,
+      "all_seed_median_r2_sharpe": -1.733
+    },
+    "0.6": {
+      "top_3_seeds": [
+        42,
+        44,
+        46
+      ],
+      "top_3_median_r1_sharpe": -0.48,
+      "top_3_median_r2_sharpe": 0.088,
+      "all_seed_median_r1_sharpe": -1.176,
+      "all_seed_median_r2_sharpe": -1.285
+    },
+    "0.7": {
+      "top_3_seeds": [
+        42,
+        45,
+        43
+      ],
+      "top_3_median_r1_sharpe": -0.686,
+      "top_3_median_r2_sharpe": -0.749,
+      "all_seed_median_r1_sharpe": -1.09,
+      "all_seed_median_r2_sharpe": -1.036
+    }
+  },
+  "decision": "clear_winner"
+}

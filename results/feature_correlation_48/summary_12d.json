@@ -1,0 +1,141 @@
+{
+  "n_contracts": 48,
+  "tickers": [
+    "CC",
+    "DA",
+    "GI",
+    "JO",
+    "KC",
+    "KW",
+    "LB",
+    "NR",
+    "SB",
+    "ZC",
+    "ZF",
+    "ZG",
+    "ZH",
+    "ZI",
+    "ZK",
+    "ZL",
+    "ZO",
+    "ZP",
+    "ZR",
+    "ZT",
+    "ZU",
+    "ZW",
+    "ZZ",
+    "ZN",
+    "CA",
+    "EN",
+    "ER",
+    "ES",
+    "LX",
+    "MD",
+    "SC",
+    "SP",
+    "XU",
+    "XX",
+    "YM",
+    "DT",
+    "TY",
+    "UB",
+    "US",
+    "AN",
+    "BN",
+    "CN",
+    "DX",
+    "FN",
+    "JN",
+    "MP",
+    "NK",
+    "SN"
+  ],
+  "feature_dim": 12,
+  "state_spec_version": "structural_38_enhanced_12d",
+  "features": [
+    "ret_1d",
+    "ret_5d",
+    "ret_21d",
+    "ret_126d",
+    "macd_8_24",
+    "rsi_5",
+    "rsi_30",
+    "atr_norm",
+    "vol_norm",
+    "oi_chg",
+    "drawdown",
+    "gap"
+  ],
+  "high_corr_pairs": [
+    {
+      "pair": [
+        "ret_5d",
+        "rsi_5"
+      ],
+      "r": 0.8718
+    },
+    {
+      "pair": [
+        "ret_21d",
+        "macd_8_24"
+      ],
+      "r": 0.8806
+    },
+    {
+      "pair": [
+        "ret_21d",
+        "rsi_5"
+      ],
+      "r": 0.6648
+    },
+    {
+      "pair": [
+        "ret_21d",
+        "rsi_30"
+      ],
+      "r": 0.8628
+    },
+    {
+      "pair": [
+        "ret_126d",
+        "rsi_30"
+      ],
+      "r": 0.6916
+    },
+    {
+      "pair": [
+        "ret_126d",
+        "drawdown"
+      ],
+      "r": 0.7657
+    },
+    {
+      "pair": [
+        "macd_8_24",
+        "rsi_5"
+      ],
+      "r": 0.6479
+    },
+    {
+      "pair": [
+        "macd_8_24",
+        "rsi_30"
+      ],
+      "r": 0.854
+    },
+    {
+      "pair": [
+        "rsi_5",
+        "rsi_30"
+      ],
+      "r": 0.6967
+    },
+    {
+      "pair": [
+        "rsi_30",
+        "drawdown"
+      ],
+      "r": 0.6992
+    }
+  ]
+}

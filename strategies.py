@@ -3,7 +3,7 @@ strategies.py — Trading signal functions
 Reference: [4] Baz et al. 2015 for MACD; [37] Moskowitz et al. 2012 for Sign(R)
 
 All strategies operate in the additive framework (Paper Section 3.2):
-  r_t = p_t - p_{t-1}  (additive profits on p0-normalized prices)
+  r_t = p_t - p_{t-1}  (additive profits on raw prices)
   
 Signal conventions:
 - Long Only: A_t = 1
@@ -31,7 +31,7 @@ def strategy_sign_r(additive_returns, lookback=SIGN_LOOKBACK):
     Sign(R): A_t = sign(r_{t-252:t})  [Paper Eq 10]
     
     In the additive framework:
-      r_t = p_t - p_{t-1} (p0-normalized)
+      r_t = p_t - p_{t-1}
       r_{t-252:t} = sum of r_{t-251}, r_{t-250}, ..., r_t  (252 returns)
                  = p_t - p_{t-252}
       A_t = sign(p_t - p_{t-252})
@@ -72,9 +72,7 @@ def strategy_macd(prices, pairs=MACD_PAIRS,
     
     Position ∈ [-1, +1].
     
-    NOTE: Input 'prices' should be p0-normalized prices (same space as Eq 4).
-    The result is scale-invariant, but we use normalized prices for
-    consistency with the additive framework.
+    NOTE: Prices used directly (p0 normalization is a no-op for Eq 4).
     
     Reference: [4] Baz et al. 2015
     """
