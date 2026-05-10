@@ -10,10 +10,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
-# Base path for BP level directories
-base_path = Path("/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/reports/ensemble_table2_bp")
-output_data_path = Path("/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/figures/data")
-output_fig_path = Path("/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/figures")
+# Base path for BP level directories (relative to this script)
+_script_dir = Path(__file__).parent
+base_path = _script_dir.parent / "reports" / "ensemble_table2_bp"
+output_data_path = _script_dir / "data"
+output_fig_path = _script_dir
 
 # BP levels to process
 bp_levels = [1, 10, 20, 30, 45]

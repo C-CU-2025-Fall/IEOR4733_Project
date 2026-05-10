@@ -1,6 +1,6 @@
 # DQN Pipeline Architecture
 
-> 单一事实来源。所有数据流经路径、reward 计算、索引约定都在这里。
+> Single source of truth. All data flow paths, reward calculations, and index conventions are documented here.
 
 ## Data Flow
 
@@ -11,42 +11,42 @@ CLC CSV files (data/CLC/{TK}_{SOURCE}.CSV)
 load_clc_full(ticker, source, start_date, anchor_date)
     │
     ├─► baseline_run._prepare_contract_cached()
-    │     start_date='2009-01-01' (默认)
-    │     返回: rd dict {prices[4343], rt[4343], sigma[4343], dates[2269], start=506, t1=2774}
-    │     dates = rd['prices'][start:t1+1] 的日期 = test period only
+    │     start_date='2009-01-01' (default)
+    │     returns: rd dict {prices[4343], rt[4343], sigma[4343], dates[2269], start=506, t1=2774}
+    │     dates = rd['prices'][start:t1+1] dates = test period only
     │     prices/rt/sigma = FULL array from 2009 to ~2026
     │
     └─► prepare_features.py
           start_date = train_start - 1 year (e.g. 2004-01-02 for R1)
-          → build_contract_arrays() → DROP 前 252 行 burn-in
+          → build_contract_arrays() → DROP first 252 rows burn-in
           → npz: {prices, returns, sigma, features[9D], dates}
-          npz 覆盖 2004-12~2026-03 (3786 rows for AN R2)
-          ⚠️ npz 长度 ≠ baseline prices 长度 (不同 start_date)
+          npz covers 2004-12~2026-03 (3786 rows for AN R2)
+          ⚠️ npz length ≠ baseline prices length (different start_date)
 ```
 
-## 数据一致性现状
+## Data Consistency Status
 
-- **prices 是同一来源**: 都用 `load_clc_full` + 同一个 source (RAD/REV)
-- **重叠日期价格完全相同**: diff = 0
-- **但 npz 更多历史**: 从 2004 起含 burn-in, baseline 从 2009 起
-- **burn-in 必须保留**: 9D features 需要历史数据计算 EWMA sigma / rolling returns / MACD
-- **npz[252:] 和 baseline 对齐后 features 一致**: test period 差异 < 0.001
+- **prices are from the same source**: both use `load_clc_full` + same source (RAD/REV)
+- **Overlapping dates have identical prices**: diff = 0
+- **But npz has more history**: starts from 2004 with burn-in, baseline starts from 2009
+- **burn-in must be kept**: 9D features need historical data for EWMA sigma / rolling returns / MACD
+- **npz[252:] and baseline features align after test period**: diff < 0.001
 
 ## Index Conventions
 
-| 变量 | 含义 |
+| Variable | Meaning |
 |------|------|
-| `rd['prices']` | 完整价格数组 (2009~2026), 长度 ~4343 |
-| `rd['start']` | test period 起始索引 (≈506, 即 2011-01) |
-| `rd['t1']` | test period 结束索引 (≈2774, 即 ~2015 或 2019) |
-| `rd['dates']` | rd['prices'][start:t1+1] 的日期, 长度 ~2269 |
-| `rd['rt']` | 加法收益: prices[t] - prices[t-1], 与 prices 同长 |
-| npz features | 从 2004-12 开始, 去掉 252 天 burn-in, 长度 ~3786 |
+| `rd['prices']` | Full price array (2009~2026), length ~4343 |
+| `rd['start']` | Test period start index (≈506, i.e. 2011-01) |
+| `rd['t1']` | Test period end index (≈2774, i.e. ~2015 or 2019) |
+| `rd['dates']` | Dates for rd['prices'][start:t1+1], length ~2269 |
+| `rd['rt']` | Additive returns: prices[t] - prices[t-1], same length as prices |
+| npz features | Start from 2004-12, after removing 252-day burn-in, length ~3786 |
 
-**⚠️ 索引陷阱**: `rd['prices'][i]` 和 `npz['features'][j]` 在同一日期的 **i ≠ j**
+**⚠️ Index trap**: `rd['prices'][i]` and `npz['features'][j]` on the same date have **i ≠ j**
 - baseline prices[0] = 2009-01-02
-- npz features[0] = 2004-12-31 (burn-in 后)
-- 对齐必须通过日期，不是索引
+- npz features[0] = 2004-12-31 (after burn-in)
+- Alignment must be through dates, not indices
 
 ## Reward: Paper Eq.4
 
@@ -54,11 +54,11 @@ load_clc_full(ticker, source, start_date, anchor_date)
 R_t = A_{t-1} × (σ_tgt / σ_{t-1}) × r_t − bp × p_{t-1} × |A_{t-1}×σ_tgt/σ_{t-1} − A_{t-2}×σ_tgt/σ_{t-2}|
 ```
 
-- `A_{t-1}` = **t 时刻持有的仓位**（t-1 时刻决定的）
-- `A_{t-2}` = **t-1 时刻持有的仓位**（t-2 时刻决定的）
-- 即使仓位不变，σ 变化也会产生微小 TC（vol-scaled position drift）
+- `A_{t-1}` = **position held at time t** (decided at t-1)
+- `A_{t-2}` = **position held at time t-1** (decided at t-2)
+- Even with unchanged position, σ changes generate small TC (vol-scaled position drift)
 
-### Training (ContractEnv.step) — 已修复 ✅
+### Training (ContractEnv.step) — Fixed ✅
 
 ```python
 # Paper's A_{t-1} = self.last_position, A_{t-2} = self.prev_last_position
@@ -70,7 +70,7 @@ compute_eq4_reward(
 )
 ```
 
-### Backtest (baseline_run, vectorized) — 始终正确 ✅
+### Backtest (baseline_run, vectorized) — Always correct ✅
 
 ```python
 sp = pos[t-1] * sigma_tgt / sigma[t-1]    # A_{t-1} scaled
@@ -87,19 +87,19 @@ spec: structural_38_close_norm_9d
   [8] RSI(30)
 ```
 
-- 需要 252 天 burn-in 历史，否则前 252 行 feature 值为 0/空
-- **不能去掉 burn-in**
+- Requires 252-day burn-in history, otherwise first 252 rows of feature values are 0/empty
+- **Cannot remove burn-in**
 
-## 一致性要求
+## Consistency Requirements
 
-三条路径必须用**同一组 prices/returns/sigma** 才有意义:
-1. Long-only baseline 回测 → baseline prices ✅
-2. DQN 回测 reward → baseline prices ✅ (同一个 rd)
-3. DQN 训练 reward → npz prices (⚠️ 更多历史，但同一来源)
+All three paths must use **the same set of prices/returns/sigma** to be meaningful:
+1. Long-only baseline backtest → baseline prices ✅
+2. DQN backtest reward → baseline prices ✅ (same rd)
+3. DQN training reward → npz prices (⚠️ more history, but same source)
 
-训练和回测 reward 在 test period 基本一致 (<0.001 diff), 因为:
-- 同一价格源
-- sigma 经过足够 warm-up 后收敛
+Training and backtest rewards are essentially identical in test period (<0.001 diff), because:
+- Same price source
+- sigma converges after sufficient warm-up
 
 ## Hyperparameters (Forex)
 
@@ -112,17 +112,17 @@ arch: LSTM(9,64)→LSTM(64,32)→FC(32)→Dueling(3)
 ## Checkpoints
 
 ```
-drl/dqn/models/Forex/r1/20260504T074157/  ← 当前唯一 R1
-Forex/r2/20260504T074703/  ← 当前唯一 R2
+drl/dqn/models/Forex/r1/20260504T074157/  ← current unique R1
+Forex/r2/20260504T074703/  ← current unique R2
 ```
 
 ## Known Issues
 
-| 状态 | 问题 |
+| Status | Issue |
 |------|------|
-| ✅ fixed | Training reward 用 pos[t] → 改用 self.last_position (A_{t-1}) |
-| ✅ fixed | 多余 checkpoint 清理 |
-| cosmetic | on-the-fly features 因长度不匹配, 但数据一致 |
+| ✅ fixed | Training reward used pos[t] → changed to self.last_position (A_{t-1}) |
+| ✅ fixed | Redundant checkpoints cleaned up |
+| cosmetic | On-the-fly features have length mismatch, but data is consistent |
 
 ## Round Config
 

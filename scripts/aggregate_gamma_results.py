@@ -1,7 +1,7 @@
-import json, csv, math
+import json, csv, math, os
 from statistics import median
 
-BASE = '/home/congge2026/.openclaw/workspace/IEOR4733_Project/results/gamma_tuning'
+BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'results', 'gamma_tuning')
 METRICS = ['E(R)','std(R)','DD','Sharpe','Sortino','MDD','Calmar','% +ve','Ave P/L']
 GAMMAS = [0.5, 0.6, 0.7]
 SEEDS = [42, 43, 44, 45, 46]

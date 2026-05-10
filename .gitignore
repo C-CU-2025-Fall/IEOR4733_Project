@@ -53,3 +53,5 @@ batch_train_results_*.json
 drl/dqn/models/[A-Z][A-Z]/
 # Shell scripts
 drl/dqn/train/train_loop.sh
+results/**/*.pt
+*.DS_Store

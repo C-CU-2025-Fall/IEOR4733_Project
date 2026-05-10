@@ -23,7 +23,7 @@ def load_yf_non(tk):
 
 def load_yf_rad(tk):
     d_yf, p_yf = load_yf_non(tk)
-    # CLC rolls
+    # CLC roll detection
     non = pd.read_csv(f'data/CLC/{tk}_NON.CSV', header=None, names=['D','O','H','L','C','V','OI'])
     rev = pd.read_csv(f'data/CLC/{tk}_REV.CSV', header=None, names=['D','O','H','L','C','V','OI'])
     non['D']=pd.to_datetime(non['D'],format='%m/%d/%Y'); rev['D']=pd.to_datetime(rev['D'],format='%m/%d/%Y')
@@ -112,8 +112,8 @@ def run_portfolio(five_source):
 
 # Define all combos to test
 combos = [
-    ({}, "全CLC_RAD"),
-    ({'CC':'YF_RAD','LB':'YF_RAD','JO':'YF_RAD','ZO':'YF_RAD','ZH':'YF_RAD'}, "全YF_RAD"),
+    ({}, "All CLC_RAD"),
+    ({'CC':'YF_RAD','LB':'YF_RAD','JO':'YF_RAD','ZO':'YF_RAD','ZH':'YF_RAD'}, "All YF_RAD"),
     ({'CC':'YF_RAD','LB':'YF_RAD','JO':'YF_RAD','ZO':'YF_RAD','ZH':'CLC_RAD'}, "YF_RAD×4+CLC_RAD×1(ZH)"),
     ({'LB':'YF_RAD','JO':'YF_RAD','ZO':'YF_RAD','CC':'CLC_RAD','ZH':'CLC_RAD'}, "YF_RAD×3(LB/JO/ZO)+CLC_RAD×2"),
     ({'CC':'CLC_REV','LB':'CLC_REV','JO':'CLC_REV','ZO':'CLC_REV','ZH':'CLC_REV'}, "CLC_REV×5+CLC_RAD×20"),
@@ -121,7 +121,7 @@ combos = [
     ({'LB':'CLC_REV','JO':'CLC_REV','ZO':'CLC_REV','CC':'CLC_RAD','ZH':'CLC_RAD'}, "CLC_REV×3(LB/JO/ZO)+CLC_RAD×22"),
 ]
 
-print(f"{'方案':45s} | {'#':>2s} {'E(R)%':>7s} {'std%':>6s} {'Shp%':>6s} {'+ve%':>6s} {'P/L%':>6s} | {'n10':>3s} {'n15':>3s}")
+print(f"{'Scenario':45s} | {'#':>2s} {'E(R)%':>7s} {'std%':>6s} {'Shp%':>6s} {'+ve%':>6s} {'P/L%':>6s} | {'n10':>3s} {'n15':>3s}")
 print("-"*115)
 for five_src, label in combos:
     md, errs, n10, n15, n = run_portfolio(five_src)

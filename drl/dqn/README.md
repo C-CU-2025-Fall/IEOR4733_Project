@@ -87,7 +87,7 @@ Reproduce command:
 python3 drl/dqn/train/train_dqn_walkforward.py --asset "Equity Index" --round 1 --gamma 0.6 --seed 42 --episodes 100 --device cuda
 ```
 
-Note: Training of all 60 models (3 assets × 2 rounds × 10 seeds) was parallelized across 4 NVIDIA GB10 GPUs. Logs at /tmp/g06_p*.log.
+Note: Training of all 60 models (4 assets × 2 rounds × 10 seeds) was parallelized across GPUs for efficiency.
 
 ## §5 Ensemble Methodology
 

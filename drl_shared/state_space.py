@@ -210,8 +210,8 @@ class ContractEnv:
         if self.idx >= self.max_idx:
             return get_feature_window(self.features, min(self.idx, self.max_idx)), 0.0, True
 
-        # 推理完第二天拿 reward: position 决定于 idx-1, return 实现于 idx
-        # 即 A_{t-1} * vol * r_t, 和论文 Eq.4 一致
+        # Reward realized next day: position decided at idx-1, return realized at idx
+        # i.e. A_{t-1} * vol * r_t, consistent with Paper Eq.4
         reward, _, _, _ = compute_eq4_reward(
             self.prices,
             self.returns,

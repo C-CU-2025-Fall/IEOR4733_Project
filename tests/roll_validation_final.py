@@ -1,19 +1,19 @@
 """
-确定性 50 合约 RAD 交叉验证 — 最终版
+Deterministic 50-contract RAD cross-validation — final version
 
-验证逻辑（无阈值）：
-  1. NON 是原始价格，不含 roll 信息
-  2. REV = NON + adj，adj 是分段常数，只在 roll 日跳变
-  3. RAD = NON × ratio，ratio 是分段常数，只在 roll 日跳变
-  4. adj_change ≠ 0 → 确定性检测 roll_date（无需阈值）
-  5. roll_date = adj_change 发生日 - 1
+Validation logic (no threshold):
+  1. NON is raw price, contains no roll information
+  2. REV = NON + adj, adj is piecewise constant, only changes on roll days
+  3. RAD = NON × ratio, ratio is piecewise constant, only changes on roll days
+  4. adj_change ≠ 0 → deterministic roll_date detection (no threshold needed)
+  5. roll_date = day of adj_change - 1
   6. prev_close = NON[roll_date]
   7. new_close = prev_close - adj_change
 
-三方交叉验证：
-  - 有 ASC 的 27 合约：ASC vs REV vs RAD → roll date 100% 匹配，price error <4%
-  - 无 ASC 的 21 合约：REV adj_change std = 精确 0 → REV 确定性可信
-  - RAD 不完整的 2 合约 (ZN, US)：REV 完整 → 可修复
+Three-way cross-validation:
+  - 27 contracts with ASC: ASC vs REV vs RAD → roll date 100% match, price error <4%
+  - 21 contracts without ASC: REV adj_change std = exactly 0 → REV deterministic is reliable
+  - 2 contracts with incomplete RAD (ZN, US): REV complete → fixable
 
 Usage:
   cd IEOR4733_Project && PYTHONPATH=. python3 tests/roll_validation_final.py
@@ -50,7 +50,7 @@ def load(filepath):
     return df
 
 
-# ── ASC 提取 ──────────────────────────────────────────────
+# ── ASC extraction ──────────────────────────────────────────────
 
 def extract_asc_rolls(symbol):
     asc_file = TEMP_DIR / f'{symbol}_CLC.ASC'
@@ -79,7 +79,7 @@ def extract_asc_rolls(symbol):
     return rolls
 
 
-# ── REV 检测（确定性）─────────────────────────────────────
+# ── REV detection (deterministic) ─────────────────────────────────────
 
 def detect_rolls_from_rev(non_df, rev_df):
     merged = non_df[['Date', 'C']].merge(
@@ -101,7 +101,7 @@ def detect_rolls_from_rev(non_df, rev_df):
     return [r for r in rolls if TEST_START <= r['date'] <= TEST_END]
 
 
-# ── RAD_v2 检测 ──────────────────────────────────────────
+# ── RAD_v2 detection ─────────────────────────────────────────
 
 # RAD_v2 contracts: 4 damaged contracts where vendor RAD is all-zero, all-NaN, or incomplete
 # ZH: vendor RAD all-zero, ZU: vendor RAD all-zero
@@ -110,7 +110,7 @@ def detect_rolls_from_rev(non_df, rev_df):
 RAD_V2_CONTRACTS = ['ZH', 'ZU', 'US', 'ZN']
 
 
-# ── RAD 检测 ─────────────────────────────────────────────
+# ── RAD detection ─────────────────────────────────────────────
 
 def detect_rolls_from_rad(non_df, rad_df):
     merged = non_df[['Date', 'C']].merge(
@@ -133,7 +133,7 @@ def detect_rolls_from_rad(non_df, rad_df):
     return [r for r in rolls if TEST_START <= r['date'] <= TEST_END]
 
 
-# ── 匹配 ─────────────────────────────────────────────────
+# ── Matching ─────────────────────────────────────────────────
 
 def match_rolls(source_a, source_b, tol=5):
     matched = []
@@ -154,7 +154,7 @@ def match_rolls(source_a, source_b, tol=5):
 
 def main():
     print('=' * 100)
-    print('确定性 50 合约 RAD 交叉验证 — 最终版')
+    print('Deterministic 50-contract RAD cross-validation — final version')
     print('=' * 100)
 
     results = []
@@ -177,7 +177,7 @@ def main():
             non_df = load(non_f)
             rev_df = load(rev_f)
             rev_rolls = detect_rolls_from_rev(non_df, rev_df)
-            # 非 roll 日 adj_change 标准差
+            # Non-roll day adj_change standard deviation
             merged = non_df[['Date', 'C']].merge(
                 rev_df[['Date', 'C']], on='Date', suffixes=('_non', '_rev'))
             merged = merged.sort_values('Date').reset_index(drop=True)
@@ -230,7 +230,7 @@ def main():
             matches = match_rolls(rev_rolls, rad_rolls)
             rev_rad_match = len(matches)
 
-        # 判定
+        # Verdict
         if not rad_ok:
             rad_verdict = 'CORRUPT'
         elif asc_rolls and asc_rad_err is not None:
@@ -265,7 +265,7 @@ def main():
     df = pd.DataFrame(results)
     df.to_csv(RESULTS_DIR / 'roll_validation_final.csv', index=False)
 
-    # ── 打印结果 ──────────────────────────────────────────
+    # ── Print results ──────────────────────────────────────────
     print(f'\n{"Symbol":>4} | {"ASC":>4} {"REV":>4} {"RAD":>4} | {"Src":>6} | {"noise_std":>12} | {"ASC→REV":>8} {"ASC→RAD":>8} | {"R-V":>4} | {"Verdict":>16}')
     print('-' * 110)
 
@@ -279,41 +279,41 @@ def main():
         marker = '✅' if v in ('VERIFIED', 'CROSS_VALIDATED') else '⚠️' if v == 'DEVIATED' else '❌'
         print(f'{r["symbol"]:>4} | {r["n_asc"]:>4} {r["n_rev"]:>4} {r["n_rad"]:>4} | {src:>6} | {noise:>12} | {asc_r:>8} {asc_d:>8} | {rv:>4} | {marker} {v}')
 
-    # ── 汇总 ──────────────────────────────────────────────
+    # ── Summary ──────────────────────────────────────────────
     print(f'\n{"=" * 100}')
-    print('汇总:')
+    print('Summary:')
     for v in ['VERIFIED', 'CROSS_VALIDATED', 'DEVIATED', 'INCOMPLETE', 'CORRUPT', 'NO_DATA']:
         n = len(df[df['rad_verdict'] == v])
         if n > 0:
             marker = '✅' if v in ('VERIFIED', 'CROSS_VALIDATED') else '⚠️' if v == 'DEVIATED' else '❌'
             print(f'  {marker} {v}: {n}/50')
 
-    # REV 可信性证明
+    # REV reliability proof
     zero_noise = len(df[df['rev_noise_std'] == 0.0])
-    print(f'\nREV adj 非roll日噪声 = 精确0: {zero_noise}/50')
-    print(f'→ REV 是确定性数据源，adj_change ≠ 0 就是 roll')
+    print(f'\nREV adj non-roll day noise = exactly 0: {zero_noise}/50')
+    print(f'→ REV is a deterministic data source, adj_change ≠ 0 means roll')
 
-    # ASC 验证
+    # ASC verification
     asc_contracts = df[df['n_asc'] > 0]
     if len(asc_contracts) > 0:
         asc_rev_match = asc_contracts['asc_rev_err_pct'].dropna()
         if len(asc_rev_match) > 0:
             print(f'\nASC vs REV price error: mean={asc_rev_match.mean():.2f}%, max={asc_rev_match.max():.2f}%')
-            print(f'→ REV 推导的 roll prices 与 ASC 高度一致')
+            print(f'→ REV-derived roll prices are highly consistent with ASC')
 
     print(f'{"=" * 100}')
 
-    # ── 最终结论 ──────────────────────────────────────────
+    # ── Final conclusion ──────────────────────────────────────────
     verified = len(df[df['rad_verdict'].isin(['VERIFIED', 'CROSS_VALIDATED'])])
     deviated = len(df[df['rad_verdict'] == 'DEVIATED'])
     needs_fix = len(df[df['rad_verdict'].isin(['INCOMPLETE', 'CORRUPT'])])
 
-    print(f'\n最终结论:')
-    print(f'  {verified}/50 vendor RAD 完全可信（经 ASC 或 REV 交叉验证）')
-    print(f'  {deviated}/50 vendor RAD 有 1-4% 偏差但仍可用')
-    print(f'  {needs_fix}/50 vendor RAD 需修复（可用 REV + NON 生成）')
-    print(f'  0/50 缺乏修复手段')
-    print(f'\n  → 50/50 合约数据完备，可回测')
+    print(f'\nFinal conclusion:')
+    print(f'  {verified}/50 vendor RAD fully reliable (cross-validated via ASC or REV)')
+    print(f'  {deviated}/50 vendor RAD has 1-4% deviation but still usable')
+    print(f'  {needs_fix}/50 vendor RAD needs fixing (can be generated from REV + NON)')
+    print(f'  0/50 lack a fix method')
+    print(f'\n  → 50/50 contracts have complete data, ready for backtesting')
 
 
 if __name__ == '__main__':

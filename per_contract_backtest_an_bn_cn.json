@@ -9,7 +9,7 @@
     "positive_pct": 54.23594615993665,
     "sharpe": 0.19317950894210034,
     "mdd": -0.6965336146390335,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/AN/r1/per_20260427_083926_s3",
+    "model_dir": "drl/dqn/models/AN/r1/per_20260427_083926_s3",
     "sigma_tgt": 0.058
   },
   {
@@ -22,7 +22,7 @@
     "positive_pct": 58.495049504950494,
     "sharpe": 0.22064629801327942,
     "mdd": -2.1484434203274567,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/AN/r2/per_20260427_083926_s2",
+    "model_dir": "drl/dqn/models/AN/r2/per_20260427_083926_s2",
     "sigma_tgt": 0.058
   },
   {
@@ -35,7 +35,7 @@
     "positive_pct": 58.478605388272584,
     "sharpe": 0.282859837984894,
     "mdd": -0.4317472528106556,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/BN/r1/per_20260427_083926_s2",
+    "model_dir": "drl/dqn/models/BN/r1/per_20260427_083926_s2",
     "sigma_tgt": 0.058
   },
   {
@@ -48,7 +48,7 @@
     "positive_pct": 28.328050713153726,
     "sharpe": 0.045998008444989316,
     "mdd": -1.5172255898006153,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/BN/r2/per_20260427_083926_s4",
+    "model_dir": "drl/dqn/models/BN/r2/per_20260427_083926_s4",
     "sigma_tgt": 0.058
   },
   {
@@ -61,7 +61,7 @@
     "positive_pct": 61.004784688995215,
     "sharpe": 0.34799474055962154,
     "mdd": -0.37609488828044846,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/CN/r1/per_20260427_092016_s0",
+    "model_dir": "drl/dqn/models/CN/r1/per_20260427_092016_s0",
     "sigma_tgt": 0.058
   },
   {
@@ -74,7 +74,7 @@
     "positive_pct": 44.713831478537365,
     "sharpe": 0.023624086978566328,
     "mdd": -2.4979325174218285,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/CN/r2/per_20260427_092136_s4",
+    "model_dir": "drl/dqn/models/CN/r2/per_20260427_092136_s4",
     "sigma_tgt": 0.058
   },
   {
@@ -87,7 +87,7 @@
     "positive_pct": 60.426540284360186,
     "sharpe": 0.3264483970655195,
     "mdd": -0.6225890268748095,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/DX/r1/per_20260427_092156_s0",
+    "model_dir": "drl/dqn/models/DX/r1/per_20260427_092156_s0",
     "sigma_tgt": 0.058
   },
   {
@@ -100,7 +100,7 @@
     "positive_pct": 43.0757159670459,
     "sharpe": 0.14556508562801243,
     "mdd": -3.0107901084435547,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/DX/r2/per_20260427_092346_s1",
+    "model_dir": "drl/dqn/models/DX/r2/per_20260427_092346_s1",
     "sigma_tgt": 0.058
   },
   {
@@ -113,7 +113,7 @@
     "positive_pct": 48.525896414342625,
     "sharpe": 0.22379494984086554,
     "mdd": -0.6436713083272743,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/FN/r1/per_20260427_094606_s2",
+    "model_dir": "drl/dqn/models/FN/r1/per_20260427_094606_s2",
     "sigma_tgt": 0.058
   },
   {
@@ -126,7 +126,7 @@
     "positive_pct": 48.05246422893482,
     "sharpe": 0.03548220438615858,
     "mdd": -3.531528576693109,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/FN/r2/per_20260427_094816_s3",
+    "model_dir": "drl/dqn/models/FN/r2/per_20260427_094816_s3",
     "sigma_tgt": 0.058
   },
   {
@@ -139,7 +139,7 @@
     "positive_pct": 59.02943516308672,
     "sharpe": 0.27896267089735693,
     "mdd": -0.5493901250551403,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/JN/r1/per_20260427_094916_s3",
+    "model_dir": "drl/dqn/models/JN/r1/per_20260427_094916_s3",
     "sigma_tgt": 0.058
   },
   {
@@ -152,7 +152,7 @@
     "positive_pct": 49.78165938864629,
     "sharpe": 0.01821952851222075,
     "mdd": -3.9442780024867616,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/JN/r2/per_20260427_095736_s4",
+    "model_dir": "drl/dqn/models/JN/r2/per_20260427_095736_s4",
     "sigma_tgt": 0.058
   },
   {
@@ -165,7 +165,7 @@
     "positive_pct": 60.015961691939346,
     "sharpe": 0.25889681651519286,
     "mdd": -0.5904982845851698,
-    "model_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/MP/r1/per_20260427_100736_s0",
+    "model_dir": "drl/dqn/models/MP/r1/per_20260427_100736_s0",
     "sigma_tgt": 0.058
   },
   {

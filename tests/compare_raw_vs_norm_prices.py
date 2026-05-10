@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-对比 raw prices vs normalized prices (p/p0) 在 Sign(R) Eq.4 回测中的差异。
+Compare raw prices vs normalized prices (p/p0) in Sign(R) Eq.4 backtest.
 
-结论：数学上完全等价，diff 应该 ≈ 0（浮点误差 ~1e-14）。
+Conclusion: Mathematically equivalent, diff should ≈ 0 (floating-point error ~1e-14).
 
-原理：
+Principle:
   normalized: r_norm = r_raw/p0, σ_norm = σ_raw/p0
   scale_norm = σ_tgt/σ_norm = σ_tgt×p0/σ_raw
   gross = scale_norm × r_norm = (σ_tgt×p0/σ) × (r/p0) = σ_tgt×r/σ = gross_raw
@@ -33,7 +33,7 @@ for asset in ASSET_CLASSES:
         n = len(prices)
         p0 = prices[0]
         
-        # Sign(R) 仓位
+        # Sign(R) position
         pos = strategy_sign_r(prices, SIGN_LOOKBACK)
         
         # Normalized prices
@@ -66,4 +66,4 @@ for asset in ASSET_CLASSES:
     print(f"{asset:15s}: raw_sum={sum_raw:+.6f}, norm_sum={sum_norm:+.6f}, "
           f"diff={diff:.2e}, steps={count}")
 
-print("\n结论: diff ≈ 1e-14 (浮点误差), raw 和 norm 完全等价。")
+print("\nConclusion: diff ≈ 1e-14 (floating-point error), raw and norm are fully equivalent.")

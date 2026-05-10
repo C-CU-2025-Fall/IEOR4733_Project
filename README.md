@@ -10,7 +10,7 @@ The repo now has one active interpretation:
 - old versioned DQN artifact families are archive-only, not mainline
 
 Historical search waves and abandoned branches live in:
-- [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md)
+- [PROJECT_MEMORY.md](PROJECT_MEMORY.md)
 
 Paper:
 - [Published JFDS 2020](references/Deep-Reinforcement-Learning-for-Trading.pdf) — **canonical version**
@@ -232,15 +232,15 @@ Three layers should not be mixed:
 ## Current References
 
 - data issues:
-  - [docs/data_issues.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/data_issues.md)
+  - [docs/data_issues.md](docs/data_issues.md)
 - suspicious paper cells:
-  - [docs/paper_table_suspicious_cells.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/paper_table_suspicious_cells.md)
+  - [docs/paper_table_suspicious_cells.md](docs/paper_table_suspicious_cells.md)
 - DRL pipeline handoff:
-  - [docs/drl_pipeline.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/drl_pipeline.md)
+  - [docs/drl_pipeline.md](docs/drl_pipeline.md)
 - DQN folder README:
-  - [drl/dqn/README.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/drl/dqn/README.md)
+  - [drl/dqn/README.md](drl/dqn/README.md)
 - printable A4 structural summary:
-  - [docs/structural38_trade_tables_paper_style_a4.png](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/structural38_trade_tables_paper_style_a4.png)
+  - [docs/structural38_trade_tables_paper_style_a4.png](docs/structural38_trade_tables_paper_style_a4.png)
 
 ## Latest Alignment Snapshot
 
@@ -290,6 +290,6 @@ Most suspicious remaining paper-side cells:
 ## 41/45 Status
 
 `41/45` is retained only as an experimental upper-bound reproducer:
-- [tests/run_legacy_41.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/run_legacy_41.py)
+- [tests/run_legacy_41.py](tests/run_legacy_41.py)
 
 It is not part of the active baseline or active DRL interpretation.

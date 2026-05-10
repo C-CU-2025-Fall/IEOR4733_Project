@@ -82,9 +82,9 @@ instead of forcing the same path for every contract.
 
 Code changes:
 
-- [data_loader.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/data_loader.py:1)
-- [baseline_run.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/baseline_run.py:41)
-- [repro_analysis.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/repro_analysis.py:71)
+- [data_loader.py](data_loader.py:1)
+- [baseline_run.py](baseline_run.py:41)
+- [repro_analysis.py](repro_analysis.py:71)
 
 Why this is mathematically valid:
 
@@ -98,11 +98,11 @@ So this is not cosmetic. It changes the actual Eq. 4 inputs.
 
 We added:
 
-- [tests/source_override_search.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/tests/source_override_search.py:1)
+- [tests/source_override_search.py](tests/source_override_search.py:1)
 
 This script tested one-by-one and greedy per-contract source overrides and wrote:
 
-- [docs/source_override_search_report.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/docs/source_override_search_report.md:1)
+- [docs/source_override_search_report.md](docs/source_override_search_report.md:1)
 
 The first major verified improvement came from Commodity:
 
@@ -161,7 +161,7 @@ Current default Table 3 frontier:
 - excluded set: `LB`, `ZO`, `CC`, `FB`
 - aggregation: `variable_n`
 - `sigma_tgt = 0.0600`
-- per-contract source overrides in [config.py](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/config.py:85)
+- per-contract source overrides in [config.py](config.py:85)
 
 Verified with:
 
