@@ -40,16 +40,16 @@ import pandas as pd
 # ── project root on sys.path ─────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / "rl_models"))
+sys.path.insert(0, str(PROJECT_ROOT / "drl_models" / "a2c"))
 
 from data_loader import load_clc_full
 from config import ASSET_CLASSES
-from rl_models.loaddata import (
+from drl_models.a2c.loaddata import (
     load_paper_rad_data,
     build_paper_features,
     make_state_tensor_single,
 )
-from rl_models.a2c_model import (
+from drl_models.a2c.a2c_model import (
     PaperTradingEnv,
     PaperA2CTrainer,
     build_envs_from_state_dict,
@@ -79,7 +79,7 @@ PERIODS = {
     },
 }
 
-# 9-dim feature columns (must match rl_models/loaddata.py build_paper_features)
+# 9-dim feature columns (must match drl_models/a2c/loaddata.py build_paper_features)
 FEATURE_COLS_9 = [
     "close_norm",
     "ret_1m", "ret_2m", "ret_3m", "ret_1y",
@@ -93,7 +93,7 @@ FEATURE_COLS_12 = FEATURE_COLS_9 + REGIME_COLS
 N_UPDATES  = 2000   # training steps (reduce to 500 for a quick sanity check)
 SIGMA_TARGET = 0.15 / np.sqrt(252)   # daily vol target ≈ 15% annual
 
-OUTPUT_DIR = PROJECT_ROOT / "rl_models"
+OUTPUT_DIR = PROJECT_ROOT / "drl_models" / "a2c"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -414,7 +414,7 @@ def _evaluate(actor, test_state_dict: Dict, sigma_target: float) -> Dict:
             if pd.isna(r_tp1) or pd.isna(price_t):
                 pnl_rows.append((row_tp1["date"], np.nan))
             else:
-                from rl_models.a2c_model import BP, MU
+                from drl_models.a2c.a2c_model import BP, MU
                 gross = MU * scaled_pos * r_tp1
                 cost  = MU * BP * price_t * abs(scaled_pos - prev_scaled)
                 pnl_rows.append((row_tp1["date"], gross - cost))

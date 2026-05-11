@@ -34,10 +34,10 @@ python tests/run_legacy_41.py
 python tests/run_legacy_41.py
 
 # MACD
-python tests_MACD/run_legacy_41_macd.py
+python baseline/macd/run_legacy_41_macd.py
 
 # Sign(R)
-python tests_Signr/run_legacy_41_signr.py
+python baseline/signr/run_legacy_41_signr.py
 
 # 生成以上三种策略的table3格式的表格：
 python generate_table3_comparison.py #快速查看版本，输出到控制台

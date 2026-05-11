@@ -17,8 +17,8 @@
 | 策略 | 类型 | 状态 | 位置 |
 |------|------|------|------|
 | **Long Only** | 传统 | ✅ 完成 | `baseline_run.py` |
-| **Sign(R)** | 传统 | ✅ 完成 | `tests_Signr/` |
-| **MACD** | 传统 | ✅ 完成 | `tests_MACD/` |
+| **Sign(R)** | 传统 | ✅ 完成 | `baseline/signr/` |
+| **MACD** | 传统 | ✅ 完成 | `baseline/macd/` |
 | **DQN** | 深度强化学习 | ✅ 完成 | `drl/dqn/` |
 | **Route B** | A2C + 制度检测 | ✅ 完成 | `regime_detection/` |
 | **A2C** | 深度强化学习 | ✅ 完成 | `src/core/models/a2c/` |

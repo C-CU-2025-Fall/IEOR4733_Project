@@ -13,8 +13,8 @@ if str(ROOT) not in sys.path:
 
 # Import frontier modules from each strategy folder
 sys.path.insert(0, str(ROOT / "tests"))
-sys.path.insert(0, str(ROOT / "tests_MACD"))
-sys.path.insert(0, str(ROOT / "tests_Signr"))
+sys.path.insert(0, str(ROOT / "baseline" / "macd"))
+sys.path.insert(0, str(ROOT / "baseline" / "signr"))
 
 import frontier_40plus_enumeration as fe_long  # noqa: E402
 import frontier_40plus_enumeration_macd as fe_macd  # noqa: E402
