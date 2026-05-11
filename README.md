@@ -149,9 +149,7 @@ Trade-world `<=15%` error: **28/28** metrics across 4 asset classes.
 ## Deck / Presentations
 
 See [deck/](deck/) for presentation slides:
-- `deck-v1.1.pptx` — midterm draft
-- `deck-v2.pptx` — updated version
-- `DRL_Trading_Midterm_draft.pptx` — early draft
+- `DL_presentation_v3.pdf` — final presentation
 
 ---
 
