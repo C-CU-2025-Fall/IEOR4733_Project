@@ -14,11 +14,11 @@ import torch
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / "rl_models"))
+sys.path.insert(0, str(PROJECT_ROOT / "drl_models" / "a2c"))
 
 from config import ASSET_CLASSES
-from rl_models.a2c_model import PaperA2CTrainer, DEVICE, BP, MU
-from rl_models.loaddata import (
+from drl_models.a2c.a2c_model import PaperA2CTrainer, DEVICE, BP, MU
+from drl_models.a2c.loaddata import (
     load_paper_rad_data,
     build_paper_features,
 )
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 NEW_SIGMA_TARGET = 0.064
 
-CKPT_DIR  = PROJECT_ROOT / "rl_models"
+CKPT_DIR  = PROJECT_ROOT / "drl_models" / "a2c"
 REGIME_DIR = PROJECT_ROOT / "regime_detection" / "results"
 PNL_DIR   = REGIME_DIR
 PNL_DIR.mkdir(exist_ok=True)
