@@ -10,6 +10,38 @@ Paper: [arXiv PDF](https://arxiv.org/pdf/1911.10107)
 
 > Read [PROJECT_MEMORY.md](/Users/gecong/LocalFiles/GitHub/IEOR4733_Project/PROJECT_MEMORY.md) first if you are resuming work.
 
+## 🎓 部署应用 - 交易策略模拟平台
+
+> **新增功能!** 现已支持完整的 Streamlit Web 应用，满足教师要求的交互式部署。
+
+### 启动 Streamlit 应用
+
+```bash
+# 方法 1: 使用启动脚本
+chmod +x run_app.sh
+./run_app.sh
+
+# 方法 2: 手动启动
+streamlit run src/app/main.py
+```
+
+访问: **http://localhost:8501**
+
+### ✨ 应用功能
+
+| 功能 | 说明 |
+|------|------|
+| **清洁数据管道** | 自动从 `data/CLC/` 加载、验证、清洁数据 |
+| **回测引擎** | 支持 Long Only, Sign(R), MACD 三种策略 |
+| **交易成本模型** | 自动计算滚动成本、头寸调整成本 |
+| **性能仪表板** | 关键指标: 收益率、Sharpe 比、最大回撤 |
+| **风险分析** | 波动率、最大回撤对比、可视化图表 |
+| **参数优化** | 敏感性分析界面，实时计算参数影响 |
+
+📖 **详细使用说明**: 请参考 [STREAMLIT_GUIDE.md](STREAMLIT_GUIDE.md)
+
+---
+
 ## Quick Start
 
 ```bash
