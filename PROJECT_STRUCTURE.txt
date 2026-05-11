@@ -1,0 +1,176 @@
+📁 IEOR4733_Project - 完整项目结构
+═══════════════════════════════════════════════════════════
+
+📂 根目录 (项目核心文件)
+├── 📜 config.py                    # 全局配置 (ASSET_CLASSES, BP, etc.)
+├── 📜 data_loader.py               # 数据加载主模块 
+├── 📜 strategies.py                # 策略实现 (Long Only, Sign(R), MACD)
+├── 📜 baseline_run.py              # 回测执行引擎
+├── 📜 metrics.py                   # 性能计算 (Sharpe, MDD, etc.)
+├── 📜 indicators.py                # 技术指标 (MACD, etc.)
+├── 📜 vol_scaling.py               # 波动率调整
+├── 📜 repro_analysis.py            # 分析脚本
+├── 📜 test_baseline.py             # 单元测试
+│
+├── 📜 README.md                    # 项目说明
+├── 📜 STREAMLIT_GUIDE.md           # 应用使用指南
+├── 📜 DEPLOYMENT_COMPLETE.md       # 部署完成总结
+├── 📜 PROJECT_MEMORY.md            # 项目记忆/背景
+├── 📜 PROJECT_STRUCTURE.txt        # 本文件
+│
+├── 📜 streamlit_requirements.txt    # Streamlit 依赖
+├── 📜 run_app.sh                   # 应用启动脚本
+├── 📜 verify_setup.py              # 配置验证工具
+│
+├── 📂 src/                         # 应用代码模块
+│   ├── 📂 core/                    # 核心模块库
+│   │   ├── 📜 __init__.py
+│   │   ├── 📂 data/                # 数据模块
+│   │   │   ├── 📜 __init__.py
+│   │   │   └── 📜 loader.py        # 迁移自 data_loader.py
+│   │   ├── 📂 strategies/          # 策略模块
+│   │   │   ├── 📜 __init__.py
+│   │   │   ├── 📜 base.py          # 迁移自 strategies.py
+│   │   │   └── 📜 runner.py        # 迁移自 baseline_run.py
+│   │   ├── 📂 metrics/             # 性能指标模块
+│   │   │   ├── 📜 __init__.py
+│   │   │   └── 📜 calculator.py    # 迁移自 metrics.py
+│   │   ├── 📂 utils/               # 工具函数
+│   │   │   ├── 📜 __init__.py
+│   │   │   └── 📜 indicators.py    # 迁移自 indicators.py
+│   │   └── 📂 models/              # 模型加载器 (待补全)
+│   │       ├── __init__.py
+│   │       ├── dqn.py             # DQN 模型包装
+│   │       ├── a2c.py             # A2C 模型包装
+│   │       └── regime.py          # Route B 模型包装
+│   │
+│   └── 📂 app/                     # Web 应用
+│       ├── 📜 __init__.py
+│       └── 📜 main.py              # ⭐ Streamlit 主应用 (5 TAB)
+│           ├── TAB 1: 策略对比
+│           ├── TAB 2: 性能指标
+│           ├── TAB 3: 风险分析
+│           ├── TAB 4: 敏感性分析
+│           └── TAB 5: 数据管道
+│
+├── 📂 data/                        # 数据目录
+│   ├── 📂 CLC/                     # CLCData RAD 格式 (291 个 CSV)
+│   │   ├── AD_RAD.CSV              # 天然气
+│   │   ├── AN_RAD.CSV              # 原油
+│   │   ├── ... (288 more)
+│   │   └── ZL_RAD.CSV              # 大豆粉
+│   ├── 📄 index_data.csv
+│   ├── 📄 risk_free_rate.csv
+│   ├── 📂 yahoo/
+│   └── 📂 other/
+│
+├── 📂 drl_models/                  # 深度学习模型
+│   ├── 📜 a2c_model.py             # A2C 模型架构
+│   ├── 📜 eval_utils.py            # 评估工具
+│   ├── 📜 loaddata.py              # 数据加载 (A2C 用)
+│   ├── 📄 a2c_results_wide改.csv   # 结果数据
+│   ├── 📂 dqn/                     # DQN 模型目录
+│   │   ├── figures/
+│   │   │   └── data/               # DQN 输出数据
+│   │   └── ...
+│   └── 📂 ... (其他模型)
+│
+├── 📂 regime_detection/            # Route B 模型
+│   ├── 📜 route_b_train.py         # 训练脚本
+│   ├── 📜 reeval_route_b_final.py  # 评估脚本
+│   ├── 📜 timeseries_fft_regime.py # FFT 检测
+│   └── 📂 results/                 # 输出结果
+│       ├── pnl_routeB_*.csv
+│       └── ...
+│
+├── 📂 baseline/                    # 基准策略
+│   ├── 📂 long_only/               # Long Only 策略 (27 文件)
+│   ├── 📂 macd/                    # MACD 策略
+│   │   └── run_legacy_41_macd.py
+│   └── 📂 signr/                   # Sign(R) 策略
+│       └── run_legacy_41_signr.py
+│
+├── 📂 reproduction_of_figures/     # 结果复现
+│   ├── 📓 strategies_comparison.ipynb  # ⭐ 主要结果笔记本
+│   └── 📂 a2c_csv_data/
+│
+├── 📂 rl_models/                   # A2C 模型权重
+│   ├── 📄 a2c_All_period1.pt
+│   ├── 📄 a2c_All_period2.pt
+│   ├── ... (20 个 .pt 文件)
+│   └── 📓 project code.ipynb
+│
+├── 📂 docs/                        # 文档
+│   ├── 📄 final_table3_comparison_report.md
+│   ├── 📄 rad_validation_report_50.md
+│   ├── 📄 metric_audit_report.md
+│   └── ... (其他分析报告)
+│
+├── 📂 config/
+│   ├── 📄 contract_months.json
+│   ├── 📄 current_roll_mapping.txt
+│   └── 📂 TEMP/
+│
+└── 📂 references/
+    ├── 📄 DRL_journal.txt
+    └── 📄 ref_list.txt
+
+═══════════════════════════════════════════════════════════
+
+📊 核心功能映射
+
+应用 TAB          实现模块              核心函数
+─────────────────────────────────────────────────────
+TAB 1: 策略对比   src/core/strategies   compute_*
+TAB 2: 性能指标   src/core/metrics      compute_metrics
+TAB 3: 风险分析   src/core/metrics      max_drawdown_from_path
+TAB 4: 敏感性分析 src/core/strategies   compute_*
+TAB 5: 数据管道   src/core/data         load_clc_full
+
+═══════════════════════════════════════════════════════════
+
+📁 文件大小统计
+
+模块                 文件数    总大小     说明
+────────────────────────────────────────────
+src/core/           5 py     ~50 KB     核心库
+src/app/main.py     1 py     ~45 KB     Streamlit 应用
+data/CLC/          291 CSV  ~150 MB    RAD 数据格式
+drl_models/        20 pt    ~2.0 GB    A2C 模型权重
+rl_models/         20 pt    ~2.0 GB    RL 模型权重
+baseline/          60 py    ~300 KB    基准策略
+rl_models/         50 py    ~500 KB    RL 实现
+reproduction/       1 ipynb  ~2.0 MB   结果笔记本
+
+═══════════════════════════════════════════════════════════
+
+🚀 启动应用
+
+1. 方法A - 启动脚本 (推荐):
+   $ chmod +x run_app.sh
+   $ ./run_app.sh
+
+2. 方法B - 直接启动:
+   $ streamlit run src/app/main.py
+
+3. 方法C - Python:
+   $ python -m streamlit run src/app/main.py
+
+访问: http://localhost:8501
+
+═══════════════════════════════════════════════════════════
+
+✅ 项目完成状态
+
+[✓] 源代码模块化 (src/core/)
+[✓] Streamlit 应用开发
+[✓] 5 功能 TAB 实现
+[✓] 依赖管理和验证
+[✓] 启动脚本
+[✓] 用户文档
+[✓] 配置检查工具
+
+═══════════════════════════════════════════════════════════
+
+最后更新: 2024-05
+项目状态: ✅ 就绪展示和部署
