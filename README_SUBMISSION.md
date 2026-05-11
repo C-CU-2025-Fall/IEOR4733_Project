@@ -21,7 +21,7 @@
 | **MACD** | 传统 | ✅ 完成 | `tests_MACD/` |
 | **DQN** | 深度强化学习 | ✅ 完成 | `drl/dqn/` |
 | **Route B** | A2C + 制度检测 | ✅ 完成 | `regime_detection/` |
-| **A2C** | 深度强化学习 | ⏳ 待上传 | `src/core/models/a2c/` |
+| **A2C** | 深度强化学习 | ✅ 完成 | `src/core/models/a2c/` |
 
 ---
 
