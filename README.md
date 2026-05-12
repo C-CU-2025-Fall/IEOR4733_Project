@@ -118,12 +118,12 @@ The Streamlit application.
 
 ### `data/`
 
-All market data used by the backtests.
+All market data used by the backtests. **Vendor data (CLCData) is not included** due to licensing — see [`data/README.md`](data/README.md) for setup instructions.
 
 | Path | Contents |
 |---|---|
-| `data/CLC/` | Raw CLCData RAD CSV files — one file per futures contract |
-| `data/yahoo/` | Yahoo Finance price data used for equity-index fallback |
+| `data/CLC/` | *(not in repo)* Raw CLCData RAD CSV files — see [data/README.md](data/README.md) |
+| `data/yahoo/` | *(not in repo)* Yahoo Finance fallback data — optional, see [data/README.md](data/README.md) |
 | `data/index_data.csv` | Pre-merged index-level daily prices |
 | `data/risk_free_rate.csv` | Daily risk-free rate series |
 

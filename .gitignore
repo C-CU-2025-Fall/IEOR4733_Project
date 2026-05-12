@@ -38,4 +38,5 @@ dqn_model_backups/
 data/CLC/
 data/yahoo/
 config/TEMP/
-*.pkl
+# *.pkl excluded — but regime detection results are tracked via git add -f
+# Do NOT re-add *.pkl blanket rule
