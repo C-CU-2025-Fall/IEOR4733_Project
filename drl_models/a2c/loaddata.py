@@ -15,7 +15,7 @@ PAPER_50 = [
     "AN","BN","CN","DX","FN","JN","MP","NK","SN"
 ]
 # -----------------------------
-# 1️⃣ 找 CLCDATA 文件夹
+# Find CLCDATA floder
 # -----------------------------
 def find_clcdata(root_path):
     """Construct path to data/CLC from project root."""
@@ -24,11 +24,10 @@ def find_clcdata(root_path):
         raise FileNotFoundError(f"CLC folder not found at {clc_path}")
     return clc_path
 # -----------------------------
-# 2️⃣ 读取单个 RAD 文件
+# Read sing RAD data
 # -----------------------------
 def read_rad_csv(file_path):
     df = pd.read_csv(file_path, header=None)
-    # 按 manual 强制赋列名
     df.columns = [
         "date",
         "open",
@@ -38,9 +37,7 @@ def read_rad_csv(file_path):
         "volume",
         "open_interest"
     ]
-    # 转时间
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    # 排序 + 去重
     df = df.sort_values("date").drop_duplicates("date")
 
     return df
@@ -54,7 +51,7 @@ def load_paper_rad_data(root_path, start=None, end=None):
     data_dict = {}
     missing = []
 
-    # 建立 filename → path 映射（大小写无关）
+    
     file_map = {}
     for root, _, files in os.walk(clc_path):
         for f in files:
@@ -78,7 +75,7 @@ def load_paper_rad_data(root_path, start=None, end=None):
 
         data_dict[ticker] = df.reset_index(drop=True)
 
-    # 拼 panel
+
     panel = pd.concat(data_dict.values(), ignore_index=True)
 
     return data_dict, panel, missing
@@ -116,9 +113,6 @@ def build_paper_features(data_dict, dropna=False):
     for ticker, df in data_dict.items():
         x = df.copy()
 
-        # -------------------------
-        # 1) 基础清洗
-        # -------------------------
         required_cols = ["date", "open", "high", "low", "close", "volume", "open_interest"]
         missing_cols = [c for c in required_cols if c not in x.columns]
         if missing_cols:
@@ -126,18 +120,15 @@ def build_paper_features(data_dict, dropna=False):
 
         x = x.sort_values("date").reset_index(drop=True)
 
-        # 确保类型正确
+
         x["date"] = pd.to_datetime(x["date"], errors="coerce")
         for col in ["open", "high", "low", "close", "volume", "open_interest"]:
             x[col] = pd.to_numeric(x[col], errors="coerce")
 
-        # 如果原表没有 ticker 列，就补上
+
         if "ticker" not in x.columns:
             x["ticker"] = ticker
 
-        # -------------------------
-        # 2) paper里的日收益: r_t = p_t - p_{t-1}
-        # -------------------------
         x["ret_1d"] = x["close"].diff()
 
         # 60-day EWMA volatility on daily additive returns
@@ -151,7 +142,7 @@ def build_paper_features(data_dict, dropna=False):
 
         # -------------------------
         # 3) normalized close price series
-        # 这里用 60-day rolling z-score
+        # 60-day rolling z-score
         # -------------------------
         close_mean_60 = x["close"].rolling(window=60, min_periods=60).mean()
         close_std_60 = x["close"].rolling(window=60, min_periods=60).std()
@@ -160,9 +151,9 @@ def build_paper_features(data_dict, dropna=False):
         x["close_norm"] = (x["close"] - close_mean_60) / close_std_60
 
         # -------------------------
-        # 4) 多周期 return features
-        # paper: 1m, 2m, 3m, 1y
-        # 并用 sigma_t * sqrt(h) 标准化
+        # 4) return features
+        #  1m, 2m, 3m, 1y
+        #  sigma_t * sqrt(h) standardization
         # -------------------------
         horizons = {
             "ret_1m": 21,
@@ -218,13 +209,11 @@ def build_paper_features(data_dict, dropna=False):
         rs = avg_gain / avg_loss.replace(0, np.nan)
         x["rsi_30"] = 100 - (100 / (1 + rs))
 
-        # 特殊情况处理
+
         x.loc[(avg_loss == 0) & (avg_gain > 0), "rsi_30"] = 100
         x.loc[(avg_loss == 0) & (avg_gain == 0), "rsi_30"] = 50
 
-        # -------------------------
-        # 7) 保留常用列
-        # -------------------------
+
         keep_cols = [
             "date", "ticker",
             "open", "high", "low", "close", "volume", "open_interest",
@@ -237,9 +226,6 @@ def build_paper_features(data_dict, dropna=False):
 
         x = x[keep_cols].copy()
 
-        # -------------------------
-        # 8) 可选 dropna
-        # -------------------------
         core_cols = [
             "ewm_vol_60", "close_norm",
             "ret_1m", "ret_2m", "ret_3m", "ret_1y",
@@ -279,7 +265,7 @@ def make_state_tensor_single(
     x = df.copy()
     x = x.sort_values("date").reset_index(drop=True)
 
-    # 只保留 feature 完整的行
+
     x = x.dropna(subset=feature_cols).reset_index(drop=True)
 
     X = []
@@ -349,7 +335,7 @@ def build_baselines(df):
     macd = out["macd_avg"]
     out["macd_signal"] = macd * np.exp(-macd**2 / 4) / 0.89
 
-    # --- 时间对齐 ---
+
     out["long_only"] = out["long_only"].shift(1)
     out["sign"] = out["sign"].shift(1)
     out["macd_signal"] = out["macd_signal"].shift(1)
@@ -366,7 +352,7 @@ def compute_pnl(
     price_col="close",
     ret_col="ret_1d",
     vol_col="ewm_vol_60",
-    sigma_target=0.064, ##注意假设
+    sigma_target=0.064, 
     bp=0.0020,
     mu=1.0,
     dropna=False
@@ -420,7 +406,7 @@ def compute_pnl(
 
     out["price_prev"] = out[price_col].shift(1)
 
-    # 防止除零
+
     out["vol_prev"] = out["vol_prev"].replace(0, np.nan)
     out["vol_prev2"] = out["vol_prev2"].replace(0, np.nan)
 
