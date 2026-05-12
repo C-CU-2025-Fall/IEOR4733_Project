@@ -156,8 +156,8 @@ Trained model weights and code for the deep RL strategies.
 
 | Path | Contents |
 |---|---|
-| `drl_models/a2c/` | A2C model definition (`a2c_model.py`), pre-trained `.pt` weights (Original / Extension Reward variants), data loader, and per-asset result CSVs |
-| `drl_models/dqn/` | DQN implementation, trained weights, and figure/data output |
+| [`drl_models/a2c/`](drl_models/a2c/README.md) | A2C model definition (`a2c_model.py`), pre-trained `.pt` weights (Original / Extension Reward variants), data loader, and per-asset result CSVs |
+| [`drl_models/dqn/`](drl_models/dqn/README.md) | DQN implementation, trained weights, and figure/data output |
 
 ### `baseline/`
 
