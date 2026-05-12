@@ -12,11 +12,11 @@ Usage:
     python baseline_run.py --sigma 0.064    # Custom σ_tgt
     python baseline_run.py --test-start 2015-01-01 --test-end 2019-12-31  # Custom period
     python baseline_run.py --source-mode working --all-metrics # Use unified SOURCE_OVERRIDES from config.py
-    python baseline_run.py --source-mode pure-rad --all-metrics # 不用任何 override，所有合约默认走 RAD
+    python baseline_run.py --source-mode pure-rad --all-metrics # No overrides, all contracts use RAD by default
     python baseline_run.py --source-mode strategy-legacy --all-metrics # Use legacy overrides for each strategy                                                  
-                                                            Long 用 LEGACY_EXPERIMENTAL_OVERRIDES_LONG
-                                                            Sign(R) 用 LEGACY_EXPERIMENTAL_OVERRIDES_SIGNR
-                                                            MACD 用 LEGACY_EXPERIMENTAL_OVERRIDES_MACD
+                                                            Long uses LEGACY_EXPERIMENTAL_OVERRIDES_LONG
+                                                            Sign(R) uses LEGACY_EXPERIMENTAL_OVERRIDES_SIGNR
+                                                            MACD uses LEGACY_EXPERIMENTAL_OVERRIDES_MACD
     
     
     """

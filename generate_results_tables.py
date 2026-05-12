@@ -2,10 +2,10 @@
 """
 generate_results_tables.py
 ==========================
-汇总所有策略（Long / Sign(R) / MACD / DQN / A2C）的指标，
-生成论文风格的 Table 2（含组合波动率缩放）和 Table 3（原始信号）。
+Aggregate metrics for all strategies (Long / Sign(R) / MACD / DQN / A2C),
+generate paper-style Table 2 (with portfolio vol scaling) and Table 3 (raw signal).
 
-输出：伦钰婷做PPT要用的素材/results_tables.md
+Output: assets_for_presentation/results_tables.md
 
 Usage:
     python3 generate_results_tables.py
@@ -303,7 +303,7 @@ def main():
         note='No additional portfolio-level vol scaling (raw per-contract signal only).'
     )
 
-    output_dir = ROOT / '伦钰婷做PPT要用的素材'
+    output_dir = ROOT / 'assets_for_presentation'
     output_dir.mkdir(exist_ok=True)
     out_path = output_dir / 'results_tables.md'
 

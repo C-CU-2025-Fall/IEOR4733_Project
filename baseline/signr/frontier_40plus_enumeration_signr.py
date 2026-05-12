@@ -28,7 +28,7 @@ from metrics import compute_metrics, max_drawdown_from_path  # noqa: E402
 
 
 SIGMA = 0.058
-STRATEGY = "Sign(R)"  # ← 主策略改为 Sign(R)
+STRATEGY = "Sign(R)"  # ← main strategy changed to Sign(R)
 ASSETS4 = ["Commodity", "Equity Index", "Fixed Income", "Forex"]
 DOC_PATH = ROOT / "docs" / "frontier_40plus_enumeration_signr.md"
 
@@ -108,7 +108,7 @@ def aligned_price_p0(ticker: str, date0, source: str) -> float | None:
 def build_reporting_portfolio(raw_data, capital_mode: str, strategy: str = STRATEGY):
     sleeve_paths = []
     for rd in raw_data:
-        detail = compute_contract_returns(rd, strategy, SIGMA, detail=True)  # ← 使用 Sign(R)
+        detail = compute_contract_returns(rd, strategy, SIGMA, detail=True)  # ← use Sign(R)
         start, t1 = rd["start"], rd["t1"]
         Rt = detail["Rt"][start:t1 + 1]
         prices = detail["prices"][start:t1 + 1]
@@ -297,7 +297,7 @@ def evaluate_scenario(
         trade_metrics["MDD"] = round(mdd, 3)
         trade_metrics["Calmar"] = round(cal, 3) if np.isfinite(cal) else float("nan")
 
-        paper = PAPER_TABLE3[asset][strategy]  # ← 对标 Sign(R)
+        paper = PAPER_TABLE3[asset][strategy]  # ← benchmark against Sign(R)
         errors = {metric: pct_err(trade_metrics[metric], paper[metric]) for metric in METRIC_NAMES}
         misses = [metric for metric in METRIC_NAMES if errors[metric] >= 15.0]
         asset_reporting[asset] = reporting
@@ -415,7 +415,7 @@ def scenario(label, family, overrides, excluded, default_capital_mode="risk_pric
     )
 
 
-# 使用相同的 overrides 配置（可以后续根据搜索结果调整）
+# Use the same overrides configuration (can be adjusted later based on search results)
 BASE_CLEAN_OVERRIDES = dict(SOURCE_OVERRIDES)
 BASE_CLEAN_OVERRIDES.update(
     {
@@ -446,7 +446,7 @@ STRUCTURAL_HISTORY_EXCLUDED = {"FB", "ZA", "ZO", "EN", "ES"}
 
 
 def search_legacy_experimental():
-    """搜索 Sign(R) 的最优数据源配置"""
+    """Search for Sign(R) optimal data source configuration"""
     rows = []
     for numerator_mode, all_mode in itertools.product(NUMERATOR_MODES, ALL_MODES):
         rows.append(

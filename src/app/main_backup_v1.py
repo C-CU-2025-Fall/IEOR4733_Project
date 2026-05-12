@@ -43,18 +43,18 @@ plt.rcParams['figure.figsize'] = (14, 6)
 # ============================================================================
 # SIDEBAR CONFIGURATION
 # ============================================================================
-st.sidebar.title("🎯 模拟配置")
+st.sidebar.title("🎯 Simulation Config")
 
 # Test period selection
 col1, col2 = st.sidebar.columns(2)
 with col1:
-    start_date = st.date_input("开始日期", datetime(2011, 1, 1))
+    start_date = st.date_input("Start Date", datetime(2011, 1, 1))
 with col2:
-    end_date = st.date_input("结束日期", datetime(2019, 12, 31))
+    end_date = st.date_input("End Date", datetime(2019, 12, 31))
 
 # Asset class selection
 selected_assets = st.sidebar.multiselect(
-    "选择资产类别",
+    "Select Asset Classes",
     options=list(ASSET_CLASSES.keys()),
     default=list(ASSET_CLASSES.keys())
 )
@@ -62,7 +62,7 @@ selected_assets = st.sidebar.multiselect(
 # Strategy selection (all 6 strategies)
 strategies_available = ["Long Only", "Sign(R)", "MACD", "A2C", "A2C + Regime (B)", "DQN (Paper)"]
 selected_strategies = st.sidebar.multiselect(
-    "选择交易策略",
+    "Select Trading Strategies",
     options=strategies_available,
     default=["Long Only", "Sign(R)", "MACD", "A2C", "A2C + Regime (B)", "DQN (Paper)"]
 )
@@ -128,15 +128,15 @@ def compute_cumulative_wealth(returns_series):
 # MAIN CONTENT
 # ============================================================================
 
-st.title("📊 交易策略模拟与分析平台")
+st.title("📊 Trading Strategy Simulation & Analysis Platform")
 
 # Tab structure
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📈 策略对比",
-    "💹 性能指标",
-    "📊 风险分析",
-    "🔧 敏感性分析",
-    "📥 数据管道"
+    "📈 Strategy Comparison",
+    "💹 Performance Metrics",
+    "📊 Risk Analysis",
+    "🔧 Sensitivity Analysis",
+    "📥 Data Pipeline"
 ])
 
 
@@ -421,8 +421,8 @@ def load_dqn_data_cached(asset_class):
 # TAB 1: Strategy Comparison
 # ============================================================================
 with tab1:
-    st.header("📈 策略对比分析")
-    st.markdown(f"**回测期间**: {start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}")
+    st.header("📈 Strategy Comparison Analysis")
+    st.markdown(f"**Backtest Period**: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
     
     # Color scheme matching notebook
     COLORS_FULL = {
@@ -530,7 +530,7 @@ with tab1:
                 ax.legend(loc='best', fontsize=8, frameon=True)
                 ax.axhline(y=0.0, color='gray', linestyle='--', linewidth=1, alpha=0.5)
             else:
-                ax.text(0.5, 0.5, f'❌ {asset}\n数据不可用',
+                ax.text(0.5, 0.5, f'❌ {asset}\nData unavailable',
                        ha='center', va='center', fontsize=12,
                        transform=ax.transAxes, color='red')
                 ax.set_title(asset, fontsize=12, fontweight='bold')
@@ -547,18 +547,18 @@ with tab1:
         plt.tight_layout()
         st.pyplot(fig)
     else:
-        st.warning("请在左侧选择至少一个资产类别")
+        st.warning("Please select at least one asset class on the left")
                         ax.plot(dates[:len(routeb_wealth)], routeb_wealth - 1.0, 
-                               label="Route B (过滤Signal)", linewidth=2.5, 
+                               label="Route B (Filtered Signal)", linewidth=2.5, 
                                color=all_strategies['Route B'], alpha=0.85)
                         data_loaded = True
                     else:
-                        st.info(f"ℹ️ {asset} 没有 Route B 数据", icon="ℹ️")
+                        st.info(f"ℹ️ {asset} has no Route B data", icon="ℹ️")
                 
                 if data_loaded:
-                    ax.set_xlabel("时间", fontsize=12, fontweight='bold')
-                    ax.set_ylabel("累积收益率", fontsize=12, fontweight='bold')
-                    ax.set_title(f"{asset} - 策略对比", fontsize=14, fontweight='bold')
+                    ax.set_xlabel("Time", fontsize=12, fontweight='bold')
+                    ax.set_ylabel("Cumulative Return", fontsize=12, fontweight='bold')
+                    ax.set_title(f"{asset} - Strategy Comparison", fontsize=14, fontweight='bold')
                     ax.grid(True, alpha=0.3)
                     ax.legend(loc='best', fontsize=11, framealpha=0.95)
                     ax.axhline(y=0, color='gray', linestyle='--', alpha=0.5, linewidth=1)
@@ -566,15 +566,15 @@ with tab1:
                     plt.tight_layout()
                     st.pyplot(fig)
                 else:
-                    st.warning(f"⚠️ {asset} 无可用数据")
+                    st.warning(f"⚠️ {asset} has no available data")
     else:
-        st.info("请在左侧选择资产类别和策略")
+        st.info("Please select asset classes and strategies on the left")
 
 # ============================================================================
 # TAB 2: Performance Metrics
 # ============================================================================
 with tab2:
-    st.header("💹 性能指标仪表板")
+    st.header("💹 Performance Metrics Dashboard")
     
     if selected_assets and selected_strategies:
         metrics_data = []
@@ -594,13 +594,13 @@ with tab2:
                             max_dd = max_drawdown_from_path(wealth.values) * 100
                             
                             metrics_data.append({
-                                "资产": asset,
-                                "策略": strategy,
-                                "总收益 (%)": f"{total_return:.2f}",
-                                "年化收益 (%)": f"{annual_return:.2f}",
-                                "年化波动 (%)": f"{annual_vol:.2f}",
-                                "Sharpe比": f"{sharpe:.2f}",
-                                "最大回撤 (%)": f"{max_dd:.2f}",
+                                "Asset": asset,
+                                "Strategy": strategy,
+                                "Total Return (%)": f"{total_return:.2f}",
+                                "Annualized Return (%)": f"{annual_return:.2f}",
+                                "Annualized Vol (%)": f"{annual_vol:.2f}",
+                                "Sharpe Ratio": f"{sharpe:.2f}",
+                                "Max Drawdown (%)": f"{max_dd:.2f}",
                             })
             
             # DQN
@@ -615,13 +615,13 @@ with tab2:
                     max_dd = max_drawdown_from_path(dqn_wealth) * 100
                     
                     metrics_data.append({
-                        "资产": asset,
-                        "策略": "DQN",
-                        "总收益 (%)": f"{total_return:.2f}",
-                        "年化收益 (%)": f"{annual_return:.2f}",
-                        "年化波动 (%)": f"{annual_vol:.2f}",
-                        "Sharpe比": f"{sharpe:.2f}",
-                        "最大回撤 (%)": f"{max_dd:.2f}",
+                        "Asset": asset,
+                        "Strategy": "DQN",
+                        "Total Return (%)": f"{total_return:.2f}",
+                        "Annualized Return (%)": f"{annual_return:.2f}",
+                        "Annualized Vol (%)": f"{annual_vol:.2f}",
+                        "Sharpe Ratio": f"{sharpe:.2f}",
+                        "Max Drawdown (%)": f"{max_dd:.2f}",
                     })
             
             # A2C
@@ -636,13 +636,13 @@ with tab2:
                     max_dd = max_drawdown_from_path(a2c_wealth) * 100
                     
                     metrics_data.append({
-                        "资产": asset,
-                        "策略": "A2C",
-                        "总收益 (%)": f"{total_return:.2f}",
-                        "年化收益 (%)": f"{annual_return:.2f}",
-                        "年化波动 (%)": f"{annual_vol:.2f}",
-                        "Sharpe比": f"{sharpe:.2f}",
-                        "最大回撤 (%)": f"{max_dd:.2f}",
+                        "Asset": asset,
+                        "Strategy": "A2C",
+                        "Total Return (%)": f"{total_return:.2f}",
+                        "Annualized Return (%)": f"{annual_return:.2f}",
+                        "Annualized Vol (%)": f"{annual_vol:.2f}",
+                        "Sharpe Ratio": f"{sharpe:.2f}",
+                        "Max Drawdown (%)": f"{max_dd:.2f}",
                     })
             
             # Route B
@@ -657,13 +657,13 @@ with tab2:
                     max_dd = max_drawdown_from_path(routeb_wealth) * 100
                     
                     metrics_data.append({
-                        "资产": asset,
-                        "策略": "Route B",
-                        "总收益 (%)": f"{total_return:.2f}",
-                        "年化收益 (%)": f"{annual_return:.2f}",
-                        "年化波动 (%)": f"{annual_vol:.2f}",
-                        "Sharpe比": f"{sharpe:.2f}",
-                        "最大回撤 (%)": f"{max_dd:.2f}",
+                        "Asset": asset,
+                        "Strategy": "Route B",
+                        "Total Return (%)": f"{total_return:.2f}",
+                        "Annualized Return (%)": f"{annual_return:.2f}",
+                        "Annualized Vol (%)": f"{annual_vol:.2f}",
+                        "Sharpe Ratio": f"{sharpe:.2f}",
+                        "Max Drawdown (%)": f"{max_dd:.2f}",
                     })
         
         if metrics_data:
@@ -673,27 +673,27 @@ with tab2:
             # Download button
             csv = df_metrics.to_csv(index=False)
             st.download_button(
-                label="📥 下载指标CSV",
+                label="📥 Download Metrics CSV",
                 data=csv,
                 file_name=f"performance_metrics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv"
             )
         else:
-            st.warning("⚠️ 无性能数据")
+            st.warning("⚠️ No performance data")
     else:
-        st.info("请在左侧选择资产类别和策略")
+        st.info("Please select asset classes and strategies on the left")
 
 # ============================================================================
 # TAB 3: Risk Analysis
 # ============================================================================
 with tab3:
-    st.header("风险指标分析")
+    st.header("Risk Metrics Analysis")
     
     if selected_assets and selected_strategies:
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("最大回撤对比")
+            st.subheader("Max Drawdown Comparison")
             mdd_data = []
             
             for asset in selected_assets:
@@ -704,20 +704,20 @@ with tab3:
                         if wealth is not None:
                             mdd = max_drawdown_from_path(wealth.values) * 100
                             mdd_data.append({
-                                "策略": f"{strategy}/{asset}",
-                                "最大回撤 (%)": mdd
+                                "Strategy": f"{strategy}/{asset}",
+                                "Max Drawdown (%)": mdd
                             })
             
             if mdd_data:
-                df_mdd = pd.DataFrame(mdd_data).sort_values("最大回撤 (%)")
+                df_mdd = pd.DataFrame(mdd_data).sort_values("Max Drawdown (%)")
                 fig, ax = plt.subplots(figsize=(8, 6))
-                ax.barh(df_mdd["策略"], df_mdd["最大回撤 (%)"], color="#E74C3C")
-                ax.set_xlabel("最大回撤 (%)", fontweight='bold')
-                ax.set_title("策略最大回撤对比", fontweight='bold')
+                ax.barh(df_mdd["Strategy"], df_mdd["Max Drawdown (%)"], color="#E74C3C")
+                ax.set_xlabel("Max Drawdown (%)", fontweight='bold')
+                ax.set_title("Strategy Max Drawdown Comparison", fontweight='bold')
                 st.pyplot(fig)
         
         with col2:
-            st.subheader("波动率对比")
+            st.subheader("Volatility Comparison")
             vol_data = []
             
             for asset in selected_assets:
@@ -726,47 +726,47 @@ with tab3:
                     if returns is not None and len(returns) > 0:
                         annual_vol = returns.std() * np.sqrt(252) * 100
                         vol_data.append({
-                            "策略": f"{strategy}/{asset}",
-                            "年化波动 (%)": annual_vol
+                            "Strategy": f"{strategy}/{asset}",
+                            "Annualized Vol (%)": annual_vol
                         })
             
             if vol_data:
-                df_vol = pd.DataFrame(vol_data).sort_values("年化波动 (%)")
+                df_vol = pd.DataFrame(vol_data).sort_values("Annualized Vol (%)")
                 fig, ax = plt.subplots(figsize=(8, 6))
-                ax.barh(df_vol["策略"], df_vol["年化波动 (%)"], color="#3498DB")
-                ax.set_xlabel("年化波动 (%)", fontweight='bold')
-                ax.set_title("策略波动率对比", fontweight='bold')
+                ax.barh(df_vol["Strategy"], df_vol["Annualized Vol (%)"], color="#3498DB")
+                ax.set_xlabel("Annualized Vol (%)", fontweight='bold')
+                ax.set_title("Strategy Volatility Comparison", fontweight='bold')
                 st.pyplot(fig)
     else:
-        st.info("请在左侧选择资产类别和策略")
+        st.info("Please select asset classes and strategies on the left")
 
 # ============================================================================
 # TAB 4: Sensitivity Analysis
 # ============================================================================
 with tab4:
-    st.header("🔧 敏感性分析")
-    st.markdown("分析目标波动率 σ_tgt 对策略性能的影响（收益、Sharpe比、波动率）")
+    st.header("🔧 Sensitivity Analysis")
+    st.markdown("Analyze the impact of target volatility σ_tgt on strategy performance (return, Sharpe ratio, volatility)")
     
     if selected_assets and selected_strategies:
         # Select one asset and strategy for sensitivity analysis
         col1, col2 = st.columns(2)
         
         with col1:
-            sensitivity_asset = st.selectbox("选择资产", selected_assets)
+            sensitivity_asset = st.selectbox("Select Asset", selected_assets)
         
         with col2:
-            sensitivity_strategy = st.selectbox("选择策略", selected_strategies)
+            sensitivity_strategy = st.selectbox("Select Strategy", selected_strategies)
         
         # Range of sigma targets
         sigma_range = np.arange(0.03, 0.16, 0.01)
         sensitivity_results = []
         
-        st.info(f"📊 正在计算 {len(sigma_range)} 个 σ 值的敏感性分析...")
+        st.info(f"📊 Computing sensitivity analysis for {len(sigma_range)} σ values...")
         progress_bar = st.progress(0)
         status_text = st.empty()
         
         for idx, sigma_val in enumerate(sigma_range):
-            status_text.text(f"计算 σ={sigma_val:.3f}... ({idx+1}/{len(sigma_range)})")
+            status_text.text(f"Computing σ={sigma_val:.3f}... ({idx+1}/{len(sigma_range)})")
             
             try:
                 # Load data for this specific sigma
@@ -788,10 +788,10 @@ with tab4:
                         
                         sensitivity_results.append({
                             "σ_target": round(sigma_val, 3),
-                            "年化收益 (%)": round(annual_return, 2),
-                            "Sharpe比": round(sharpe, 4),
-                            "年化波动 (%)": round(annual_vol, 2),
-                            "累计收益": round(wealth.iloc[-1] - 1.0, 4)
+                            "Annualized Return (%)": round(annual_return, 2),
+                            "Sharpe Ratio": round(sharpe, 4),
+                            "Annualized Vol (%)": round(annual_vol, 2),
+                            "Cumulative Return": round(wealth.iloc[-1] - 1.0, 4)
                         })
             except Exception as e:
                 # Log but continue
@@ -810,94 +810,94 @@ with tab4:
             sigma_vals = df_sens["σ_target"].values
             
             # Plot 1: Return vs Sigma
-            axes[0].plot(sigma_vals, df_sens["年化收益 (%)"], marker='o', color="#2E86AB", linewidth=2.5, markersize=6)
+            axes[0].plot(sigma_vals, df_sens["Annualized Return (%)"], marker='o', color="#2E86AB", linewidth=2.5, markersize=6)
             axes[0].set_xlabel("σ_target", fontweight='bold', fontsize=11)
-            axes[0].set_ylabel("年化收益 (%)", fontweight='bold', fontsize=11)
-            axes[0].set_title(f"{sensitivity_asset} - {sensitivity_strategy}\n收益敏感性", fontweight='bold', fontsize=12)
+            axes[0].set_ylabel("Annualized Return (%)", fontweight='bold', fontsize=11)
+            axes[0].set_title(f"{sensitivity_asset} - {sensitivity_strategy}\nReturn Sensitivity", fontweight='bold', fontsize=12)
             axes[0].grid(True, alpha=0.3)
             
             # Plot 2: Sharpe vs Sigma
-            axes[1].plot(sigma_vals, df_sens["Sharpe比"], marker='s', color="#A23B72", linewidth=2.5, markersize=6)
+            axes[1].plot(sigma_vals, df_sens["Sharpe Ratio"], marker='s', color="#A23B72", linewidth=2.5, markersize=6)
             axes[1].set_xlabel("σ_target", fontweight='bold', fontsize=11)
-            axes[1].set_ylabel("Sharpe比", fontweight='bold', fontsize=11)
-            axes[1].set_title(f"{sensitivity_asset} - {sensitivity_strategy}\nSharpe比敏感性", fontweight='bold', fontsize=12)
+            axes[1].set_ylabel("Sharpe Ratio", fontweight='bold', fontsize=11)
+            axes[1].set_title(f"{sensitivity_asset} - {sensitivity_strategy}\nSharpe Ratio Sensitivity", fontweight='bold', fontsize=12)
             axes[1].grid(True, alpha=0.3)
             
             # Plot 3: Volatility vs Sigma
-            axes[2].plot(sigma_vals, df_sens["年化波动 (%)"], marker='^', color="#F18F01", linewidth=2.5, markersize=6)
+            axes[2].plot(sigma_vals, df_sens["Annualized Vol (%)"], marker='^', color="#F18F01", linewidth=2.5, markersize=6)
             axes[2].set_xlabel("σ_target", fontweight='bold', fontsize=11)
-            axes[2].set_ylabel("年化波动 (%)", fontweight='bold', fontsize=11)
-            axes[2].set_title(f"{sensitivity_asset} - {sensitivity_strategy}\n波动率敏感性", fontweight='bold', fontsize=12)
+            axes[2].set_ylabel("Annualized Vol (%)", fontweight='bold', fontsize=11)
+            axes[2].set_title(f"{sensitivity_asset} - {sensitivity_strategy}\nVolatility Sensitivity", fontweight='bold', fontsize=12)
             axes[2].grid(True, alpha=0.3)
             
             plt.tight_layout()
             st.pyplot(fig)
             
-            st.markdown("### 详细数据")
+            st.markdown("### Detailed Data")
             st.dataframe(df_sens, use_container_width=True, hide_index=True)
             
             # Summary statistics
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                best_return_sigma = df_sens.loc[df_sens["年化收益 (%)"].idxmax(), "σ_target"]
-                best_return = df_sens["年化收益 (%)"].max()
-                st.metric("最优σ（收益）", f"{best_return_sigma:.3f}", f"{best_return:.2f}%")
+                best_return_sigma = df_sens.loc[df_sens["Annualized Return (%)"].idxmax(), "σ_target"]
+                best_return = df_sens["Annualized Return (%)"].max()
+                st.metric("Best σ (Return)", f"{best_return_sigma:.3f}", f"{best_return:.2f}%")
             with col2:
-                best_sharpe_sigma = df_sens.loc[df_sens["Sharpe比"].idxmax(), "σ_target"]
-                best_sharpe = df_sens["Sharpe比"].max()
-                st.metric("最优σ（Sharpe）", f"{best_sharpe_sigma:.3f}", f"{best_sharpe:.4f}")
+                best_sharpe_sigma = df_sens.loc[df_sens["Sharpe Ratio"].idxmax(), "σ_target"]
+                best_sharpe = df_sens["Sharpe Ratio"].max()
+                st.metric("Best σ (Sharpe)", f"{best_sharpe_sigma:.3f}", f"{best_sharpe:.4f}")
             with col3:
-                min_vol_sigma = df_sens.loc[df_sens["年化波动 (%)"].idxmin(), "σ_target"]
-                min_vol = df_sens["年化波动 (%)"].min()
-                st.metric("最低波动σ", f"{min_vol_sigma:.3f}", f"{min_vol:.2f}%")
+                min_vol_sigma = df_sens.loc[df_sens["Annualized Vol (%)"].idxmin(), "σ_target"]
+                min_vol = df_sens["Annualized Vol (%)"].min()
+                st.metric("Lowest Vol σ", f"{min_vol_sigma:.3f}", f"{min_vol:.2f}%")
             with col4:
-                avg_return = df_sens["年化收益 (%)"].mean()
-                st.metric("平均收益", f"-", f"{avg_return:.2f}%")
+                avg_return = df_sens["Annualized Return (%)"].mean()
+                st.metric("Average Return"), f"-", f"{avg_return:.2f}%")
         else:
-            st.error(f"❌ 无法加载 {sensitivity_asset} 的 {sensitivity_strategy} 数据。请检查资产类别和策略组合。")
+            st.error(f"❌ Cannot load {sensitivity_strategy} data for {sensitivity_asset}. Check asset class and strategy combination.")
     else:
-        st.info("请在左侧选择资产类别和策略")
+        st.info("Please select asset classes and strategies on the left")
 
 # ============================================================================
 # TAB 5: Data Pipeline
 # ============================================================================
 with tab5:
-    st.header("📥 数据管道")
+    st.header("📥 Data Pipeline")
     st.markdown("""
-    ### 数据清理流程
+    ### Data Cleaning Pipeline
     
-    1. **原始数据读取**: CLCData RAD格式
-    2. **数据验证**: 
-       - 检查价格有效性（Close > 0）
-       - 移除缺失数据
-       - 按日期排序
-    3. **特征工程**:
-       - 向前调整（Forward Adjusted）价格
-       - 计算收益率
-       - 头寸调整（根据目标波动率）
-    4. **输出**: 清洁数据供策略使用
+    1. **Raw Data Reading**: CLCData RAD format
+    2. **Data Validation:** 
+       - Check price validity (Close > 0)
+       - Remove missing data
+       - Sort by date
+    3. **Feature Engineering:**
+       - Forward adjusted prices
+       - Calculate returns
+       - Position sizing (based on target volatility)
+    4. **Output**: Clean data for strategy use
     
-    ### 支持的数据格式
-    - **输入**: CLCData RAD CSV (Date, Open, High, Low, Close, Volume, OI)
-    - **输出**: 时间序列数据，已清洗和对齐
+    ### Supported Data Formats
+    - **Input**: CLCData RAD CSV (Date, Open, High, Low, Close, Volume, OI)
+    - **Output**: Time series data, cleaned and aligned
     
-    ### 质量指标
+    ### Quality Metrics
     """)
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("数据周期", "2011-2019 (9 年)")
+        st.metric("Data Period", "2011-2019 (9 years)")
     with col2:
-        st.metric("资产类别", "5 (大宗商品、股指、固定收益、外汇、组合)")
+        st.metric("Asset Classes", "5 (Commodity, Equity, Fixed Income, Forex, Combined)")
     with col3:
-        st.metric("交易日数", "~2,300 天/资产")
+        st.metric("Trading Days", "~2,300 days/asset")
     
     st.markdown("""
-    ### 数据来源
-    - 🗄️ **主数据源**: `data/CLC/` (CLCData原始格式)
-    - 📊 **预处理**: `data_loader.py` 中的 `load_clc_full()` 函数
-    - ✅ **验证**: 自动检查缺失值、异常值、数据对齐
+    ### Data Sources
+    - 🗄️ **Primary Data Source**: `data/CLC/` (CLCData raw format)
+    - 📊 **Preprocessing**: `load_clc_full()` function in `data_loader.py`
+    - ✅ **Validation**: Automatic checks for missing values, outliers, data alignment
     """)
 
 # ============================================================================
@@ -906,7 +906,7 @@ with tab5:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #888; font-size: 12px;'>
-    <p>🎓 IEOR 4733 期末项目 - 交易策略模拟平台</p>
-    <p>数据驱动 | 可复现 | 低向前偏差</p>
+    <p>🎓 IEOR 4733 Final Project - Trading Strategy Simulator</p>
+    <p>Data-Driven | Reproducible | Low Look-Ahead Bias</p>
 </div>
 """, unsafe_allow_html=True)

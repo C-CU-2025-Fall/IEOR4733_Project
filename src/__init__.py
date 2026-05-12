@@ -1,12 +1,12 @@
 """
-DRL Trading Strategies - 模块化 Python 框架
+DRL Trading Strategies - Modular Python Framework
 
-一个完整的交易策略框架，包含：
-- 传统策略: Long Only, Sign(R), MACD
-- 深度强化学习: DQN (论文复现), A2C (待上传), Route B
-- 完整的数据管理、指标计算、可视化工具
+A complete trading strategy framework including:
+- Traditional strategies: Long Only, Sign(R), MACD
+- Deep reinforcement learning: DQN (paper replication), A2C (pending upload), Route B
+- Full data management, indicator calculation, and visualization tools
 
-使用示例:
+Usage example:
     from src.core.strategies import LongOnlyStrategy, SignRStrategy, MACDStrategy
     from src.core.models.dqn import DQNEvaluator
     

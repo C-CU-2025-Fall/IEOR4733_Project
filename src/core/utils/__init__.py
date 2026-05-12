@@ -1,13 +1,13 @@
 """
-Utils Module - 通用工具函数
+Utils Module - General-purpose utility functions
 
-包含内容:
-    - metrics.py: 风险收益指标计算
-    - indicators.py: 技术指标计算
-    - visualization.py: 绘图和可视化
-    - helpers.py: 通用助手函数
+Contents:
+    - metrics.py: Risk-return metric calculation
+    - indicators.py: Technical indicator calculation
+    - visualization.py: Plotting and visualization
+    - helpers.py: General helper functions
 
-主要函数:
+Main functions:
     - calculate_sharpe_ratio()
     - calculate_max_drawdown()
     - calculate_returns_metrics()
@@ -15,7 +15,7 @@ Utils Module - 通用工具函数
     - compute_sma(), compute_ema()
     - compute_macd()
 
-使用示例:
+Usage example:
     from src.core.utils import metrics, indicators
     
     sharpe = metrics.calculate_sharpe_ratio(returns)

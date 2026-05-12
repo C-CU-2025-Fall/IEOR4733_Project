@@ -15,8 +15,8 @@ PAPER_50 = [
     "AN","BN","CN","DX","FN","JN","MP","NK","SN"
 ]
 # -----------------------------
-# 1) Find CLC data folder
 # -----------------------------
+
 def find_clcdata(root_path):
     """Construct path to data/CLC from project root."""
     clc_path = os.path.join(root_path, 'data', 'CLC')
@@ -24,11 +24,11 @@ def find_clcdata(root_path):
         raise FileNotFoundError(f"CLC folder not found at {clc_path}")
     return clc_path
 # -----------------------------
-# 2) Read single RAD file
+# Read one RAD file
 # -----------------------------
 def read_rad_csv(file_path):
     df = pd.read_csv(file_path, header=None)
-    # Assign column names
+    # Use the column order from the Pinnacle manual.
     df.columns = [
         "date",
         "open",
@@ -38,10 +38,10 @@ def read_rad_csv(file_path):
         "volume",
         "open_interest"
     ]
+    # Parse dates.
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    # Convert to datetime
+    # Keep one clean row per date.
     df = df.sort_values("date").drop_duplicates("date")
-    # Sort and deduplicate
 
     return df
 # -----------------------------
@@ -54,7 +54,7 @@ def load_paper_rad_data(root_path, start=None, end=None):
     data_dict = {}
     missing = []
 
-    # Build filename -> path mapping (case-insensitive)
+    # Build a case-insensitive filename lookup.
     file_map = {}
     for root, _, files in os.walk(clc_path):
         for f in files:
@@ -78,8 +78,7 @@ def load_paper_rad_data(root_path, start=None, end=None):
 
         data_dict[ticker] = df.reset_index(drop=True)
 
-
-    # Concatenate panel
+    # Stack all contracts into one long panel.
     panel = pd.concat(data_dict.values(), ignore_index=True)
 
     return data_dict, panel, missing
@@ -117,24 +116,27 @@ def build_paper_features(data_dict, dropna=False):
     for ticker, df in data_dict.items():
         x = df.copy()
 
-        # --- 1) Basic cleaning ---
+        # -------------------------
+        # Basic cleanup.
+        # -------------------------
         required_cols = ["date", "open", "high", "low", "close", "volume", "open_interest"]
         missing_cols = [c for c in required_cols if c not in x.columns]
         if missing_cols:
             raise ValueError(f"{ticker} missing columns: {missing_cols}")
 
         x = x.sort_values("date").reset_index(drop=True)
-        # Ensure correct types
+
+        # Force the expected dtypes before making features.
         x["date"] = pd.to_datetime(x["date"], errors="coerce")
         for col in ["open", "high", "low", "close", "volume", "open_interest"]:
             x[col] = pd.to_numeric(x[col], errors="coerce")
 
-
-        # Add ticker column if missing
         if "ticker" not in x.columns:
             x["ticker"] = ticker
 
-        # --- 2) Daily returns: r_t = p_t - p_{t-1} ---
+        # -------------------------
+        # Daily additive return used in the paper: r_t = p_t - p_{t-1}.
+        # -------------------------
         x["ret_1d"] = x["close"].diff()
 
         # 60-day EWMA volatility on daily additive returns
@@ -146,14 +148,20 @@ def build_paper_features(data_dict, dropna=False):
 
         x["ewm_vol_60"] = x["ewm_vol_60"].replace(0, np.nan)
 
-        # --- 3) Normalized close price (60-day rolling z-score) ---
+        # -------------------------
+        # Normalized close price series.
+        # Here I use a 60-day rolling z-score.
+        # -------------------------
         close_mean_60 = x["close"].rolling(window=60, min_periods=60).mean()
         close_std_60 = x["close"].rolling(window=60, min_periods=60).std()
         close_std_60 = close_std_60.replace(0, np.nan)
 
         x["close_norm"] = (x["close"] - close_mean_60) / close_std_60
 
-        # --- 4) Multi-horizon return features (1m, 2m, 3m, 1y, sigma_t * sqrt(h) scaled) ---
+        # -------------------------
+        # Return features from the paper: 1m, 2m, 3m, and 1y.
+        # Scale each horizon by sigma_t * sqrt(h).
+        # -------------------------
         horizons = {
             "ret_1m": 21,
             "ret_2m": 42,
@@ -208,12 +216,13 @@ def build_paper_features(data_dict, dropna=False):
         rs = avg_gain / avg_loss.replace(0, np.nan)
         x["rsi_30"] = 100 - (100 / (1 + rs))
 
-
+        # Handle the flat-price edge cases explicitly.
         x.loc[(avg_loss == 0) & (avg_gain > 0), "rsi_30"] = 100
         x.loc[(avg_loss == 0) & (avg_gain == 0), "rsi_30"] = 50
 
+        # -------------------------
 
-        # --- 7) Select output columns ---
+        # -------------------------
         keep_cols = [
             "date", "ticker",
             "open", "high", "low", "close", "volume", "open_interest",
@@ -226,7 +235,9 @@ def build_paper_features(data_dict, dropna=False):
 
         x = x[keep_cols].copy()
 
-        # --- 8) Optional: drop NaN rows ---
+        # -------------------------
+        # Optional feature cleanup.
+        # -------------------------
         core_cols = [
             "ewm_vol_60", "close_norm",
             "ret_1m", "ret_2m", "ret_3m", "ret_1y",
@@ -235,7 +246,6 @@ def build_paper_features(data_dict, dropna=False):
         ]
 
         if dropna:
-            # Keep only rows with complete features
             x = x.dropna(subset=core_cols).reset_index(drop=True)
 
         feature_dict[ticker] = x
@@ -267,7 +277,7 @@ def make_state_tensor_single(
     x = df.copy()
     x = x.sort_values("date").reset_index(drop=True)
 
-
+    # Keep rows where the state features are complete.
     x = x.dropna(subset=feature_cols).reset_index(drop=True)
 
     X = []
@@ -337,8 +347,7 @@ def build_baselines(df):
     macd = out["macd_avg"]
     out["macd_signal"] = macd * np.exp(-macd**2 / 4) / 0.89
 
-
-    # --- Time alignment (shift signals by 1 day) ---
+    # --- Timing alignment ---
     out["long_only"] = out["long_only"].shift(1)
     out["sign"] = out["sign"].shift(1)
     out["macd_signal"] = out["macd_signal"].shift(1)
@@ -355,7 +364,7 @@ def compute_pnl(
     price_col="close",
     ret_col="ret_1d",
     vol_col="ewm_vol_60",
-    sigma_target=0.064,  # assumption from paper
+    sigma_target=0.064,  # assumption used in this run
     bp=0.0020,
     mu=1.0,
     dropna=False
@@ -379,9 +388,9 @@ def compute_pnl(
     sigma_target : float
         sigma_tgt in the paper
     bp : float
-        Cost rate. Paper Table 1 uses 0.0020 in training. :contentReference[oaicite:1]{index=1}
+        Cost rate. Paper Table 1 uses 0.0020 in training.
     mu : float
-        Per-contract scaling factor. Paper sets mu = 1. :contentReference[oaicite:2]{index=2}
+        Per-contract scaling factor. Paper sets mu = 1.
     dropna : bool
         If True, drop rows where key outputs are NaN
 
@@ -397,6 +406,7 @@ def compute_pnl(
         gross_pnl
         trading_cost
         net_pnl
+        cumulative_net_pnl
     """
     out = df.copy()
 
@@ -409,8 +419,7 @@ def compute_pnl(
 
     out["price_prev"] = out[price_col].shift(1)
 
-
-    # Avoid division by zero
+    # Avoid division by zero.
     out["vol_prev"] = out["vol_prev"].replace(0, np.nan)
     out["vol_prev2"] = out["vol_prev2"].replace(0, np.nan)
 
@@ -429,8 +438,11 @@ def compute_pnl(
         * (out["scaled_pos_prev"] - out["scaled_pos_prev2"]).abs()
     )
 
-    # net pnl
+    # Net reward / PnL for this date.
     out["net_pnl"] = out["gross_pnl"] - out["trading_cost"]
+
+    # Keep the cumulative reward anchored at 0, not 1.
+    out["cumulative_net_pnl"] = out["net_pnl"].fillna(0.0).cumsum()
 
     if dropna:
         out = out.dropna(
@@ -442,6 +454,7 @@ def compute_pnl(
                 "net_pnl",
             ]
         ).reset_index(drop=True)
+        out["cumulative_net_pnl"] = out["net_pnl"].cumsum()
 
     return out
 
@@ -491,8 +504,8 @@ LEAKY_RELU_SLOPE = 0.01
 
 
 # ============================================================
+
 # 1) Two-layer LSTM backbone
-#    Paper says:
 #      - LSTM for actor and critic
 #      - two-layer LSTM
 #      - 64 and 32 units
@@ -523,9 +536,7 @@ class StackedLSTMBackbone(nn.Module):
         out2, _ = self.lstm2(out1)
         out2 = self.act(out2)
 
-        # IMPLEMENTATION ASSUMPTION:
-        # paper does not specify pooling/readout method from LSTM.
-        # Standard choice: use last time-step hidden representation.
+        # The paper does not spell out the LSTM readout, so I use the last hidden state here.
         return out2[:, -1, :]   # (batch, 32)
 
 
@@ -540,14 +551,12 @@ class ActorContinuous(nn.Module):
         self.backbone = StackedLSTMBackbone(input_size, hidden_sizes)
         self.mu_head = nn.Linear(hidden_sizes[-1], 1)
 
-        # IMPLEMENTATION ASSUMPTION:
-        # paper does not specify how to parameterize continuous action policy.
-        # We use a Gaussian policy with a trainable global log_std.
+        # The policy distribution is not fixed in the paper; this uses a Gaussian with one trainable log_std.
         self.log_std = nn.Parameter(torch.tensor(-0.5, dtype=torch.float32))
 
     def forward(self, x):
         h = self.backbone(x)
-        mu = torch.tanh(self.mu_head(h))   # action mean constrained to [-1,1]
+        mu = self.mu_head(h)   
         std = torch.exp(self.log_std).clamp(min=1e-4, max=2.0)
         return mu, std
 
@@ -762,13 +771,13 @@ class PaperA2CTrainer:
         lr_actor=LR_ACTOR,
         lr_critic=LR_CRITIC,
         gamma=GAMMA,
-        entropy_coef=1e-3,    # IMPLEMENTATION ASSUMPTION: not specified in paper
-        max_grad_norm=1.0,    # IMPLEMENTATION ASSUMPTION: not specified in paper
+        #entropy_coef=1e-3,    # not specified in the paper
+        max_grad_norm=1.0,    # not specified in the paper
         device=DEVICE,
     ):
         self.device = device
         self.gamma = gamma
-        self.entropy_coef = entropy_coef
+        #self.entropy_coef = entropy_coef
         self.max_grad_norm = max_grad_norm
 
         self.actor = ActorContinuous(n_features, HIDDEN_SIZES).to(device)
@@ -813,8 +822,9 @@ class PaperA2CTrainer:
         log_probs = dist.log_prob(z) - torch.log(1 - actions_flat.pow(2) + 1e-6)
         log_probs = log_probs.sum(dim=-1)
 
-        entropy = dist.entropy().sum(dim=-1).mean()
-        actor_loss = -(log_probs * advantages_flat.detach()).mean() - self.entropy_coef * entropy
+        #entropy = dist.entropy().sum(dim=-1).mean()
+        #actor_loss = -(log_probs * advantages_flat.detach()).mean() - self.entropy_coef * entropy
+        actor_loss = -(log_probs * advantages_flat.detach()).mean()
 
         self.actor_optim.zero_grad()
         actor_loss.backward()
@@ -824,7 +834,7 @@ class PaperA2CTrainer:
         out = {
             "actor_loss": float(actor_loss.item()),
             "critic_loss": float(critic_loss.item()),
-            "entropy": float(entropy.item()),
+            #"entropy": float(entropy.item()),
             "avg_return": float(returns_flat.mean().item()),
             "avg_reward": float(batch["rewards"].mean().item()),
         }
@@ -839,7 +849,7 @@ class PaperA2CTrainer:
             "critic_optim_state_dict": self.critic_optim.state_dict(),
             "train_log": self.train_log,
             "gamma": self.gamma,
-            "entropy_coef": self.entropy_coef,
+            #"entropy_coef": self.entropy_coef,
             "max_grad_norm": self.max_grad_norm,
         }
         if extra_state is not None:
@@ -889,7 +899,7 @@ class PaperA2CTrainer:
                     f"actor_loss={metrics['actor_loss']:.4f} "
                     f"critic_loss={metrics['critic_loss']:.4f} "
                     f"avg_reward={metrics['avg_reward']:.6f} "
-                    f"entropy={metrics['entropy']:.4f}"
+                    #f"entropy={metrics['entropy']:.4f}"
                 )
 
             if checkpoint_path is not None and update_idx % checkpoint_every == 0:
@@ -952,3 +962,301 @@ def build_envs_from_state_dict(
     return envs
 
 
+
+
+
+# ============================================================
+# A2C experiment constants / asset mapping
+# ============================================================
+PAPER_TICKERS_BY_ASSET_CLASS = {
+    "Commodity": ["CC","DA","GI","JO","KC","KW","LB","NR","SB","ZA","ZC","ZF","ZG","ZH","ZI","ZK","ZL","ZN","ZO","ZP","ZR","ZT","ZU","ZW","ZZ"],
+    "Equity Index": ["CA","EN","ER","ES","LX","MD","SC","SP","XU","XX","YM"],
+    "Fixed Income": ["DT","FB","TY","UB","US"],
+    "FX": ["AN","BN","CN","DX","FN","JN","MP","NK","SN"],
+}
+PAPER_TICKERS_BY_ASSET_CLASS["All"] = sorted(sum(PAPER_TICKERS_BY_ASSET_CLASS.values(), []))
+
+STATE_FEATURES = [
+    "close_norm",
+    "ret_1m",
+    "ret_2m",
+    "ret_3m",
+    "ret_1y",
+    "macd_8_24",
+    "macd_16_48",
+    "macd_32_96",
+    "rsi_30",
+]
+
+
+
+
+def build__by_asset(pnl_a2c_by_ticker, ticker_to_asset):
+    """
+    Convert per-ticker A2C reward DataFrames into cumulative reward curves by asset class.
+
+    Notes:
+    - This uses df['net_pnl'], the reward/PnL recomputed by compute_pnl().
+    - The curve starts from 0, so it is a cumulative reward curve, not wealth.
+    """
+    results = {}
+    asset_classes = ["Commodity", "Equity Index", "Fixed Income", "Forex"]
+
+    for asset in asset_classes:
+        series_list = []
+
+        for ticker, df in pnl_a2c_by_ticker.items():
+            if ticker_to_asset.get(ticker) != asset:
+                continue
+            if df is None or len(df) == 0:
+                continue
+            if not all(c in df.columns for c in ["date", "net_pnl"]):
+                continue
+
+            s = pd.Series(df["net_pnl"].values, index=pd.to_datetime(df["date"]))
+            series_list.append(s)
+
+        if series_list:
+            port_series = pd.DataFrame(series_list).T.sort_index().mean(axis=1)
+            dates = port_series.index.to_numpy()
+            cum_reward = np.cumsum(port_series.fillna(0.0).values)
+            results[asset] = (dates, cum_reward)
+        else:
+            results[asset] = (None, None)
+
+    all_ticker_series = []
+    for ticker, df in pnl_a2c_by_ticker.items():
+        if df is None or len(df) == 0:
+            continue
+        if not all(c in df.columns for c in ["date", "net_pnl"]):
+            continue
+        s = pd.Series(df["net_pnl"].values, index=pd.to_datetime(df["date"]))
+        all_ticker_series.append(s)
+
+    if all_ticker_series:
+        port_series_all = pd.DataFrame(all_ticker_series).T.sort_index().mean(axis=1)
+        results["All"] = (
+            port_series_all.index.to_numpy(),
+            np.cumsum(port_series_all.fillna(0.0).values)
+        )
+    else:
+        results["All"] = (None, None)
+
+    return results
+
+
+# ============================================================
+# Paper Exhibit 3 comparison helper
+# ============================================================
+PAPER_TABLE3_A2C_FINAL_CUM_RETURNS = {
+    # Hand-read from the A2C curve in the paper's Exhibit 3 / Table 3 plot.
+    # Use these as reference benchmarks for the wide comparison table.
+    "Commodity": 3.4,
+    "Equity Index": 3.6,
+    "Fixed Income": 5.2,
+    "Forex": 2.7,
+    "All": 7.1,
+}
+
+
+def build_table3_a2c_comparison_wide(a2c_results, paper_table3_a2c=None):
+    """
+    Build a wide table comparing this notebook's A2C final cumulative reward
+    with the paper's A2C final cumulative trade return from Exhibit 3 / Table 3.
+
+    Parameters
+    ----------
+    a2c_results : dict
+        Output from build__by_asset(), formatted as:
+        {asset_class: (dates, cumulative_reward_curve)}.
+    paper_table3_a2c : dict, optional
+        Reference A2C final cumulative trade returns from the paper.
+        If None, uses PAPER_TABLE3_A2C_FINAL_CUM_RETURNS.
+
+    Returns
+    -------
+    comparison_wide : pd.DataFrame
+        Wide table with asset classes as columns.
+    """
+    if paper_table3_a2c is None:
+        paper_table3_a2c = PAPER_TABLE3_A2C_FINAL_CUM_RETURNS
+
+    asset_order = ["Commodity", "Equity Index", "Fixed Income", "Forex", "All"]
+
+    our_final = {}
+    for asset in asset_order:
+        dates, curve = a2c_results.get(asset, (None, None))
+        if curve is None or len(curve) == 0:
+            our_final[asset] = np.nan
+        else:
+            our_final[asset] = float(curve[-1])
+
+    paper_final = {asset: paper_table3_a2c.get(asset, np.nan) for asset in asset_order}
+    diff = {
+        asset: our_final[asset] - paper_final[asset]
+        if pd.notna(our_final[asset]) and pd.notna(paper_final[asset])
+        else np.nan
+        for asset in asset_order
+    }
+
+    comparison_wide = pd.DataFrame(
+        [our_final, paper_final, diff],
+        index=[
+            "our_a2c_final_cumulative_reward",
+            "paper_table3_a2c_final_cumulative_trade_return",
+            "difference_our_minus_paper",
+        ],
+    )
+
+    return comparison_wide[asset_order]
+
+
+
+def compute_table3_like_metrics_from_daily_pnl(daily_pnl, annualization=252):
+    """
+    Compute Table-3-style summary metrics from a daily reward/PnL series.
+
+    The input should be the daily net reward from compute_pnl(), not a wealth index.
+    Metrics are annualized using the supplied annualization factor.
+    """
+    s = pd.Series(daily_pnl).dropna().astype(float)
+
+    if len(s) == 0:
+        return {
+            "E(R)": np.nan,
+            "Std(R)": np.nan,
+            "DD": np.nan,
+            "Sharpe": np.nan,
+            "Sortino": np.nan,
+            "MDD": np.nan,
+            "Calmar": np.nan,
+            "% + Ret": np.nan,
+            "Ave P/L": np.nan,
+        }
+
+    er = s.mean() * annualization
+    std = s.std(ddof=1) * np.sqrt(annualization) if len(s) > 1 else np.nan
+
+    downside = s[s < 0]
+    dd = downside.std(ddof=1) * np.sqrt(annualization) if len(downside) > 1 else np.nan
+
+    sharpe = er / std if pd.notna(std) and std != 0 else np.nan
+    sortino = er / dd if pd.notna(dd) and dd != 0 else np.nan
+
+    cum = s.fillna(0.0).cumsum()
+    running_max = cum.cummax()
+    drawdown = running_max - cum
+    mdd = drawdown.max() if len(drawdown) else np.nan
+    calmar = er / mdd if pd.notna(mdd) and mdd != 0 else np.nan
+
+    pct_pos = (s > 0).mean()
+    avg_profit = s[s > 0].mean()
+    avg_loss = s[s < 0].mean()
+    ave_pl = avg_profit / abs(avg_loss) if pd.notna(avg_profit) and pd.notna(avg_loss) and avg_loss != 0 else np.nan
+
+    return {
+        "E(R)": er,
+        "Std(R)": std,
+        "DD": dd,
+        "Sharpe": sharpe,
+        "Sortino": sortino,
+        "MDD": mdd,
+        "Calmar": calmar,
+        "% + Ret": pct_pos,
+        "Ave P/L": ave_pl,
+    }
+
+
+def build_a2c_table3_comparison_wide(
+    pnl_by_ticker,
+    ticker_to_asset,
+    cost_bp=20,
+    signal_col="a2c_signal",
+    sigma_target=0.064,
+    mu=1.0,
+    annualization=252,
+):
+    """
+    Compare this project's A2C test results with the A2C rows from the paper's Table 3.
+
+    The project side recomputes daily net reward with compute_pnl() and then builds
+    an equal-weight daily asset-class portfolio before computing the summary metrics.
+    The paper side is hard-coded from Table 3: Experiment Results for the Raw Signal.
+    """
+    asset_order = ["Commodity", "Equity Index", "Fixed Income", "Forex", "All"]
+
+    paper_a2c = {
+        "Commodity": {
+            "E(R)": 0.072, "Std(R)": 0.163, "DD": 0.098, "Sharpe": 0.440,
+            "Sortino": 0.729, "MDD": 0.099, "Calmar": 0.161, "% + Ret": 0.487, "Ave P/L": 1.151,
+        },
+        "Equity Index": {
+            "E(R)": 0.293, "Std(R)": 0.629, "DD": 0.427, "Sharpe": 0.466,
+            "Sortino": 0.686, "MDD": 0.193, "Calmar": 0.214, "% + Ret": 0.533, "Ave P/L": 0.965,
+        },
+        "Fixed Income": {
+            "E(R)": 0.852, "Std(R)": 1.345, "DD": 0.806, "Sharpe": 0.633,
+            "Sortino": 1.057, "MDD": 0.128, "Calmar": 0.397, "% + Ret": 0.517, "Ave P/L": 1.039,
+        },
+        "Forex": {
+            "E(R)": 0.159, "Std(R)": 0.455, "DD": 0.267, "Sharpe": 0.349,
+            "Sortino": 0.592, "MDD": 0.081, "Calmar": 0.193, "% + Ret": 0.507, "Ave P/L": 1.034,
+        },
+        "All": {
+            "E(R)": 0.214, "Std(R)": 0.221, "DD": 0.134, "Sharpe": 0.969,
+            "Sortino": 1.601, "MDD": 0.009, "Calmar": 0.672, "% + Ret": 0.538, "Ave P/L": 1.014,
+        },
+    }
+
+    bp_decimal = cost_bp / 10000.0
+    by_asset = {asset: [] for asset in asset_order}
+
+    for ticker, df in pnl_by_ticker.items():
+        if df is None or len(df) == 0:
+            continue
+        if signal_col not in df.columns:
+            continue
+
+        asset = ticker_to_asset.get(ticker)
+        if asset not in by_asset:
+            continue
+
+        pnl_df = compute_pnl(
+            df,
+            signal_col=signal_col,
+            sigma_target=sigma_target,
+            bp=bp_decimal,
+            mu=mu,
+            dropna=True,
+        )
+        if len(pnl_df) == 0:
+            continue
+
+        s = pd.Series(pnl_df["net_pnl"].values, index=pd.to_datetime(pnl_df["date"]))
+        by_asset[asset].append(s)
+        by_asset["All"].append(s)
+
+    project_metrics = {}
+    for asset in asset_order:
+        if len(by_asset[asset]) == 0:
+            project_metrics[asset] = compute_table3_like_metrics_from_daily_pnl([], annualization=annualization)
+            continue
+
+        port = pd.DataFrame(by_asset[asset]).T.sort_index().mean(axis=1)
+        project_metrics[asset] = compute_table3_like_metrics_from_daily_pnl(port, annualization=annualization)
+
+    rows = []
+    metric_order = ["E(R)", "Std(R)", "DD", "Sharpe", "Sortino", "MDD", "Calmar", "% + Ret", "Ave P/L"]
+
+    for metric in metric_order:
+        row = {"metric": metric, "cost_bp": cost_bp}
+        for asset in asset_order:
+            project_value = project_metrics[asset].get(metric, np.nan)
+            paper_value = paper_a2c[asset].get(metric, np.nan)
+            row[f"{asset} Project A2C"] = project_value
+            row[f"{asset} Paper Table 3 A2C"] = paper_value
+            row[f"{asset} Difference"] = project_value - paper_value if pd.notna(project_value) and pd.notna(paper_value) else np.nan
+        rows.append(row)
+
+    wide = pd.DataFrame(rows)
+    return wide

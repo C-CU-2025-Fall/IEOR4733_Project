@@ -1,17 +1,17 @@
 """
-Data Module - 数据加载和预处理
+Data Module - Data loading and preprocessing
 
-包含内容:
-    - loader.py: 数据加载器
-    - preprocessor.py: 数据预处理
-    - contract_manager.py: 期货合约管理
+Contents:
+    - loader.py: Data loader
+    - preprocessor.py: Data preprocessing
+    - contract_manager.py: Futures contract management
 
-主要类:
-    - DataLoader: 通用数据加载器
-    - DataPreprocessor: 数据预处理
-    - ContractManager: 合约管理
+Main classes:
+    - DataLoader: General-purpose data loader
+    - DataPreprocessor: Data preprocessing
+    - ContractManager: Contract management
 
-使用示例:
+Usage example:
     from src.core.data import DataLoader, DataPreprocessor
     
     loader = DataLoader(data_dir="data/")

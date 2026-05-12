@@ -591,10 +591,10 @@ def top_40plus(rows, limit=8):
 
 def recommendation_for(label, family, score15):
     if family == "clean_same_rule":
-        return "主方案" if score15 >= 40 else "clean 主方案"
+        return "Primary scheme" if score15 >= 40 else "clean primary scheme"
     if family == "coherent_override":
-        return "备选方案"
-    return "仅实验上界"
+        return "Alternative scheme"
+    return "Experimental upper bound only"
 
 
 def summary_table_rows(candidates):

@@ -29,3 +29,9 @@ results_lstm_*.csv
 # Images (optional - can include if small)
 # *.png
 simulation_data/
+
+.DS_Store
+*.pt
+*.pth
+*.log
+dqn_model_backups/

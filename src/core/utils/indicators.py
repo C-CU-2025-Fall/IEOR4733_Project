@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-技术指标计算模块
-论文第 4 页：State Space 特征工程
+Technical Indicator Calculation Module
+Paper p.4: State Space Feature Engineering
 """
 
 import numpy as np
@@ -11,38 +11,38 @@ from typing import Union
 ArrayLike = Union[np.ndarray, pd.Series]
 
 # =============================================================================
-# MACD 指标 (论文公式 3)
+# MACD Indicator (Paper Formula 3)
 # =============================================================================
 
 def compute_macd(prices: ArrayLike, short_span: int, long_span: int) -> np.ndarray:
     """
-    论文公式 (3): MACD 指标
+    Paper Formula (3): MACD Indicator
     
     MACD_t = q_t / std(q_{t-252:t})
     q_t = (m(S) - m(L)) / std(p_{t-63:t})
     
-    参数:
-        prices: 价格序列
-        short_span: 短期时间尺度 (论文：8, 16, 32)
-        long_span: 长期时间尺度 (论文：24, 48, 96)
+    Args:
+        prices: Price series
+        short_span: Short time scale (paper: 8, 16, 32)
+        long_span: Long time scale (paper: 24, 48, 96)
     
-    返回:
-        MACD 值序列
+    Returns:
+        MACD value series
     """
     if isinstance(prices, np.ndarray):
         prices = pd.Series(prices)
     
-    # 指数加权移动平均
+    # Exponential weighted moving average
     m_short = prices.ewm(span=short_span, adjust=False).mean()
     m_long = prices.ewm(span=long_span, adjust=False).mean()
     
-    # 63 天滚动标准差
+    # 63-day rolling standard deviation
     std_63 = prices.rolling(window=63, min_periods=1).std()
     
     # q_t
     q = (m_short - m_long) / std_63
     
-    # 252 天滚动标准差
+    # 252-day rolling standard deviation
     std_q = q.rolling(window=252, min_periods=1).std()
     
     # MACD_t
@@ -53,13 +53,13 @@ def compute_macd(prices: ArrayLike, short_span: int, long_span: int) -> np.ndarr
 
 def compute_macd_multi_scale(prices: ArrayLike) -> np.ndarray:
     """
-    多时间尺度 MACD 平均 (论文公式 12)
+    Multi-scale MACD average (Paper Formula 12)
     
     Sk ∈ {8, 16, 32}
     Lk ∈ {24, 48, 96}
     
-    返回:
-        3 个时间尺度的平均 MACD
+    Returns:
+        Average MACD across 3 time scales
     """
     macd_8_24 = compute_macd(prices, 8, 24)
     macd_16_48 = compute_macd(prices, 16, 48)
@@ -69,19 +69,19 @@ def compute_macd_multi_scale(prices: ArrayLike) -> np.ndarray:
 
 
 # =============================================================================
-# RSI 指标
+# RSI Indicator
 # =============================================================================
 
 def compute_rsi(prices: ArrayLike, window: int = 30) -> np.ndarray:
     """
-    RSI 指标 - 相对强弱指数
+    RSI Indicator - Relative Strength Index
     
-    参数:
-        prices: 价格序列
-        window: 回溯窗口 (论文：30 天)
+    Args:
+        prices: Price series
+        window: Lookback window (paper: 30 days)
     
-    返回:
-        RSI 值序列 (0-100)
+    Returns:
+        RSI value series (0-100)
     """
     if isinstance(prices, np.ndarray):
         prices = pd.Series(prices)
@@ -99,29 +99,29 @@ def compute_rsi(prices: ArrayLike, window: int = 30) -> np.ndarray:
 
 def normalize_rsi(rsi: np.ndarray) -> np.ndarray:
     """
-    RSI 归一化到 [-1, 1]
+    Normalize RSI to [-1, 1]
     
-    <20: 超卖 → -1
-    >80: 超买 → +1
-    50: 中性 → 0
+    <20: oversold → -1
+    >80: overbought → +1
+    50: neutral → 0
     """
     return (rsi - 50) / 50
 
 
 # =============================================================================
-# 波动率计算
+# Volatility Calculation
 # =============================================================================
 
 def compute_volatility(returns: ArrayLike, window: int = 60) -> np.ndarray:
     """
-    60 天指数加权移动波动率 (论文第 4 页)
+    60-day exponential weighted moving volatility (Paper p.4)
     
-    参数:
-        returns: 收益率序列
-        window: 窗口大小 (默认 60 天)
+    Args:
+        returns: Return series
+        window: Window size (default 60 days)
     
-    返回:
-        波动率序列
+    Returns:
+        Volatility series
     """
     if isinstance(returns, np.ndarray):
         returns = pd.Series(returns)
@@ -132,37 +132,37 @@ def compute_volatility(returns: ArrayLike, window: int = 60) -> np.ndarray:
 
 def normalize_return(returns: np.ndarray, vol: np.ndarray, horizon: int = 252) -> np.ndarray:
     """
-    论文：用日波动率调整到合理时间尺度
+    Paper: scale to appropriate time horizon using daily volatility
     
     r_normalized = r / (vol * sqrt(horizon))
     
-    参数:
-        returns: 原始收益率
-        vol: 波动率估计
-        horizon: 时间尺度 (21/42/63/252 等)
+    Args:
+        returns: Raw returns
+        vol: Volatility estimate
+        horizon: Time horizon (21/42/63/252, etc.)
     
-    返回:
-        波动率调整的收益率
+    Returns:
+        Volatility-adjusted returns
     """
     return returns / (vol * np.sqrt(horizon) + 1e-10)
 
 
 # =============================================================================
-# 多周期收益率
+# Multi-horizon Returns
 # =============================================================================
 
 def compute_multi_horizon_returns(returns: np.ndarray, vol: np.ndarray) -> dict:
     """
-    计算多周期收益率 (论文第 4 页)
+    Compute multi-horizon returns (Paper p.4)
     
-    周期:
-    - 1 个月 (21 天)
-    - 2 个月 (42 天)
-    - 3 个月 (63 天)
-    - 1 年 (252 天)
+    Horizons:
+    - 1 month (21 days)
+    - 2 months (42 days)
+    - 3 months (63 days)
+    - 1 year (252 days)
     
-    返回:
-        字典：{'ret_21': ..., 'ret_42': ..., 'ret_63': ..., 'ret_252': ...}
+    Returns:
+        Dict: {'ret_21': ..., 'ret_42': ..., 'ret_63': ..., 'ret_252': ...}
     """
     return {
         'ret_21': normalize_return(returns, vol, 21),
@@ -173,35 +173,35 @@ def compute_multi_horizon_returns(returns: np.ndarray, vol: np.ndarray) -> dict:
 
 
 # =============================================================================
-# 价格归一化
+# Price Normalization
 # =============================================================================
 
 def normalize_prices(prices: np.ndarray) -> np.ndarray:
     """
-    归一化收盘价序列
+    Normalize close price series
     
-    z-score 归一化: (p - mean) / std
+    z-score normalization: (p - mean) / std
     """
     return (prices - np.mean(prices)) / (np.std(prices) + 1e-10)
 
 
 # =============================================================================
-# 完整状态空间构建
+# Full State Space Construction
 # =============================================================================
 
 class FeatureEngineer:
     """
-    特征工程 - 构建论文要求的状态空间
+    Feature Engineering - Build the paper's required state space
     
-    输出：8 个特征
-    1. 归一化收盘价
-    2. 21 天收益率 (波动率调整)
-    3. 42 天收益率 (波动率调整)
-    4. 63 天收益率 (波动率调整)
-    5. 252 天收益率 (波动率调整)
-    6. MACD (多时间尺度平均)
-    7. RSI (归一化)
-    8. 波动率 (归一化)
+    Output: 8 features
+    1. Normalized close price
+    2. 21-day return (volatility-adjusted)
+    3. 42-day return (volatility-adjusted)
+    4. 63-day return (volatility-adjusted)
+    5. 252-day return (volatility-adjusted)
+    6. MACD (multi-scale average)
+    7. RSI (normalized)
+    8. Volatility (normalized)
     """
     
     def __init__(self, window_size: int = 60):
@@ -211,52 +211,52 @@ class FeatureEngineer:
     def build_features(self, prices: np.ndarray, returns: np.ndarray, 
                       current_idx: int) -> np.ndarray:
         """
-        在 current_idx 时刻构建状态特征
+        Build state features at current_idx
         
-        参数:
-            prices: 价格序列
-            returns: 收益率序列
-            current_idx: 当前时间索引
+        Args:
+            prices: Price series
+            returns: Return series
+            current_idx: Current time index
         
-        返回:
+        Returns:
             (window_size, feature_dim) = (60, 8)
         """
         if current_idx < self.window_size:
             return np.zeros((self.window_size, self.feature_dim), dtype=np.float32)
         
-        # 获取时间窗口数据
+        # Get time window data
         start_idx = current_idx - self.window_size
         window_prices = prices[start_idx:current_idx]
         window_returns = returns[start_idx:current_idx]
         
-        # 处理 NaN：用 0 填充
+        # Handle NaN: fill with 0
         window_returns = np.nan_to_num(window_returns, nan=0.0, posinf=0.0, neginf=0.0)
         
-        # 计算波动率
+        # Calculate volatility
         vol = compute_volatility(window_returns, 60)
-        vol = np.nan_to_num(vol, nan=0.01, posinf=1.0, neginf=0.001)  # ✅ 处理 vol 的 NaN
+        vol = np.nan_to_num(vol, nan=0.01, posinf=1.0, neginf=0.001)  # Handle NaN in vol
         vol_mean = np.mean(vol) + 1e-10
         
-        # 特征 1: 归一化收盘价
+        # Feature 1: Normalized close price
         norm_price = normalize_prices(window_prices)
         
-        # 特征 2-5: 多周期收益率
+        # Features 2-5: Multi-horizon returns
         ret_21 = normalize_return(window_returns, vol, 21)
         ret_42 = normalize_return(window_returns, vol, 42)
         ret_63 = normalize_return(window_returns, vol, 63)
         ret_252 = normalize_return(window_returns, vol, 252)
         
-        # 特征 6: MACD
+        # Feature 6: MACD
         macd = compute_macd_multi_scale(window_prices)
         
-        # 特征 7: RSI
+        # Feature 7: RSI
         rsi = compute_rsi(window_prices, 30)
         rsi_norm = normalize_rsi(rsi)
         
-        # 特征 8: 波动率
+        # Feature 8: Volatility
         vol_norm = vol / vol_mean
         
-        # 堆叠特征：(window_size, 8)
+        # Stack features: (window_size, 8)
         features = np.stack([
             norm_price,
             ret_21,
@@ -268,13 +268,13 @@ class FeatureEngineer:
             vol_norm
         ], axis=1)
         
-        # ✅ 最终 NaN 处理：确保没有 NaN
+        # Final NaN handling: ensure no NaN remains
         features = np.nan_to_num(features, nan=0.0, posinf=1.0, neginf=-1.0)
         
         return features.astype(np.float32)
     
     def get_feature_names(self) -> list:
-        """返回特征名称列表"""
+        """Return list of feature names"""
         return [
             'norm_price',
             'ret_21',
@@ -288,44 +288,44 @@ class FeatureEngineer:
 
 
 # =============================================================================
-# 测试函数
+# Test Function
 # =============================================================================
 
 def test_indicators():
-    """测试指标计算"""
-    print("测试技术指标计算...")
+    """Test indicator calculations"""
+    print("Testing technical indicator calculations...")
     
-    # 生成测试数据
+    # Generate test data
     np.random.seed(42)
     n = 500
     prices = 100 + np.cumsum(np.random.randn(n))
     returns = np.diff(prices) / prices[:-1]
     returns = np.insert(returns, 0, 0)
     
-    # 测试 MACD
+    # Test MACD
     macd = compute_macd(prices, 8, 24)
     print(f"✅ MACD: shape={macd.shape}, mean={np.mean(macd):.4f}")
     
-    # 测试多尺度 MACD
+    # Test multi-scale MACD
     macd_multi = compute_macd_multi_scale(prices)
     print(f"✅ Multi-MACD: shape={macd_multi.shape}")
     
-    # 测试 RSI
+    # Test RSI
     rsi = compute_rsi(prices, 30)
     print(f"✅ RSI: shape={rsi.shape}, mean={np.mean(rsi):.2f}")
     
-    # 测试波动率
+    # Test volatility
     vol = compute_volatility(returns, 60)
     print(f"✅ Volatility: shape={vol.shape}, mean={np.mean(vol):.6f}")
     
-    # 测试特征工程
+    # Test feature engineering
     fe = FeatureEngineer(window_size=60)
     features = fe.build_features(prices, returns, 200)
     print(f"✅ Features: shape={features.shape}, dtype={features.dtype}")
-    print(f"   特征数：{fe.feature_dim}")
-    print(f"   时间窗口：{fe.window_size}")
+    print(f"   Feature count: {fe.feature_dim}")
+    print(f"   Time window: {fe.window_size}")
     
-    print("\n✅ 所有指标测试通过！")
+    print("\n✅ All indicator tests passed!")
     return True
 
 

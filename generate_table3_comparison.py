@@ -32,8 +32,8 @@ ASSETS = ["Commodity", "Equity Indexes", "Fixed Income", "FX", "All"]
 
 
 def get_results_for_strategy(strategy_name, overrides, excluded, fe_module):
-    """获取指定策略的所有资产结果"""
-    # 根据各策略的最优参数选择 numerator_mode
+    """Get all asset results for the specified strategy."""
+    # Select numerator_mode based on each strategy's optimal parameters
     numerator_mode_map = {
         "Long": "annual_mean_sleeve",
         "Sign(R)": "annual_mean_sleeve",
@@ -79,7 +79,7 @@ def get_results_for_strategy(strategy_name, overrides, excluded, fe_module):
 
 
 def format_metric(value: float, precision: int = 3) -> str:
-    """格式化指标值"""
+    """Format metric value."""
     if not np.isfinite(value):
         return "—"
     if abs(value) < 0.001:
@@ -88,7 +88,7 @@ def format_metric(value: float, precision: int = 3) -> str:
 
 
 def print_asset_table(asset_name: str, all_results: dict[str, dict]) -> None:
-    """打印单个资产的表格"""
+    """Print table for a single asset."""
     print(f"{'':12} | ", end="")
     print(" | ".join(f"{col:>8}" for col in METRIC_NAMES))
     print("-" * (14 + len(METRIC_NAMES) * 11))
@@ -101,7 +101,7 @@ def print_asset_table(asset_name: str, all_results: dict[str, dict]) -> None:
 
 
 def main():
-    # 获取各策略结果
+    # Get results for each strategy
     all_strategy_results = {}
     
     print("=" * 100)
@@ -115,7 +115,7 @@ def main():
         all_strategy_results[strategy_name] = results
         print("✓")
     
-    # 打印表格
+    # Print tables
     print("\n")
     print("=" * 100)
     

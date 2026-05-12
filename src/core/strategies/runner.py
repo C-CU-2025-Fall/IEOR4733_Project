@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-baseline_run.py — Table 2 & Table 3 baseline reproduction (single entry point)
+baseline_run.py - Table 2 & Table 3 baseline reproduction (single entry point)
 
 Paper: Zhang, Zohren, Roberts (2019) "Deep Reinforcement Learning for Trading"
 
@@ -12,13 +12,13 @@ Usage:
     python baseline_run.py --sigma 0.064    # Custom σ_tgt
     python baseline_run.py --test-start 2015-01-01 --test-end 2019-12-31  # Custom period
     python baseline_run.py --source-mode working --all-metrics # Use unified SOURCE_OVERRIDES from config.py
-    python baseline_run.py --source-mode pure-rad --all-metrics # 不用任何 override，所有合约默认走 RAD
-    python baseline_run.py --source-mode strategy-legacy --all-metrics # Use legacy overrides for each strategy                                                  
-                                                            Long 用 LEGACY_EXPERIMENTAL_OVERRIDES_LONG
-                                                            Sign(R) 用 LEGACY_EXPERIMENTAL_OVERRIDES_SIGNR
-                                                            MACD 用 LEGACY_EXPERIMENTAL_OVERRIDES_MACD
-    
-    
+    python baseline_run.py --source-mode pure-rad --all-metrics # No overrides, all contracts use RAD by default
+    python baseline_run.py --source-mode strategy-legacy --all-metrics # Use legacy overrides for each strategy
+    #     Long uses LEGACY_EXPERIMENTAL_OVERRIDES_LONG
+    #     Sign(R) uses LEGACY_EXPERIMENTAL_OVERRIDES_SIGNR
+    #     MACD uses LEGACY_EXPERIMENTAL_OVERRIDES_MACD
+
+
     """
 import argparse
 from functools import lru_cache
@@ -214,7 +214,7 @@ def compute_contract_returns(rd, strat, sigma_tgt, detail=False):
     """Compute daily R_t for one contract using Paper Eq 4:
 
     R_t = A_{t-1} × (σ_tgt / σ_{t-1}) × r_t
-        − bp × p_{t-1} × |(σ_tgt/σ_{t-1})×A_{t-1} − (σ_tgt/σ_{t-2})×A_{t-2}|
+        - bp × p_{t-1} × |(σ_tgt/σ_{t-1})×A_{t-1} - (σ_tgt/σ_{t-2})×A_{t-2}|
 
     Args:
         detail: if True, return dict with Rt + position/scale/TC details
@@ -327,7 +327,7 @@ def run_table(raw_data, ac_name, sigma_tgt, paper_table, table_label,
     port_str = f" | port_vol→{port_vol_target}" if port_vol_target else ""
     report_str = f" | report={report_source}" if report_source != 'trade' else ""
     print(f"\n{'=' * 90}")
-    print(f"  {table_label} — {ac_name} ({n_label} contracts)")
+    print(f"  {table_label} - {ac_name} ({n_label} contracts)")
     print(f"  σ_tgt={sigma_tgt} | EWMA({EWMA_SPAN}) | bp={BP}{port_str}{report_str}")
     print(f"  Metrics: {', '.join(metric_names)}")
     print(f"{'=' * 90}")

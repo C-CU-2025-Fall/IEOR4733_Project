@@ -112,8 +112,8 @@ def run_portfolio(five_source):
 
 # Define all combos to test
 combos = [
-    ({}, "全CLC_RAD"),
-    ({'CC':'YF_RAD','LB':'YF_RAD','JO':'YF_RAD','ZO':'YF_RAD','ZH':'YF_RAD'}, "全YF_RAD"),
+    ({}, "All CLC_RAD"),
+    ({'CC':'YF_RAD','LB':'YF_RAD','JO':'YF_RAD','ZO':'YF_RAD','ZH':'YF_RAD'}, "All YF_RAD"),
     ({'CC':'YF_RAD','LB':'YF_RAD','JO':'YF_RAD','ZO':'YF_RAD','ZH':'CLC_RAD'}, "YF_RAD×4+CLC_RAD×1(ZH)"),
     ({'LB':'YF_RAD','JO':'YF_RAD','ZO':'YF_RAD','CC':'CLC_RAD','ZH':'CLC_RAD'}, "YF_RAD×3(LB/JO/ZO)+CLC_RAD×2"),
     ({'CC':'CLC_REV','LB':'CLC_REV','JO':'CLC_REV','ZO':'CLC_REV','ZH':'CLC_REV'}, "CLC_REV×5+CLC_RAD×20"),
@@ -121,7 +121,7 @@ combos = [
     ({'LB':'CLC_REV','JO':'CLC_REV','ZO':'CLC_REV','CC':'CLC_RAD','ZH':'CLC_RAD'}, "CLC_REV×3(LB/JO/ZO)+CLC_RAD×22"),
 ]
 
-print(f"{'方案':45s} | {'#':>2s} {'E(R)%':>7s} {'std%':>6s} {'Shp%':>6s} {'+ve%':>6s} {'P/L%':>6s} | {'n10':>3s} {'n15':>3s}")
+print(f"{'Scheme':45s} | {'#':>2s} {'E(R)%':>7s} {'std%':>6s} {'Shp%':>6s} {'+ve%':>6s} {'P/L%':>6s} | {'n10':>3s} {'n15':>3s}")
 print("-"*115)
 for five_src, label in combos:
     md, errs, n10, n15, n = run_portfolio(five_src)

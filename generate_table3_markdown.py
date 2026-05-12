@@ -32,8 +32,8 @@ ASSETS = ["Commodity", "Equity Indexes", "Fixed Income", "FX", "All"]
 
 
 def get_results_for_strategy(strategy_name, overrides, excluded, fe_module):
-    """获取指定策略的所有资产结果"""
-    # 根据各策略的最优参数选择 numerator_mode
+    """Get all asset results for the specified strategy."""
+    # Select numerator_mode based on each strategy's optimal parameters
     numerator_mode_map = {
         "Long": "annual_mean_sleeve",
         "Sign(R)": "annual_mean_sleeve",
@@ -79,7 +79,7 @@ def get_results_for_strategy(strategy_name, overrides, excluded, fe_module):
 
 
 def format_metric(value: float, precision: int = 3) -> str:
-    """格式化指标值"""
+    """Format metric value."""
     if not np.isfinite(value):
         return "—"
     if abs(value) < 0.001:
@@ -88,7 +88,7 @@ def format_metric(value: float, precision: int = 3) -> str:
 
 
 def generate_markdown_table(asset_name: str, all_results: dict[str, dict]) -> str:
-    """生成单个资产的 markdown 表格"""
+    """Generate markdown table for a single asset."""
     lines = []
     lines.append(f"| {'':<8} |" + " | ".join(f" {col:>7}" for col in METRIC_NAMES) + " |")
     lines.append("|" + "-" * 10 + "|" + "|".join(["-" * 10 for _ in METRIC_NAMES]) + "|")
@@ -102,7 +102,7 @@ def generate_markdown_table(asset_name: str, all_results: dict[str, dict]) -> st
 
 
 def print_text_table(asset_name: str, all_results: dict[str, dict]) -> None:
-    """打印单个资产的文本表格"""
+    """Print text table for a single asset."""
     print(f"\n{asset_name.upper()}")
     print("-" * 100)
     print(f"{'':12} | ", end="")
@@ -117,7 +117,7 @@ def print_text_table(asset_name: str, all_results: dict[str, dict]) -> None:
 
 
 def main():
-    # 获取各策略结果
+    # Get results for each strategy
     all_strategy_results = {}
     
     print("=" * 100)
@@ -131,14 +131,14 @@ def main():
         all_strategy_results[strategy_name] = results
         print("✓")
     
-    # 打印文本表格
+    # Print text tables
     print("\n")
     print("=" * 100)
     
     for asset in ASSETS:
         print_text_table(asset, all_strategy_results)
     
-    # 生成 Markdown 版本并保存
+    # Generate and save Markdown version
     print("\n" + "=" * 100)
     print("\nGenerating markdown version...")
     
@@ -156,7 +156,7 @@ def main():
     markdown_content += "- **Sign(R)**: Optimal for momentum strategy (16/36 score)\n"
     markdown_content += "- **MACD**: Optimal for mean-reversion strategy (17/36 score)\n"
     
-    # 保存到文件
+    # Save to file
     output_file = ROOT / "docs" / "table3_comparison.md"
     output_file.parent.mkdir(parents=True, exist_ok=True)
     output_file.write_text(markdown_content)

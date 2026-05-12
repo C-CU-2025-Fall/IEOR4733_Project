@@ -108,12 +108,12 @@ drl_models/                      Deep RL model weights and implementation
 │   ├── loaddata.py              Data loader for A2C training/evaluation
 │   ├── README.md                A2C usage guide
 │   ├── a2c_project_readme_md.md Additional A2C documentation
-│   ├── a2c_results_wide改.csv   Wide-format A2C results (all assets, periods)
+│   ├── a2c_results_wide_modified.csv   Wide-format A2C results (all assets, periods)
 │   ├── Original Reward/         Trained .pt weights — original reward function
-│   │   ├── a2c_{asset}_period{n}改.pt
-│   │   ├── loaddata改.py
+│   │   ├── a2c_{asset}_period{n}_modified.pt
+│   │   ├── loaddata_modified.py
 │   │   ├── project_code.ipynb
-│   │   ├── a2c_results_wide改.csv
+│   │   ├── a2c_results_wide_modified.csv
 │   │   ├── a2c_table3_raw_signal_a2c_comparison_wide.csv
 │   │   ├── a2c_tc_*.csv         Transaction-cost robustness results
 │   │   └── a2c_transaction_cost_robustness_summary.csv

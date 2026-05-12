@@ -1,16 +1,16 @@
 """
-Tests Module - 单元测试集合
+Tests Module - Unit test collection
 
-包含的测试:
-    - test_long_only.py: Long Only 策略测试
-    - test_signr.py: Sign(R) 策略测试
-    - test_macd.py: MACD 策略测试
-    - test_dqn.py: DQN 模型测试
-    - test_a2c.py: A2C 模型测试（待实现）
-    - test_route_b.py: Route B 策略测试
-    - conftest.py: pytest 共享配置
+Included tests:
+    - test_long_only.py: Long Only strategy test
+    - test_signr.py: Sign(R) strategy test
+    - test_macd.py: MACD strategy test
+    - test_dqn.py: DQN model test
+    - test_a2c.py: A2C model test (to be implemented)
+    - test_route_b.py: Route B strategy test
+    - conftest.py: pytest shared configuration
 
-运行测试:
+Run tests:
     pytest tests/
     pytest tests/test_dqn.py -v
     pytest tests/test_a2c.py -v

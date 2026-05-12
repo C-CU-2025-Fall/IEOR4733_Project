@@ -22,7 +22,7 @@
   "asset_class_count": 9,
   "best_val_reward": 0.7017010443848936,
   "bp": 0.002,
-  "bundle_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Forex/r1/20260505T094637_s42",
+  "bundle_dir": "drl/dqn/models/Forex/r1/20260505T094637_s42",
   "completed_cycles": 71,
   "continuous_action_range": [
     -1.0,
@@ -136,15 +136,15 @@
   ],
   "feature_artifact_path": null,
   "feature_artifact_paths": {
-    "AN": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/AN/r1.npz",
-    "BN": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/BN/r1.npz",
-    "CN": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/CN/r1.npz",
-    "DX": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/DX/r1.npz",
-    "FN": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/FN/r1.npz",
-    "JN": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/JN/r1.npz",
-    "MP": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/MP/r1.npz",
-    "NK": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/NK/r1.npz",
-    "SN": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/features/SN/r1.npz"
+    "AN": "drl/features/AN/r1.npz",
+    "BN": "drl/features/BN/r1.npz",
+    "CN": "drl/features/CN/r1.npz",
+    "DX": "drl/features/DX/r1.npz",
+    "FN": "drl/features/FN/r1.npz",
+    "JN": "drl/features/JN/r1.npz",
+    "MP": "drl/features/MP/r1.npz",
+    "NK": "drl/features/NK/r1.npz",
+    "SN": "drl/features/SN/r1.npz"
   },
   "feature_dim": 9,
   "feature_line": "structural_38_mainline",
@@ -247,7 +247,7 @@
     "NK",
     "SN"
   ],
-  "log_dir": "/home/congge2026/.openclaw/workspace/IEOR4733_Project/drl/dqn/models/Forex/r1/20260505T094637_s42",
+  "log_dir": "drl/dqn/models/Forex/r1/20260505T094637_s42",
   "macd_pairs": [
     [
       8,

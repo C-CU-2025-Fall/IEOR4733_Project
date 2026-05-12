@@ -1,11 +1,11 @@
 """
-Core 模块 - 交易策略和模型的核心实现
+Core Module - Core implementations of trading strategies and models
 
-子模块:
-    - strategies: 交易策略 (Long Only, Sign(R), MACD, Route B, DQN)
-    - models: 深度学习模型 (DQN, A2C, Regime Detection)
-    - data: 数据加载和预处理
-    - utils: 工具函数 (指标计算、可视化等)
+Submodules:
+    - strategies: Trading strategies (Long Only, Sign(R), MACD, Route B, DQN)
+    - models: Deep learning models (DQN, A2C, Regime Detection)
+    - data: Data loading and preprocessing
+    - utils: Utility functions (indicator calculation, visualization, etc.)
 """
 
 from src.core import strategies, models, data, utils

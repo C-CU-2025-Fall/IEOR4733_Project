@@ -400,16 +400,16 @@ def final_classification(commodity_best, numerator_winner, extraction_rows):
     base_obj = commodity_best["objective"]
     if commodity_best["label"] != "base" and base_obj[0] < 0.05:
         if numerator_winner:
-            return "MDD aligned, numerator wrong", "在 cleaned baseline 上把 default numerator 改到全局 winner"
+            return "MDD aligned, numerator wrong", "Change default numerator to global winner on cleaned baseline"
         best_extract = extraction_rows[0]
         if best_extract["mean_ann_err"] + best_extract["mean_cal_err"] < 80:
-            return "both off", "先保留 current numerator；下一步优先审 same-path reporting extraction / aggregation"
-        return "contract-driven distortion", "先固定 Commodity cleaned baseline，再重审 numerator"
+            return "both off", "Keep current numerator; next step audit same-path reporting extraction / aggregation"
+        return "contract-driven distortion", "Fix Commodity cleaned baseline first, then re-audit numerator"
     if numerator_winner:
-        return "MDD aligned, numerator wrong", "先采用全局 numerator winner，再复核 Commodity"
+        return "MDD aligned, numerator wrong", "Adopt global numerator winner first, then review Commodity"
     if extraction_rows and extraction_rows[0]["path_mode"] != "contract_equal_path":
-        return "both off", "优先审 reporting extraction / aggregation，而不是继续做广义 source 搜索"
-    return "contract-driven distortion", "先把 Commodity distortion 解释清楚，再谈全局 Calmar 对齐"
+        return "both off", "Prioritize auditing reporting extraction / aggregation rather than continuing broad source search"
+    return "contract-driven distortion", "Explain Commodity distortion first before discussing global Calmar alignment"
 
 
 def main():

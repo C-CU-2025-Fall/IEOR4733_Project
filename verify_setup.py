@@ -11,14 +11,14 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 def check_imports():
     """Check all required imports."""
-    print("🔍 检查依赖导入...")
+    print("🔍 Checking dependency imports...")
     
     dependencies = {
-        "streamlit": "Streamlit 框架",
-        "pandas": "数据处理",
-        "numpy": "数值计算",
-        "matplotlib": "图表绘制",
-        "seaborn": "统计可视化",
+        "streamlit": "Streamlit framework",
+        "pandas": "Data processing",
+        "numpy": "Numerical computation",
+        "matplotlib": "Plotting",
+        "seaborn": "Statistical visualization",
     }
     
     missing = []
@@ -27,14 +27,14 @@ def check_imports():
             __import__(pkg)
             print(f"  ✅ {pkg:20} ({desc})")
         except ImportError:
-            print(f"  ❌ {pkg:20} ({desc}) - 缺失!")
+            print(f"  ❌ {pkg:20} ({desc}) - Missing!")
             missing.append(pkg)
     
     return len(missing) == 0
 
 def check_project_files():
     """Check required project files."""
-    print("\n🗂️  检查项目文件...")
+    print("\n🗂️  Checking project files...")
     
     required_files = [
         "config.py",
@@ -52,41 +52,41 @@ def check_project_files():
         if full_path.exists():
             print(f"  ✅ {file_path}")
         else:
-            print(f"  ❌ {file_path} - 缺失!")
+            print(f"  ❌ {file_path} - Missing!")
             missing.append(file_path)
     
     return len(missing) == 0
 
 def check_data():
     """Check data files."""
-    print("\n📊 检查数据文件...")
+    print("\n📊 Checking data files...")
     
     data_dir = PROJECT_ROOT / "data" / "CLC"
     if not data_dir.exists():
-        print(f"  ❌ {data_dir} 不存在!")
+        print(f"  ❌ {data_dir} does not exist!")
         return False
     
     # Check for both .csv and .CSV files
     csv_files = list(data_dir.glob("*.csv")) + list(data_dir.glob("*.CSV"))
     if not csv_files:
-        print(f"  ❌ {data_dir} 中没有 CSV 文件!")
+        print(f"  ❌ No CSV files found in {data_dir}!")
         return False
     
-    print(f"  ✅ 找到 {len(csv_files)} 个 CSV 文件")
-    print(f"     示例: {csv_files[0].name}")
+    print(f"  ✅ Found {len(csv_files)} CSV files")
+    print(f"     Example: {csv_files[0].name}")
     
     return True
 
 def main():
     """Run all checks."""
     print("=" * 60)
-    print("🔧 Streamlit 应用配置检查")
+    print("🔧 Streamlit App Setup Check")
     print("=" * 60)
     
     checks = [
-        ("依赖导入", check_imports),
-        ("项目文件", check_project_files),
-        ("数据文件", check_data),
+        ("Dependencies", check_imports),
+        ("Project Files", check_project_files),
+        ("Data Files", check_data),
     ]
     
     results = []
@@ -95,32 +95,32 @@ def main():
             result = check_fn()
             results.append((name, result))
         except Exception as e:
-            print(f"\n❌ 检查 {name} 时出错: {e}")
+            print(f"\n❌ Error during {name} check: {e}")
             results.append((name, False))
     
     # Summary
     print("\n" + "=" * 60)
-    print("📋 检查总结")
+    print("📋 Check Summary")
     print("=" * 60)
     
     all_passed = True
     for name, result in results:
-        status = "✅ 通过" if result else "❌ 失败"
+        status = "✅ Pass" if result else "❌ Fail"
         print(f"{name:20} {status}")
         if not result:
             all_passed = False
     
     print("\n" + "=" * 60)
     if all_passed:
-        print("✅ 所有检查通过！可以启动应用:")
+        print("✅ All checks passed! You can start the app:")
         print("   $ streamlit run src/app/main.py")
-        print("   或使用: $ ./run_app.sh")
+        print("   Or use: $ ./run_app.sh")
     else:
-        print("❌ 有些检查未通过，请修复后重试")
-        print("\n解决方案:")
-        print("1️⃣  缺少依赖? 运行: pip install -r streamlit_requirements.txt")
-        print("2️⃣  缺少数据? 检查 data/CLC/ 目录是否存在")
-        print("3️⃣  缺少文件? 检查项目根目录文件完整性")
+        print("❌ Some checks failed. Please fix and retry")
+        print("\nSolutions:")
+        print("1️⃣  Missing dependencies? Run: pip install -r streamlit_requirements.txt")
+        print("2️⃣  Missing data? Check if data/CLC/ directory exists")
+        print("3️⃣  Missing files? Verify project root file integrity")
         return 1
     
     print("=" * 60)

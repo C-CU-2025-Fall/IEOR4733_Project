@@ -710,7 +710,7 @@ if __name__ == "__main__":
     a2c_regime_data = export_regime_for_a2c(
         regime_results=results,
         a2c_periods=a2c_periods,
-        output_dir='/Users/ladymie/Documents/GitHub/IEOR4733_Project/regime_detection/results'
+        output_dir='regime_detection/results'
     )
     
     # Get results for a specific period

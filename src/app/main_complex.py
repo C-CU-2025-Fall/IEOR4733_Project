@@ -40,7 +40,7 @@ STRATEGY_CONFIG_MAP = {
 # ============================================================================
 
 st.set_page_config(
-    page_title="交易策略模拟平台",
+    page_title="Trading Strategy Simulator",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -50,18 +50,18 @@ st.set_page_config(
 # SIDEBAR CONTROLS
 # ============================================================================
 
-st.sidebar.title("⚙️ 控制面板")
+st.sidebar.title("⚙️ Control Panel")
 st.sidebar.markdown("---")
 
 # Date range
-start_date = st.sidebar.date_input("开始日期", value=pd.to_datetime('2011-01-01'))
-end_date = st.sidebar.date_input("结束日期", value=pd.to_datetime('2019-12-31'))
+start_date = st.sidebar.date_input("Start Date", value=pd.to_datetime('2011-01-01'))
+end_date = st.sidebar.date_input("End Date", value=pd.to_datetime('2019-12-31'))
 
 st.sidebar.markdown("---")
 
 # Asset class selection
 selected_assets = st.sidebar.multiselect(
-    "📍 选择资产类别",
+    "📍 Select Asset Classes",
     options=list(ASSET_CLASSES.keys()),
     default=list(ASSET_CLASSES.keys())
 )
@@ -69,7 +69,7 @@ selected_assets = st.sidebar.multiselect(
 # Strategy selection
 strategies_available = ["Long Only", "Sign(R)", "MACD", "A2C", "A2C + Regime (B)", "DQN (Paper)"]
 selected_strategies = st.sidebar.multiselect(
-    "🎯 选择交易策略",
+    "🎯 Select Trading Strategies",
     options=strategies_available,
     default=["Long Only", "Sign(R)", "MACD", "A2C", "A2C + Regime (B)", "DQN (Paper)"]
 )
@@ -249,22 +249,22 @@ def load_dqn_data(asset_class):
 # MAIN CONTENT - TAB STRUCTURE
 # ============================================================================
 
-st.title("📊 交易策略模拟与分析平台")
-st.markdown(f"**回测期间**: {start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}")
+st.title("📊 Trading Strategy Simulation & Analysis Platform")
+st.markdown(f"**Backtest Period**: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📈 策略对比",
-    "💹 性能指标",
-    "📊 风险分析",
-    "🔧 敏感性分析",
-    "📥 数据管道"
+    "📈 Strategy Comparison",
+    "💹 Performance Metrics",
+    "📊 Risk Analysis",
+    "🔧 Sensitivity Analysis",
+    "📥 Data Pipeline"
 ])
 
 # ============================================================================
 # TAB 1: Strategy Comparison
 # ============================================================================
 with tab1:
-    st.header("📈 策略对比分析")
+    st.header("📈 Strategy Comparison Analysis")
     
     # Color scheme matching notebook
     COLORS_FULL = {
@@ -360,7 +360,7 @@ with tab1:
                 ax.legend(loc='best', fontsize=8, frameon=True)
                 ax.axhline(y=0.0, color='gray', linestyle='--', linewidth=1, alpha=0.5)
             else:
-                ax.text(0.5, 0.5, f'❌ {asset}\n数据不可用',
+                ax.text(0.5, 0.5, f'❌ {asset}\nData unavailable',
                        ha='center', va='center', fontsize=12,
                        transform=ax.transAxes, color='red')
                 ax.set_title(asset, fontsize=12, fontweight='bold')
@@ -377,16 +377,16 @@ with tab1:
         plt.tight_layout()
         st.pyplot(fig)
     else:
-        st.warning("请在左侧选择至少一个资产类别")
+        st.warning("Please select at least one asset class on the left")
 
 # ============================================================================
 # TAB 2: Performance Metrics
 # ============================================================================
 with tab2:
-    st.header("💹 性能指标仪表板")
+    st.header("💹 Performance Metrics Dashboard")
     
     if selected_assets and selected_strategies:
-        st.info("📊 此功能正在开发中 - 显示所有策略的性能指标")
+        st.info("📊 This feature is under development - showing performance metrics for all strategies")
         
         metrics_data = []
         
@@ -408,86 +408,86 @@ with tab2:
                             max_dd = np.min(drawdown) * 100
                             
                             metrics_data.append({
-                                "资产": asset,
-                                "策略": strategy,
-                                "总收益 (%)": f"{total_return:.2f}",
-                                "年化波动 (%)": f"{annual_vol:.2f}",
-                                "夏普比": f"{sharpe:.2f}",
-                                "最大回撤 (%)": f"{max_dd:.2f}",
+                                "Asset": asset,
+                                "Strategy": strategy,
+                                "Total Return (%)": f"{total_return:.2f}",
+                                "Annualized Vol (%)": f"{annual_vol:.2f}",
+                                "Sharpe Ratio": f"{sharpe:.2f}",
+                                "Max Drawdown (%)": f"{max_dd:.2f}",
                             })
         
         if metrics_data:
             df_metrics = pd.DataFrame(metrics_data)
             st.dataframe(df_metrics, use_container_width=True)
         else:
-            st.warning("无可用数据")
+            st.warning("No data available")
     else:
-        st.info("请在左侧选择资产类别和策略")
+        st.info("Please select asset classes and strategies on the left")
 
 # ============================================================================
 # TAB 3: Risk Analysis
 # ============================================================================
 with tab3:
-    st.header("📊 风险分析")
+    st.header("📊 Risk Analysis")
     
     if selected_assets and selected_strategies:
-        st.info("📈 此功能正在开发中 - 显示风险分析指标")
+        st.info("📈 This feature is under development - showing risk analysis metrics")
     else:
-        st.info("请在左侧选择资产类别和策略")
+        st.info("Please select asset classes and strategies on the left")
 
 # ============================================================================
 # TAB 4: Sensitivity Analysis
 # ============================================================================
 with tab4:
-    st.header("🔧 敏感性分析")
+    st.header("🔧 Sensitivity Analysis")
     
     if selected_assets and selected_strategies:
-        st.info("⚠️ 此功能仅适用于基础策略（Long Only、Sign(R)、MACD）")
-        st.markdown("机器学习模型（A2C、DQN、Route B）为预训练模型，波动率不可调整。")
+        st.info("⚠️ This feature only applies to baseline strategies (Long Only, Sign(R), MACD)")
+        st.markdown("ML models (A2C, DQN, Route B) are pre-trained with fixed volatility.")
     else:
-        st.info("请在左侧选择资产类别和策略")
+        st.info("Please select asset classes and strategies on the left")
 
 # ============================================================================
 # TAB 5: Data Pipeline
 # ============================================================================
 with tab5:
-    st.header("📥 数据管道")
+    st.header("📥 Data Pipeline")
     
     st.markdown("""
-    ### 数据清理流程
+    ### Data Cleaning Pipeline
     
-    1. **原始数据读取**: CLCData RAD格式
-    2. **数据验证**: 
-       - 检查价格有效性（Close > 0）
-       - 移除缺失数据
-       - 按日期排序
-    3. **特征工程**:
-       - 向前调整（Forward Adjusted）价格
-       - 计算收益率
-       - 头寸调整（根据目标波动率）
-    4. **输出**: 清洁数据供策略使用
+    1. **Raw Data Reading**: CLCData RAD format
+    2. **Data Validation:** 
+       - Check price validity (Close > 0)
+       - Remove missing data
+       - Sort by date
+    3. **Feature Engineering:**
+       - Forward adjusted prices
+       - Calculate returns
+       - Position sizing (based on target volatility)
+    4. **Output**: Clean data for strategy use
     
-    ### 支持的数据格式
-    - **输入**: CLCData RAD CSV (Date, Open, High, Low, Close, Volume, OI)
-    - **输出**: 时间序列数据，已清洗和对齐
+    ### Supported Data Formats
+    - **Input**: CLCData RAD CSV (Date, Open, High, Low, Close, Volume, OI)
+    - **Output**: Time series data, cleaned and aligned
     
-    ### 质量指标
+    ### Quality Metrics
     """)
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.metric("数据周期", "2011-2019 (9 年)")
+        st.metric("Data Period", "2011-2019 (9 years)")
     with col2:
-        st.metric("资产类别", "5 (大宗商品、股指、固定收益、外汇、组合)")
+        st.metric("Asset Classes", "5 (Commodity, Equity, Fixed Income, Forex, Combined)")
     with col3:
-        st.metric("交易日数", "~2,300 天/资产")
+        st.metric("Trading Days", "~2,300 days/asset")
     
     st.markdown("""
-    ### 数据来源
-    - 🗄️ **主数据源**: `data/CLC/` (CLCData原始格式)
-    - 📊 **预处理**: `data_loader.py` 中的 `load_clc_full()` 函数
-    - ✅ **验证**: 自动检查缺失值、异常值、数据对齐
+    ### Data Sources
+    - 🗄️ **Primary Data Source**: `data/CLC/` (CLCData raw format)
+    - 📊 **Preprocessing**: `load_clc_full()` function in `data_loader.py`
+    - ✅ **Validation**: Automatic checks for missing values, outliers, data alignment
     """)
 
 # ============================================================================
@@ -496,7 +496,7 @@ with tab5:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #888; font-size: 12px;'>
-    <p>🎓 IEOR 4733 期末项目 - 交易策略模拟平台</p>
-    <p>数据驱动 | 可复现 | 低向前偏差</p>
+    <p>🎓 IEOR 4733 Final Project - Trading Strategy Simulator</p>
+    <p>Data-Driven | Reproducible | Low Look-Ahead Bias</p>
 </div>
 """, unsafe_allow_html=True)
