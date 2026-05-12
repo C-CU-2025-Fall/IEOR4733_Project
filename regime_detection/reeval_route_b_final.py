@@ -1,7 +1,7 @@
 """
 reeval_route_b_final.py
 =======================
-正确格式的快速重新评估：保存为按日期行排列的 CSV（date, net_pnl, cum_wealth）
+Quick re-evaluation in correct format: save as CSV with rows indexed by date (date, net_pnl, cum_wealth)
 """
 
 import sys
@@ -43,13 +43,13 @@ TARGET_CLASSES = ["Commodity", "Equity Index", "Fixed Income", "Forex", "All"]
 
 
 def build_state_12dim(tickers, asset_class, data_start, test_end):
-    """构建 12-dim 状态"""
+    """Build 12-dim state."""
     root_path = str(PROJECT_ROOT)
     data_dict, _, _ = load_paper_rad_data(root_path, start=data_start, end=test_end)
     data_dict = {t: v for t, v in data_dict.items() if t in tickers}
     feature_dict, _ = build_paper_features(data_dict, dropna=False)
 
-    # 加载 regime CSV
+    # Load regime CSV
     ac_slug = asset_class.replace(" ", "_")
     regime_files = list(REGIME_DIR.glob(f"regime_routeB_*_{ac_slug}.csv"))
     regimes = []
@@ -63,7 +63,7 @@ def build_state_12dim(tickers, asset_class, data_start, test_end):
     
     regime_df = pd.concat(regimes, ignore_index=True).drop_duplicates(subset=["date"]).sort_values("date")
 
-    # 为每个 ticker 构建 12-dim 状态
+    # Build 12-dim state for each ticker
     state_dict = {}
     for ticker, feature_df in feature_dict.items():
         if feature_df is None or len(feature_df) == 0:
@@ -105,7 +105,7 @@ def build_state_12dim(tickers, asset_class, data_start, test_end):
 
 
 def inference_get_pnl_series(actor, state_dict, sigma_target):
-    """推理得到 portfolio 日期-PnL Series"""
+    """Infer portfolio daily PnL series."""
     actor.eval()
     pnl_list = []
 
@@ -161,7 +161,7 @@ def inference_get_pnl_series(actor, state_dict, sigma_target):
     if not pnl_list:
         return None
 
-    pnl_df = pd.DataFrame(pnl_list).T  # 转置使得日期在 index
+    pnl_df = pd.DataFrame(pnl_list).T  # transpose so dates are the index
     portfolio = pnl_df.mean(axis=1).dropna()
 
     if len(portfolio) == 0:
@@ -211,7 +211,7 @@ def main():
                 logger.warning(f"  ⚠️  No PnL for {asset_class} {period_name}")
                 continue
 
-            # 计算指标
+            # Compute metrics
             ann = np.sqrt(252)
             mean_ret = portfolio_pnl.mean() * 252
             std_ret = portfolio_pnl.std() * ann
@@ -222,10 +222,10 @@ def main():
 
             logger.info(
                 f"  ✅ Sharpe={sharpe:.3f}  Calmar={calmar:.3f}  AnnRet={mean_ret:.4f}  "
-                f"({len(portfolio_pnl)} 个交易日)"
+                f"({len(portfolio_pnl)} trading days)"
             )
 
-            # 保存为正确格式
+            # Save in the correct format
             csv_path = PNL_DIR / f"pnl_routeB_{period_name}_{ac_slug}.csv"
             pnl_df_out = pd.DataFrame({
                 "date": portfolio_pnl.index.strftime("%Y-%m-%d"),
@@ -236,7 +236,7 @@ def main():
             logger.info(f"  💾 Saved: {csv_path.name}")
             summary.append((period_name, asset_class, sharpe, calmar, mean_ret, len(portfolio_pnl)))
 
-    # 汇总
+    # Summary
     print(f"\n{'='*70}")
     print(f"Summary  (sigma_target = {NEW_SIGMA_TARGET})")
     print(f"{'='*70}")
