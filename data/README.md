@@ -6,7 +6,7 @@ Market data required to reproduce the backtests. Due to licensing restrictions, 
 
 ### CLCData (Primary — Required)
 
-- **Source**: [CLCData](https://www.clcdata.com/) — Continuous Linked Contracts (CLC) futures data
+- **Source**: [Pinnacle Data / CLC](https://pinnacledata2.com/clc.html) — Continuous Linked Contracts (CLC) futures data
 - **Format**: Per-contract RAD (Ratio-Adjusted) CSV files — one file per ticker (e.g., `ES_RAD.CSV`)
 - **Location**: Place files under `data/CLC/`
 - **Contracts**: 50 futures contracts across 4 asset classes (Commodity, Equity Index, Fixed Income, Forex). See `config.py` → `PAPER_50` for the full list.
