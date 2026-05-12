@@ -1,12 +1,12 @@
 """
-时间序列FFT Regime检测 (修复版本)
+Time-Series FFT Regime Detection (Fixed Version)
 
-核心改进：
-1. 修复时间范围显示问题（1970-01-01错误）
-2. 支持输出特定时间段的 soft probability（用于A2C）
-3. 正确对齐时间索引
+Key improvements:
+1. Fix time-range display issue (1970-01-01 bug)
+2. Support outputting soft probabilities for a specific period (for A2C)
+3. Correctly align time indices
 
-A2C 时间段配置：
+A2C period configuration:
 - Period 1: Train (2005-01-01 ~ 2010-12-31), Test (2011-01-01 ~ 2015-12-31)
 - Period 2: Train (2010-01-01 ~ 2015-12-31), Test (2016-01-01 ~ 2019-12-31)
 
@@ -28,11 +28,11 @@ logger = logging.getLogger(__name__)
 
 
 class StateMatrixBuilder:
-    """根据论文定义构建 60×9 状态矩阵"""
+    """Build the 60x9 state matrix as defined in the paper."""
     
     @staticmethod
     def compute_rsi(prices, window=30):
-        """计算RSI指标"""
+        """Compute RSI indicator."""
         if len(prices) < window:
             return 50.0
         
@@ -49,7 +49,7 @@ class StateMatrixBuilder:
     
     @staticmethod
     def compute_macd(prices, fast=8, slow=24):
-        """计算MACD"""
+        """Compute MACD."""
         if len(prices) < slow:
             return 0.0
         
@@ -59,7 +59,7 @@ class StateMatrixBuilder:
     
     @staticmethod
     def compute_volatility(prices, span=60):
-        """计算日波动率"""
+        """Compute daily volatility."""
         if len(prices) < 2:
             return 0.01
         
@@ -73,14 +73,14 @@ class StateMatrixBuilder:
     @classmethod
     def build_state_matrix_for_asset(cls, prices: np.ndarray, time_idx: int) -> Optional[np.ndarray]:
         """
-        为某个时间点构建完整的60×9状态矩阵
+        Build the full 60x9 state matrix for a given time point.
         
         Args:
-            prices: 历史价格序列
-            time_idx: 时间索引
+            prices: historical price series
+            time_idx: time index
         
         Returns:
-            state_matrix: (60, 9) 或 None
+            state_matrix: (60, 9) or None
         """
         if time_idx < 60:
             return None
@@ -88,7 +88,7 @@ class StateMatrixBuilder:
         prices = np.array(prices, dtype=float)
         prices = np.nan_to_num(prices, nan=0.0)
         
-        # 取过去60天的数据
+        # Take the past 60 days of data
         price_window = prices[time_idx-60:time_idx+1]
         
         if len(price_window) < 61:
@@ -96,7 +96,7 @@ class StateMatrixBuilder:
         
         state_matrix = np.zeros((60, 9))
         
-        # 对每个时间点构建状态向量
+        # Build state vector for each time point
         for row_idx in range(60):
             price_hist = price_window[:row_idx+1]
             p_current = price_hist[-1]
@@ -120,14 +120,14 @@ class StateMatrixBuilder:
 
 def extract_fft_features(state_matrix: np.ndarray, n_components: int = 10) -> np.ndarray:
     """
-    对60×9状态矩阵提取FFT特征
+    Extract FFT features from a 60x9 state matrix.
     
     Args:
-        state_matrix: (60, 9) 矩阵
-        n_components: FFT保留分量数
+        state_matrix: (60, 9) matrix
+        n_components: number of FFT components to retain
     
     Returns:
-        features: (180,) 特征向量
+        features: (180,) feature vector
     """
     if state_matrix is None or state_matrix.shape != (60, 9):
         return None
@@ -159,34 +159,34 @@ def detect_regimes_for_asset_class_timeseries(
     date_range: Optional[Tuple[str, str]] = None
 ) -> Dict:
     """
-    对单个资产类进行时间序列的regime检测
+    Perform time-series regime detection for a single asset class.
     
     Args:
-        clc_data: Dict[ticker, DataFrame] - RAD数据
-        asset_class_tickers: 该资产类的ticker列表
-        asset_class_name: 资产类名称
-        n_regimes: regime数量
-        n_fft_components: FFT保留分量数
-        min_data_length: 最小数据长度要求
-        date_range: 可选的日期范围 (start_date, end_date)，格式: "YYYY-MM-DD"
-                   如果指定，则只使用该范围内的数据
+        clc_data: Dict[ticker, DataFrame] - RAD data
+        asset_class_tickers: list of tickers for this asset class
+        asset_class_name: name of the asset class
+        n_regimes: number of regimes
+        n_fft_components: number of FFT components to retain
+        min_data_length: minimum required data length
+        date_range: optional date range (start_date, end_date), format: "YYYY-MM-DD"
+                   if specified, only data within this range will be used
     
     Returns:
-        result: 包含regime标签、概率等的字典
+        result: dict containing regime labels, probabilities, etc.
     """
-    logger.info(f"\n处理 {asset_class_name} ({len(asset_class_tickers)} 个资产)...")
+    logger.info(f"\nProcessing {asset_class_name} ({len(asset_class_tickers)} assets)...")
     
-    # 如果指定了日期范围，打印信息
+    # Print info if date range is specified
     if date_range:
         date_start, date_end = date_range
-        logger.info(f"  时间范围: {date_start} ~ {date_end}")
+        logger.info(f"  Date range: {date_start} ~ {date_end}")
     
-    # Step 1: 加载数据并检查长度
+    # Step 1: Load data and check length
     asset_prices = {}
     asset_dates_list = {}
     valid_tickers = []
     
-    # 转换日期范围
+    # Convert date range
     date_start_dt = pd.to_datetime(date_range[0]) if date_range else None
     date_end_dt = pd.to_datetime(date_range[1]) if date_range else None
     
@@ -199,7 +199,7 @@ def detect_regimes_for_asset_class_timeseries(
             if not isinstance(df, pd.DataFrame) or 'Close' not in df.columns:
                 continue
             
-            # 【新增】按日期范围过滤
+            # Filter by date range
             df_filtered = df.copy()
             if date_range:
                 mask = (df_filtered['Date'] >= date_start_dt) & (df_filtered['Date'] <= date_end_dt)
@@ -209,69 +209,69 @@ def detect_regimes_for_asset_class_timeseries(
             prices = prices[~np.isnan(prices)]
             
             if len(prices) < min_data_length:
-                logger.debug(f"  ⚠ {ticker}: 数据不足 ({len(prices)} < {min_data_length})")
+                logger.debug(f"  ⚠ {ticker}: insufficient data ({len(prices)} < {min_data_length})")
                 continue
             
             asset_prices[ticker] = prices
-            # 保存对应的日期
+            # Save corresponding dates
             close_notna = ~df_filtered['Close'].isna()
             asset_dates_list[ticker] = df_filtered.loc[close_notna, 'Date'].values
             
             valid_tickers.append(ticker)
-            logger.info(f"  ✓ {ticker}: {len(prices)} 个交易日")
+            logger.info(f"  ✓ {ticker}: {len(prices)} trading days")
         
         except Exception as e:
             logger.warning(f"  ✗ {ticker}: {e}")
     
     if not asset_prices:
-        logger.error(f"  {asset_class_name} 没有有效的数据!")
+        logger.error(f"  {asset_class_name}: no valid data!")
         return None
     
-    logger.info(f"  ✓ 加载了 {len(asset_prices)} 个有效资产")
+    logger.info(f"  ✓ Loaded {len(asset_prices)} valid assets")
     
-    # Step 2: 确定共同的时间范围和日期
+    # Step 2: Determine common time range and dates
     min_len = min(len(prices) for prices in asset_prices.values())
     
-    # 对齐所有资产到相同长度（取最后 min_len 个数据点）
+    # Align all assets to the same length (take last min_len data points)
     aligned_dates = None
     for ticker in asset_prices:
         if len(asset_prices[ticker]) > min_len:
             asset_prices[ticker] = asset_prices[ticker][-min_len:]
         
-        # 使用第一个ticker的日期作为参考（因为对齐后都相同）
+        # Use first ticker dates as reference (same after alignment)
         if aligned_dates is None:
             dates = asset_dates_list[ticker]
-            # 取最后min_len个日期
+            # Take last min_len dates
             if len(dates) >= min_len:
                 aligned_dates = dates[-min_len:]
             else:
                 aligned_dates = dates
     
     if aligned_dates is None:
-        logger.error("无法获取日期信息")
+        logger.error("Cannot retrieve date information")
         return None
     
-    # 转换为DatetimeIndex以便正确处理
+    # Convert to DatetimeIndex for proper handling
     aligned_dates = pd.DatetimeIndex(aligned_dates)
     
-    # 调试日志
-    logger.debug(f"  aligned_dates 类型: {type(aligned_dates)}")
+    # Debug log
+    logger.debug(f"  aligned_dates type: {type(aligned_dates)}")
     logger.debug(f"  aligned_dates[0]: {aligned_dates[0]}")
     logger.debug(f"  aligned_dates[-1]: {aligned_dates[-1]}")
     
     date_start = aligned_dates[0].strftime('%Y-%m-%d') if len(aligned_dates) > 0 else 'N/A'
     date_end = aligned_dates[-1].strftime('%Y-%m-%d') if len(aligned_dates) > 0 else 'N/A'
-    logger.info(f"  时间范围: {date_start} 至 {date_end} ({len(aligned_dates)} 个交易日)")
+    logger.info(f"  Date range: {date_start} to {date_end} ({len(aligned_dates)} trading days)")
     
-    # Step 3: 对每个时间点生成FFT特征
+    # Step 3: Generate FFT features for each time point
     builder = StateMatrixBuilder()
     fft_features_list = []
     valid_time_indices = []
     
-    logger.info(f"  生成时间序列特征...")
+    logger.info(f"  Generating time-series features...")
     
     for time_idx in tqdm(range(60, min_len), desc=f"  {asset_class_name}"):
-        # 对该时间点的所有资产
+        # Across all assets at this time point
         state_matrices = []
         
         for ticker in valid_tickers:
@@ -284,10 +284,10 @@ def detect_regimes_for_asset_class_timeseries(
         if not state_matrices:
             continue
         
-        # 对资产维求平均
+        # Average across the asset dimension
         avg_state_matrix = np.mean(np.array(state_matrices), axis=0)
         
-        # 提取FFT特征
+        # Extract FFT features
         fft_features = extract_fft_features(avg_state_matrix, n_fft_components)
         
         if fft_features is not None:
@@ -295,25 +295,25 @@ def detect_regimes_for_asset_class_timeseries(
             valid_time_indices.append(time_idx)
     
     if not fft_features_list:
-        logger.error(f"  无法生成任何特征!")
+        logger.error(f"  Unable to generate any features!")
         return None
     
     fft_features_array = np.array(fft_features_list)  # (N_samples, 180)
-    # 直接使用对应的日期而不是索引操作
-    # valid_time_indices 包含每个有效样本对应在 aligned_dates 中的位置
+    # Use corresponding dates directly instead of index operations
+    # valid_time_indices holds the position of each valid sample in aligned_dates
     sample_dates = [aligned_dates[int(idx)] for idx in valid_time_indices]
     valid_dates = pd.DatetimeIndex(sample_dates)
     
-    logger.info(f"  ✓ 生成 {len(fft_features_array)} 个时间点的特征 ({fft_features_array.shape})")
+    logger.info(f"  ✓ Generated features for {len(fft_features_array)} time points ({fft_features_array.shape})")
     
-    # Step 4: GMM聚类
-    logger.info(f"  执行GMM聚类 (n_clusters={n_regimes})...")
+    # Step 4: GMM clustering
+    logger.info(f"  Running GMM clustering (n_clusters={n_regimes})...")
     
-    # 标准化特征
+    # Standardize features
     scaler = StandardScaler()
     fft_scaled = scaler.fit_transform(fft_features_array)
     
-    # 训练GMM
+    # Train GMM
     gmm = GaussianMixture(
         n_components=n_regimes,
         random_state=42,
@@ -324,21 +324,21 @@ def detect_regimes_for_asset_class_timeseries(
     regime_labels = gmm.fit_predict(fft_scaled)
     soft_probs = gmm.predict_proba(fft_scaled)
     
-    # 计算质量指标
+    # Compute quality metrics
     silhouette = silhouette_score(fft_scaled, regime_labels)
     
-    logger.info(f"  ✓ 聚类完成")
-    logger.info(f"    • 样本数: {len(regime_labels)}")
+    logger.info(f"  ✓ Clustering complete")
+    logger.info(f"    • Samples: {len(regime_labels)}")
     logger.info(f"    • Silhouette Score: {silhouette:.4f}")
     
-    # Step 5: 统计Regime分布
+    # Step 5: Compute regime distribution
     regime_counts = [np.sum(regime_labels == i) for i in range(n_regimes)]
-    logger.info(f"  📊 Regime分布:")
+    logger.info(f"  📊 Regime distribution:")
     for i, count in enumerate(regime_counts):
         pct = 100 * count / len(regime_labels)
         logger.info(f"    Regime {i}: {count:6d} ({pct:5.1f}%)")
     
-    # Step 6: 构建结果DataFrame
+    # Step 6: Build result DataFrame
     regime_df = pd.DataFrame({
         'date': valid_dates,
         'regime': regime_labels,
@@ -364,7 +364,7 @@ def detect_regimes_for_asset_class_timeseries(
         'dates': valid_dates,
     }
     
-    logger.info(f"  ✅ {asset_class_name} 完成")
+    logger.info(f"  ✅ {asset_class_name} done")
     
     return result
 
@@ -376,19 +376,19 @@ def detect_regimes_for_all_classes_timeseries(
     date_range: Optional[Tuple[str, str]] = None
 ) -> Dict:
     """
-    对所有资产类进行时间序列regime检测
+    Perform time-series regime detection for all asset classes.
     
     Args:
         clc_data: Dict[ticker, DataFrame]
         asset_classes: Dict[class_name, List[ticker]]
-        n_regimes: regime数量
-        date_range: 可选的日期范围 (start_date, end_date)
+        n_regimes: number of regimes
+        date_range: optional date range (start_date, end_date)
     
     Returns:
         results: Dict[asset_class, result]
     """
     logger.info("\n" + "="*80)
-    logger.info("🎯 开始时间序列FFT Regime检测")
+    logger.info("🎯 Starting time-series FFT regime detection")
     logger.info("="*80)
     
     results = {}
@@ -406,7 +406,7 @@ def detect_regimes_for_all_classes_timeseries(
             results[asset_class] = result
     
     logger.info("\n" + "="*80)
-    logger.info(f"✅ 所有资产类处理完成 ({len(results)}/{len(asset_classes)})")
+    logger.info(f"✅ All asset classes processed ({len(results)}/{len(asset_classes)})")
     logger.info("="*80)
     
     return results
@@ -419,19 +419,19 @@ def extract_regime_for_period(
     asset_classes: Optional[List[str]] = None
 ) -> Dict[str, pd.DataFrame]:
     """
-    为特定时间段提取regime标签和soft probability（用于A2C）
+    Extract regime labels and soft probabilities for a specific period (for A2C).
     
     Args:
-        regime_results: detect_regimes_for_all_classes_timeseries的输出结果
-        period_start: 时间段开始 (str, format: "YYYY-MM-DD")
-        period_end: 时间段结束 (str, format: "YYYY-MM-DD")
-        asset_classes: 要提取的资产类列表，默认全部
+        regime_results: output from detect_regimes_for_all_classes_timeseries
+        period_start: period start date (str, format: "YYYY-MM-DD")
+        period_end: period end date (str, format: "YYYY-MM-DD")
+        asset_classes: list of asset classes to extract, default all
     
     Returns:
         period_regime_data: Dict[asset_class, DataFrame]
-        DataFrame 包含: date, regime, regime_prob_0, regime_prob_1, regime_prob_2
+        DataFrame containing: date, regime, regime_prob_0, regime_prob_1, regime_prob_2
     """
-    logger.info(f"\n提取 {period_start} 至 {period_end} 的regime数据...")
+    logger.info(f"\nExtracting regime data from {period_start} to {period_end}...")
     
     period_start_dt = pd.to_datetime(period_start)
     period_end_dt = pd.to_datetime(period_end)
@@ -443,21 +443,21 @@ def extract_regime_for_period(
     
     for asset_class in asset_classes:
         if asset_class not in regime_results:
-            logger.warning(f"  ⚠ {asset_class}: 不在结果中")
+            logger.warning(f"  ⚠ {asset_class}: not found in results")
             continue
         
         regime_df = regime_results[asset_class]['regime_df'].copy()
         
-        # 按时间段过滤
+        # Filter by time period
         mask = (regime_df['date'] >= period_start_dt) & (regime_df['date'] <= period_end_dt)
         filtered_df = regime_df[mask].reset_index(drop=True)
         
         if len(filtered_df) == 0:
-            logger.warning(f"  ⚠ {asset_class}: 该时间段无数据")
+            logger.warning(f"  ⚠ {asset_class}: no data in this period")
             continue
         
         period_regime_data[asset_class] = filtered_df
-        logger.info(f"  ✓ {asset_class}: {len(filtered_df)} 个交易日")
+        logger.info(f"  ✓ {asset_class}: {len(filtered_df)} trading days")
     
     return period_regime_data
 
@@ -468,18 +468,18 @@ def export_regime_for_a2c(
     output_dir: str = None
 ) -> Dict:
     """
-    为A2C导出特定时间段的regime数据
+    Export regime data for a specific period for A2C.
     
-    A2C periods 格式：
+    A2C periods format:
     [
         ("period_1_test", "2011-01-01", "2015-12-31"),
         ("period_2_test", "2016-01-01", "2019-12-31"),
     ]
     
     Args:
-        regime_results: detect_regimes_for_all_classes_timeseries的输出结果
+        regime_results: output from detect_regimes_for_all_classes_timeseries
         a2c_periods: [(period_name, start_date, end_date), ...]
-        output_dir: 输出目录
+        output_dir: output directory
     
     Returns:
         a2c_data: Dict[period_name][asset_class] = DataFrame
@@ -494,7 +494,7 @@ def export_regime_for_a2c(
     output_dir.mkdir(exist_ok=True, parents=True)
     
     logger.info("\n" + "="*80)
-    logger.info("💾 导出A2C用的regime数据")
+    logger.info("💾 Exporting regime data for A2C")
     logger.info("="*80)
     
     a2c_data = {}
@@ -510,14 +510,14 @@ def export_regime_for_a2c(
         
         a2c_data[period_name] = period_data
         
-        # 导出为CSV
+        # Export as CSV
         for asset_class, df in period_data.items():
             filename = f"a2c_{period_name}_{asset_class.replace(' ', '_')}.csv"
             filepath = output_dir / filename
             df.to_csv(filepath, index=False)
-            logger.info(f"  ✓ 导出: {filename}")
+            logger.info(f"  ✓ Exported: {filename}")
     
-    logger.info(f"\n✅ 所有数据已导出到: {output_dir}")
+    logger.info(f"\n✅ All data exported to: {output_dir}")
     
     return a2c_data
 
@@ -676,7 +676,7 @@ def predict_regime_soft_probs(
 
 if __name__ == "__main__":
     """
-    使用示例：
+    Example usage:
     
     from regime_detection.timeseries_fft_regime import (
         detect_regimes_for_all_classes_timeseries,
@@ -685,7 +685,7 @@ if __name__ == "__main__":
     from data_loader import load_clc_full
     from config import ASSET_CLASSES
     
-    # 加载数据
+    # Load data
     clc_data = {}
     for asset_class, tickers in ASSET_CLASSES.items():
         for ticker in tickers:
@@ -694,14 +694,14 @@ if __name__ == "__main__":
             except:
                 pass
     
-    # 执行时间序列regime检测
+    # Run time-series regime detection
     results = detect_regimes_for_all_classes_timeseries(
         clc_data=clc_data,
         asset_classes=ASSET_CLASSES,
         n_regimes=3
     )
     
-    # 为A2C导出特定时间段的数据
+    # Export data for a specific period for A2C
     a2c_periods = [
         ("period_1_test", "2011-01-01", "2015-12-31"),
         ("period_2_test", "2016-01-01", "2019-12-31"),
@@ -713,7 +713,7 @@ if __name__ == "__main__":
         output_dir='/Users/ladymie/Documents/GitHub/IEOR4733_Project/regime_detection/results'
     )
     
-    # 获取某个时间段的结果
+    # Get results for a specific period
     period_1_test = a2c_regime_data['period_1_test']['Commodity']
     print(period_1_test.head())
     """

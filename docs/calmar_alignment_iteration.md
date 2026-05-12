@@ -196,7 +196,7 @@ Notes:
 ## Final Diagnosis
 
 - final classification: `MDD aligned, numerator wrong`
-- next single recommended action: `在 cleaned baseline 上把 default numerator 改到全局 winner`
+- next single recommended action: `change default numerator to global winner on the cleaned baseline`
 
 Current cleaned baseline after Commodity iteration:
 
