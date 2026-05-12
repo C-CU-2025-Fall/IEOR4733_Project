@@ -35,3 +35,7 @@ simulation_data/
 *.pth
 *.log
 dqn_model_backups/
+data/CLC/
+data/yahoo/
+config/TEMP/
+*.pkl
