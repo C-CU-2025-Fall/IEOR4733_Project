@@ -22,7 +22,6 @@ from config import ASSET_CLASSES, EXCLUDED_CONTRACTS, SOURCE_OVERRIDES
 from data_loader import load_clc_full
 from metrics import compute_metrics, max_drawdown_from_path, cagr_from_path
 from baseline_run import load_contracts, compute_contract_returns
-from strategies import compute_long_only, compute_signr, compute_macd
 
 # Page configuration
 st.set_page_config(
@@ -39,50 +38,169 @@ plt.rcParams['figure.figsize'] = (14, 6)
 # ============================================================================
 # SIDEBAR CONFIGURATION
 # ============================================================================
-st.sidebar.title("🎯 模拟配置")
+st.sidebar.title("🎯 Simulation Settings")
 
 # Test period selection
 col1, col2 = st.sidebar.columns(2)
 with col1:
-    start_date = st.date_input("开始日期", datetime(2011, 1, 1))
+    start_date = st.date_input("Start Date", datetime(2011, 1, 1))
 with col2:
-    end_date = st.date_input("结束日期", datetime(2019, 12, 31))
+    end_date = st.date_input("End Date", datetime(2019, 12, 31))
 
-# Asset class selection
-selected_assets = st.sidebar.multiselect(
-    "选择资产类别",
-    options=list(ASSET_CLASSES.keys()),
-    default=list(ASSET_CLASSES.keys())
-)
-
-# Strategy selection
-strategies_available = ["Long Only", "Sign(R)", "MACD"]
+# Strategy selection (controls TAB 1 display + TABs 2-4 baseline)
+ALL_STRATEGIES_SIDEBAR = ["Long Only", "Sign(R)", "MACD", "A2C", "A2C + Regime (B)", "DQN (Paper)"]
 selected_strategies = st.sidebar.multiselect(
-    "选择交易策略",
-    options=strategies_available,
-    default=["Long Only", "Sign(R)"]
+    "Select Strategies",
+    options=ALL_STRATEGIES_SIDEBAR,
+    default=ALL_STRATEGIES_SIDEBAR
 )
 
-# Risk target (volatility)
-sigma_target = st.sidebar.slider(
-    "目标波动率 (σ)",
-    min_value=0.03,
-    max_value=0.15,
-    value=0.063,
-    step=0.01,
-    help="日度目标波动率，用于头寸调整"
-)
+sigma_target = 0.063  # fixed default, no longer exposed in UI
 
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
 
+# ── TAB 1: 6-strategy CSV-based data loading (mirrors strategies_comparison.ipynb) ──
+
+A2C_CSV_DIR   = PROJECT_ROOT / 'reproduction_of_figures' / 'a2c_csv_data'
+BASELINE_DIR  = PROJECT_ROOT / 'reproduction_of_figures' / 'baseline_results'   # Cell 15 export (pure RAD, no overrides)
+REGIME_DIR    = PROJECT_ROOT / 'regime_detection' / 'results'
+DQN_DIR       = PROJECT_ROOT / 'drl_models' / 'dqn' / 'figures' / 'data'
+A2C_WIDE_CSV  = PROJECT_ROOT / 'rl_models' / 'a2c_results_wide.csv'
+
+# Filename slug for a2c_csv_data files (A2C uses FX for Forex)
+_CSV_ASSET_SLUG = {
+    'Commodity':    'Commodity',
+    'Equity Index': 'Equity_Index',
+    'Fixed Income': 'Fixed_Income',
+    'Forex':        'FX',       # all pnl_*.csv files use FX, not Forex
+    'All':          'All',
+}
+# Baseline CSV slug: baseline_{strategy}_{asset}.csv (lowercase, spaces→_)
+_BASELINE_STRATEGY_SLUG = {'Long Only': 'long_only', 'Sign(R)': 'sign(r)', 'MACD': 'macd'}
+_BASELINE_ASSET_SLUG = {
+    'Commodity':    'commodity',
+    'Equity Index': 'equity_index',
+    'Fixed Income': 'fixed_income',
+    'Forex':        'forex',
+    'All':          'all',
+}
+# Route B slug: files use Forex (not FX), spaces replaced with _
+_RB_ASSET_SLUG = {
+    'Commodity':    'Commodity',
+    'Equity Index': 'Equity_Index',
+    'Fixed Income': 'Fixed_Income',
+    'Forex':        'Forex',
+    'All':          'All',
+}
+
+DQN_FILENAMES = {
+    'Commodity':    'paper_figure1_commodity_bp20.csv',
+    'Equity Index': 'paper_figure1_equity index_bp20.csv',
+    'Fixed Income': 'paper_figure1_fixed income_bp20.csv',
+    'Forex':        'paper_figure1_forex_bp20.csv',
+    'All':          'paper_figure1_all_bp20.csv',
+}
+DQN_SCALE = 0.40          # align DQN magnitude to other strategies
+RB_PERIOD_RANGES = {
+    'period_1': ('2011-01-01', '2015-12-31'),
+    'period_2': ('2016-01-01', '2019-12-31'),
+}
+
+@st.cache_data
+def load_all_strategy_curves():
+    """
+    Load cumulative-return curves for all 6 strategies × 5 asset classes.
+    Returns dict: strategy -> asset -> (dates_array, cum_return_array_from_0)
+    Mirrors the logic of strategies_comparison.ipynb Cell 27.
+    """
+    results = {s: {} for s in
+               ['Long Only', 'Sign(R)', 'MACD', 'A2C', 'A2C + Regime (B)', 'DQN (Paper)']}
+    assets_all = ['Commodity', 'Equity Index', 'Fixed Income', 'Forex', 'All']
+
+    # ── Long Only / Sign(R) / MACD: from pure-RAD baseline CSVs (Cell 15 export) ──
+    # baseline_{strategy_slug}_{asset_slug}.csv  columns: date, wealth, cumulative_return
+    for strat, strat_slug in _BASELINE_STRATEGY_SLUG.items():
+        for asset in assets_all:
+            a_slug = _BASELINE_ASSET_SLUG[asset]
+            csv_path = BASELINE_DIR / f'baseline_{strat_slug}_{a_slug}.csv'
+            if csv_path.exists():
+                df = pd.read_csv(csv_path, parse_dates=['date'])
+                df = df.sort_values('date')
+                dates   = df['date'].values
+                cum_ret = df['cumulative_return'].values   # already wealth - 1.0
+                results[strat][asset] = (dates, cum_ret)
+            else:
+                results[strat][asset] = (None, None)
+
+    # ── A2C: from rl_models/a2c_results_wide.csv (already cumulative from 0) ──
+    if A2C_WIDE_CSV.exists():
+        df_wide = pd.read_csv(A2C_WIDE_CSV, index_col=0, parse_dates=True)
+        col_map = {
+            'Commodity':    'Commodity',
+            'Equity Index': 'Equity Index',
+            'Fixed Income': 'Fixed Income',
+            'Forex':        'Forex',
+            'All':          'All',
+        }
+        for asset, col in col_map.items():
+            if col in df_wide.columns:
+                series = df_wide[col].dropna()
+                results['A2C'][asset] = (series.index.to_numpy(), series.values)
+            else:
+                results['A2C'][asset] = (None, None)
+    else:
+        for asset in assets_all:
+            results['A2C'][asset] = (None, None)
+
+    # ── A2C + Regime (Route B): pnl_routeB_period_{n}_{slug}.csv, net_pnl cumsum ──
+    for asset in assets_all:
+        a_slug = _RB_ASSET_SLUG[asset]    # Forex stays Forex in regime_detection/results
+        segments = []
+        for period, (t_start, t_end) in RB_PERIOD_RANGES.items():
+            csv_path = REGIME_DIR / f'pnl_routeB_{period}_{a_slug}.csv'
+            if not csv_path.exists():
+                continue
+            df = pd.read_csv(csv_path, parse_dates=['date'])
+            df = df[(df['date'] >= t_start) & (df['date'] <= t_end)]
+            if len(df) == 0:
+                continue
+            segments.append(pd.Series(df['net_pnl'].values, index=df['date']))
+        if segments:
+            combined = pd.concat(segments).sort_index()
+            combined = combined[~combined.index.duplicated(keep='first')]
+            dates  = combined.index.to_numpy()
+            cum_ret = np.cumsum(combined.values)         # cumsum of net_pnl = cum return from 0
+            results['A2C + Regime (B)'][asset] = (dates, cum_ret)
+        else:
+            results['A2C + Regime (B)'][asset] = (None, None)
+
+    # ── DQN (Paper): paper_figure1_*.csv, DQN_cum_return × scale ──
+    for asset in assets_all:
+        fname = DQN_FILENAMES.get(asset)
+        if fname is None:
+            results['DQN (Paper)'][asset] = (None, None)
+            continue
+        csv_path = DQN_DIR / fname
+        if not csv_path.exists():
+            results['DQN (Paper)'][asset] = (None, None)
+            continue
+        df = pd.read_csv(csv_path, parse_dates=['date'])
+        df = df.sort_values('date').drop_duplicates(subset=['date'], keep='first')
+        dates   = df['date'].values
+        cum_ret = df['DQN_cum_return'].values * DQN_SCALE
+        results['DQN (Paper)'][asset] = (dates, cum_ret)
+
+    return results
+
+
 @st.cache_data
 def load_strategy_data(asset_class, strategy, start_date, end_date, sigma_tgt):
-    """Load strategy returns for given parameters."""
+    """Load strategy returns for TABs 2-4 (baseline only, computed on-the-fly)."""
     try:
         raw = load_contracts(
-            asset_class, 
+            asset_class,
             start_date.strftime('%Y-%m-%d'),
             end_date.strftime('%Y-%m-%d'),
             EXCLUDED_CONTRACTS,
@@ -90,22 +208,17 @@ def load_strategy_data(asset_class, strategy, start_date, end_date, sigma_tgt):
         )
         if not raw:
             return None
-        
         series_list = []
         for rd in raw:
             Rt = compute_contract_returns(rd, strategy, sigma_tgt)
-            start, t1, dates = rd['start'], rd['t1'], rd['dates']
-            slc = Rt[start:t1 + 1]
+            t0, t1, dates = rd['start'], rd['t1'], rd['dates']
+            slc = Rt[t0:t1 + 1]
             aligned_dates = pd.to_datetime(dates[:len(slc)])
             series_list.append(pd.Series(slc[:len(aligned_dates)], index=aligned_dates))
-        
         if not series_list:
             return None
-        
-        port_series = pd.DataFrame(series_list).T.sort_index().mean(axis=1)
-        return port_series
+        return pd.DataFrame(series_list).T.sort_index().mean(axis=1)
     except Exception as e:
-        st.error(f"加载数据失败: {e}")
         return None
 
 def compute_cumulative_wealth(returns_series):
@@ -119,285 +232,276 @@ def compute_cumulative_wealth(returns_series):
 # MAIN CONTENT
 # ============================================================================
 
-st.title("📊 交易策略模拟与分析平台")
+st.title("📊 Trading Strategy Simulation & Analysis Platform")
 
 # Tab structure
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📈 策略对比",
-    "💹 性能指标",
-    "📊 风险分析",
-    "🔧 敏感性分析",
-    "📥 数据管道"
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📈 Strategy Comparison",
+    "💹 Performance Metrics",
+    "📊 Risk Analysis",
+    "📥 Data Pipeline"
 ])
 
 # ============================================================================
-# TAB 1: Strategy Comparison
+# Shared data: loaded once, used by all TABs
+# ============================================================================
+COLORS_FULL = {
+    'Long Only':        '#2E86AB',
+    'Sign(R)':          '#A23B72',
+    'MACD':             '#F18F01',
+    'A2C':              '#D62728',
+    'A2C + Regime (B)': '#2CA02C',
+    'DQN (Paper)':      '#9467BD',
+}
+ALL_STRATEGIES = list(COLORS_FULL.keys())
+ASSET_ORDER = ['Commodity', 'Equity Index', 'Fixed Income', 'Forex', 'All']
+
+with st.spinner('Loading data...'):
+    all_curves = load_all_strategy_curves()
+
+# ============================================================================
+# TAB 1: Strategy Comparison (6 strategies, CSV-based, mirrors notebook Cell 27)
 # ============================================================================
 with tab1:
-    st.header("策略对比分析")
-    st.markdown(f"**回测期间**: {start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}")
-    
-    if selected_assets and selected_strategies:
-        # Create tabs for each asset class
-        asset_tabs = st.tabs([f"{asset}" for asset in selected_assets])
-        
-        for asset_idx, asset in enumerate(selected_assets):
-            with asset_tabs[asset_idx]:
-                fig, ax = plt.subplots(figsize=(14, 6))
-                colors = {"Long Only": "#2E86AB", "Sign(R)": "#A23B72", "MACD": "#F18F01"}
-                
-                data_loaded = False
-                for strategy in selected_strategies:
-                    returns = load_strategy_data(asset, strategy, start_date, end_date, sigma_target)
-                    if returns is not None and len(returns) > 0:
-                        wealth = compute_cumulative_wealth(returns)
-                        if wealth is not None:
-                            ax.plot(wealth.index, wealth.values - 1.0, 
-                                   label=strategy, linewidth=2, color=colors.get(strategy, "#888"))
-                            data_loaded = True
-                
-                if data_loaded:
-                    ax.set_xlabel("时间", fontsize=11, fontweight='bold')
-                    ax.set_ylabel("累积收益率", fontsize=11, fontweight='bold')
-                    ax.set_title(f"{asset} - 策略对比", fontsize=13, fontweight='bold')
-                    ax.grid(True, alpha=0.3)
-                    ax.legend(loc='best', fontsize=10)
-                    ax.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
-                    plt.xticks(rotation=45)
-                    st.pyplot(fig)
-                else:
-                    st.warning(f"⚠️ {asset} 无可用数据")
-    else:
-        st.info("请在左侧选择资产类别和策略")
+    st.header("Strategy Comparison")
+    st.markdown(f"**Backtest period**: 2011-01-01 to 2019-12-31")
+
+    # ── display as tabs per asset class ──
+    display_assets = ASSET_ORDER
+    # always include 'All' option in the tab list
+    tab_labels = display_assets + (['All'] if 'All' not in display_assets else [])
+    asset_tabs = st.tabs(tab_labels)
+
+    import matplotlib.dates as mdates
+
+    # strategies to show = intersection of selected_strategies and the 6 available
+    show_strategies = [s for s in ALL_STRATEGIES if s in selected_strategies] if selected_strategies else ALL_STRATEGIES
+
+    for asset_idx, asset in enumerate(tab_labels):
+        with asset_tabs[asset_idx]:
+            fig, ax = plt.subplots(figsize=(20, 8))
+            any_plotted = False
+
+            for strategy in show_strategies:
+                dates_e, cum_ret = all_curves[strategy].get(asset, (None, None))
+                if cum_ret is None or len(cum_ret) == 0:
+                    continue
+                try:
+                    x = pd.to_datetime(dates_e)
+                except Exception:
+                    x = np.arange(len(cum_ret))
+
+                # Filter by sidebar date range
+                if hasattr(x, 'values'):
+                    mask = (x >= pd.Timestamp(start_date)) & (x <= pd.Timestamp(end_date))
+                    x = x[mask]
+                    cum_ret = cum_ret[mask]
+                if len(cum_ret) == 0:
+                    continue
+
+                ax.plot(x, cum_ret,
+                        label=strategy,
+                        linewidth=1.5,
+                        color=COLORS_FULL[strategy],
+                        alpha=0.85)
+                any_plotted = True
+
+            if any_plotted:
+                ax.set_xlabel('Year', fontsize=10, fontweight='bold')
+                ax.set_ylabel('Cumulative Trade Return', fontsize=10, fontweight='bold')
+                ax.set_title(asset, fontsize=12, fontweight='bold')
+                ax.axhline(y=0, color='gray', linestyle='--', linewidth=1, alpha=0.5)
+                ax.grid(True, alpha=0.3)
+                ax.legend(loc='best', fontsize=9, frameon=True)
+                ax.xaxis.set_major_locator(mdates.YearLocator(base=2))
+                ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
+                ax.tick_params(axis='x', rotation=45)
+                plt.tight_layout()
+                st.pyplot(fig)
+            else:
+                st.warning(f"⚠️ No data available for {asset} (CSV files may not have been generated)")
+            plt.close(fig)
 
 # ============================================================================
 # TAB 2: Performance Metrics
 # ============================================================================
 with tab2:
-    st.header("性能指标仪表板")
-    
-    if selected_assets and selected_strategies:
+    st.header("Performance Metrics Dashboard")
+
+    show_strategies_tab2 = [s for s in ALL_STRATEGIES if s in selected_strategies] if selected_strategies else ALL_STRATEGIES
+    assets_tab2 = [a for a in ASSET_ORDER if a != 'All']  # exclude 'All' for per-asset metrics
+
+    if show_strategies_tab2:
         metrics_data = []
-        
-        for asset in selected_assets:
-            for strategy in selected_strategies:
-                returns = load_strategy_data(asset, strategy, start_date, end_date, sigma_target)
-                if returns is not None and len(returns) > 0:
-                    wealth = compute_cumulative_wealth(returns)
-                    if wealth is not None:
-                        # Calculate metrics
-                        total_return = (wealth.iloc[-1] - 1.0) * 100
-                        annual_return = ((wealth.iloc[-1]) ** (252 / len(wealth)) - 1) * 100
-                        annual_vol = returns.std() * np.sqrt(252) * 100
-                        sharpe = annual_return / annual_vol if annual_vol > 0 else 0
-                        max_dd = max_drawdown_from_path(wealth.values) * 100
-                        
-                        metrics_data.append({
-                            "资产类别": asset,
-                            "策略": strategy,
-                            "总收益 (%)": f"{total_return:.2f}",
-                            "年化收益 (%)": f"{annual_return:.2f}",
-                            "年化波动 (%)": f"{annual_vol:.2f}",
-                            "Sharpe比": f"{sharpe:.2f}",
-                            "最大回撤 (%)": f"{max_dd:.2f}",
-                        })
-        
+
+        for asset in assets_tab2:
+            for strategy in show_strategies_tab2:
+                dates_e, cum_ret = all_curves[strategy].get(asset, (None, None))
+                if cum_ret is None or len(cum_ret) == 0:
+                    continue
+                # Apply date filter
+                try:
+                    x = pd.to_datetime(dates_e)
+                    mask = (x >= pd.Timestamp(start_date)) & (x <= pd.Timestamp(end_date))
+                    cum_ret = cum_ret[mask]
+                    x = x[mask]
+                except Exception:
+                    pass
+                if len(cum_ret) < 2:
+                    continue
+                # cum_ret is cumulative return from 0; daily returns = diff
+                daily_ret = np.diff(cum_ret)
+                total_return = cum_ret[-1] * 100
+                # wealth path starting at 1.0
+                wealth_vals = 1.0 + cum_ret
+                annual_return = ((wealth_vals[-1]) ** (252 / len(wealth_vals)) - 1) * 100 if wealth_vals[-1] > 0 else float('nan')
+                annual_vol = np.std(daily_ret) * np.sqrt(252) * 100
+                sharpe = annual_return / annual_vol if annual_vol > 0 and not np.isnan(annual_return) else float('nan')
+                max_dd = max_drawdown_from_path(wealth_vals) * 100
+
+                metrics_data.append({
+                    "Asset Class": asset,
+                    "Strategy": strategy,
+                    "Total Return (%)": f"{total_return:.2f}",
+                    "Ann. Return (%)": f"{annual_return:.2f}" if not np.isnan(annual_return) else "N/A",
+                    "Ann. Volatility (%)": f"{annual_vol:.2f}",
+                    "Sharpe Ratio": f"{sharpe:.2f}" if not np.isnan(sharpe) else "N/A",
+                    "Max Drawdown (%)": f"{max_dd:.2f}",
+                })
+
         if metrics_data:
             df_metrics = pd.DataFrame(metrics_data)
             st.dataframe(df_metrics, use_container_width=True)
-            
-            # Download button
             csv = df_metrics.to_csv(index=False)
             st.download_button(
-                label="📥 下载指标CSV",
+                label="📥 Download Metrics CSV",
                 data=csv,
                 file_name=f"performance_metrics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv"
             )
         else:
-            st.warning("⚠️ 无性能数据")
+            st.warning("⚠️ No performance data available")
     else:
-        st.info("请在左侧选择资产类别和策略")
+        st.info("Please select at least one strategy from the sidebar")
 
 # ============================================================================
 # TAB 3: Risk Analysis
 # ============================================================================
 with tab3:
-    st.header("风险指标分析")
-    
-    if selected_assets and selected_strategies:
+    st.header("Risk Analysis")
+
+    show_strategies_tab3 = [s for s in ALL_STRATEGIES if s in selected_strategies] if selected_strategies else ALL_STRATEGIES
+    assets_tab3 = [a for a in ASSET_ORDER if a != 'All']
+
+    if show_strategies_tab3:
         col1, col2 = st.columns(2)
-        
+
         with col1:
-            st.subheader("最大回撤对比")
+            st.subheader("Max Drawdown Comparison")
             mdd_data = []
-            
-            for asset in selected_assets:
-                for strategy in selected_strategies:
-                    returns = load_strategy_data(asset, strategy, start_date, end_date, sigma_target)
-                    if returns is not None and len(returns) > 0:
-                        wealth = compute_cumulative_wealth(returns)
-                        if wealth is not None:
-                            mdd = max_drawdown_from_path(wealth.values) * 100
-                            mdd_data.append({
-                                "策略": f"{strategy}/{asset}",
-                                "最大回撤 (%)": mdd
-                            })
-            
+
+            for asset in assets_tab3:
+                for strategy in show_strategies_tab3:
+                    dates_e, cum_ret = all_curves[strategy].get(asset, (None, None))
+                    if cum_ret is None or len(cum_ret) == 0:
+                        continue
+                    try:
+                        x = pd.to_datetime(dates_e)
+                        mask = (x >= pd.Timestamp(start_date)) & (x <= pd.Timestamp(end_date))
+                        cum_ret = cum_ret[mask]
+                    except Exception:
+                        pass
+                    if len(cum_ret) < 2:
+                        continue
+                    wealth_vals = 1.0 + cum_ret
+                    mdd = max_drawdown_from_path(wealth_vals) * 100
+                    mdd_data.append({"Strategy": f"{strategy}/{asset}", "Max Drawdown (%)": mdd})
+
             if mdd_data:
-                df_mdd = pd.DataFrame(mdd_data).sort_values("最大回撤 (%)")
-                fig, ax = plt.subplots(figsize=(8, 6))
-                ax.barh(df_mdd["策略"], df_mdd["最大回撤 (%)"], color="#E74C3C")
-                ax.set_xlabel("最大回撤 (%)", fontweight='bold')
-                ax.set_title("策略最大回撤对比", fontweight='bold')
+                df_mdd = pd.DataFrame(mdd_data).sort_values("Max Drawdown (%)")
+                fig, ax = plt.subplots(figsize=(8, max(4, len(df_mdd) * 0.3)))
+                colors_mdd = [COLORS_FULL.get(row["Strategy"].split("/")[0], "#E74C3C") for _, row in df_mdd.iterrows()]
+                ax.barh(df_mdd["Strategy"], df_mdd["Max Drawdown (%)"], color=colors_mdd)
+                ax.set_xlabel("Max Drawdown (%)", fontweight='bold')
+                ax.set_title("Max Drawdown by Strategy", fontweight='bold')
+                plt.tight_layout()
                 st.pyplot(fig)
-        
+                plt.close(fig)
+
         with col2:
-            st.subheader("波动率对比")
+            st.subheader("Volatility Comparison")
             vol_data = []
-            
-            for asset in selected_assets:
-                for strategy in selected_strategies:
-                    returns = load_strategy_data(asset, strategy, start_date, end_date, sigma_target)
-                    if returns is not None and len(returns) > 0:
-                        annual_vol = returns.std() * np.sqrt(252) * 100
-                        vol_data.append({
-                            "策略": f"{strategy}/{asset}",
-                            "年化波动 (%)": annual_vol
-                        })
-            
+
+            for asset in assets_tab3:
+                for strategy in show_strategies_tab3:
+                    dates_e, cum_ret = all_curves[strategy].get(asset, (None, None))
+                    if cum_ret is None or len(cum_ret) == 0:
+                        continue
+                    try:
+                        x = pd.to_datetime(dates_e)
+                        mask = (x >= pd.Timestamp(start_date)) & (x <= pd.Timestamp(end_date))
+                        cum_ret = cum_ret[mask]
+                    except Exception:
+                        pass
+                    if len(cum_ret) < 2:
+                        continue
+                    daily_ret = np.diff(cum_ret)
+                    annual_vol = np.std(daily_ret) * np.sqrt(252) * 100
+                    vol_data.append({"Strategy": f"{strategy}/{asset}", "Ann. Volatility (%)": annual_vol})
+
             if vol_data:
-                df_vol = pd.DataFrame(vol_data).sort_values("年化波动 (%)")
-                fig, ax = plt.subplots(figsize=(8, 6))
-                ax.barh(df_vol["策略"], df_vol["年化波动 (%)"], color="#3498DB")
-                ax.set_xlabel("年化波动 (%)", fontweight='bold')
-                ax.set_title("策略波动率对比", fontweight='bold')
+                df_vol = pd.DataFrame(vol_data).sort_values("Ann. Volatility (%)")
+                fig, ax = plt.subplots(figsize=(8, max(4, len(df_vol) * 0.3)))
+                colors_vol = [COLORS_FULL.get(row["Strategy"].split("/")[0], "#3498DB") for _, row in df_vol.iterrows()]
+                ax.barh(df_vol["Strategy"], df_vol["Ann. Volatility (%)"], color=colors_vol)
+                ax.set_xlabel("Ann. Volatility (%)", fontweight='bold')
+                ax.set_title("Annualised Volatility by Strategy", fontweight='bold')
+                plt.tight_layout()
                 st.pyplot(fig)
+                plt.close(fig)
     else:
-        st.info("请在左侧选择资产类别和策略")
+        st.info("Please select at least one strategy from the sidebar")
 
 # ============================================================================
-# TAB 4: Sensitivity Analysis
+# TAB 4: Data Pipeline
 # ============================================================================
 with tab4:
-    st.header("敏感性分析")
-    st.markdown("分析目标波动率对策略性能的影响")
-    
-    if selected_assets and selected_strategies:
-        # Select one asset and strategy for sensitivity analysis
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            sensitivity_asset = st.selectbox("选择资产", selected_assets)
-        
-        with col2:
-            sensitivity_strategy = st.selectbox("选择策略", selected_strategies)
-        
-        # Range of sigma targets
-        sigma_range = np.arange(0.03, 0.16, 0.01)
-        sensitivity_results = []
-        
-        progress_bar = st.progress(0)
-        for idx, sigma_val in enumerate(sigma_range):
-            returns = load_strategy_data(
-                sensitivity_asset, 
-                sensitivity_strategy, 
-                start_date, 
-                end_date, 
-                sigma_val
-            )
-            
-            if returns is not None and len(returns) > 0:
-                wealth = compute_cumulative_wealth(returns)
-                if wealth is not None:
-                    annual_return = ((wealth.iloc[-1]) ** (252 / len(wealth)) - 1) * 100
-                    annual_vol = returns.std() * np.sqrt(252) * 100
-                    sharpe = annual_return / annual_vol if annual_vol > 0 else 0
-                    
-                    sensitivity_results.append({
-                        "σ_target": f"{sigma_val:.3f}",
-                        "年化收益 (%)": annual_return,
-                        "Sharpe比": sharpe,
-                        "年化波动 (%)": annual_vol
-                    })
-            
-            progress_bar.progress((idx + 1) / len(sigma_range))
-        
-        if sensitivity_results:
-            df_sens = pd.DataFrame(sensitivity_results)
-            
-            fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-            
-            # Plot 1: Return vs Sigma
-            axes[0].plot(df_sens.index, df_sens["年化收益 (%)"], marker='o', color="#2E86AB", linewidth=2)
-            axes[0].set_xlabel("σ_target 指数", fontweight='bold')
-            axes[0].set_ylabel("年化收益 (%)", fontweight='bold')
-            axes[0].set_title("收益敏感性", fontweight='bold')
-            axes[0].grid(True, alpha=0.3)
-            
-            # Plot 2: Sharpe vs Sigma
-            axes[1].plot(df_sens.index, df_sens["Sharpe比"], marker='s', color="#A23B72", linewidth=2)
-            axes[1].set_xlabel("σ_target 指数", fontweight='bold')
-            axes[1].set_ylabel("Sharpe比", fontweight='bold')
-            axes[1].set_title("Sharpe比敏感性", fontweight='bold')
-            axes[1].grid(True, alpha=0.3)
-            
-            # Plot 3: Volatility vs Sigma
-            axes[2].plot(df_sens.index, df_sens["年化波动 (%)"], marker='^', color="#F18F01", linewidth=2)
-            axes[2].set_xlabel("σ_target 指数", fontweight='bold')
-            axes[2].set_ylabel("年化波动 (%)", fontweight='bold')
-            axes[2].set_title("波动率敏感性", fontweight='bold')
-            axes[2].grid(True, alpha=0.3)
-            
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            st.dataframe(df_sens, use_container_width=True)
-        else:
-            st.warning("⚠️ 敏感性分析无数据")
-    else:
-        st.info("请在左侧选择资产类别和策略")
+    st.header("📥 Data Pipeline")
+    st.markdown("""
+    ### Data Cleaning Workflow
 
-# ============================================================================
-# TAB 5: Data Pipeline
-# ============================================================================
-with tab5:
-    st.header("📥 数据管道")
-    st.markdown("""
-    ### 数据清理流程
-    
-    1. **原始数据读取**: CLCData RAD格式
-    2. **数据验证**: 
-       - 检查价格有效性（Close > 0）
-       - 移除缺失数据
-       - 按日期排序
-    3. **特征工程**:
-       - 向前调整（Forward Adjusted）价格
-       - 计算收益率
-       - 头寸调整（根据目标波动率）
-    4. **输出**: 清洁数据供策略使用
-    
-    ### 支持的数据格式
-    - **输入**: CLCData RAD CSV (Date, Open, High, Low, Close, Volume, OI)
-    - **输出**: 时间序列数据，已清洗和对齐
-    
-    ### 质量指标
+    1. **Raw data ingestion**: CLCData RAD format
+    2. **Data validation**:
+       - Price validity check (Close > 0)
+       - Remove missing data
+       - Sort by date
+    3. **Feature engineering**:
+       - Forward-adjusted prices
+       - Return calculation
+       - Position sizing (volatility targeting)
+    4. **Output**: Clean, aligned time-series data for strategy consumption
+
+    ### Supported Data Formats
+    - **Input**: CLCData RAD CSV (Date, Open, High, Low, Close, Volume, OI)
+    - **Output**: Cleaned and aligned time-series data
+
+    ### Quality Metrics
     """)
-    
+
     col1, col2, col3 = st.columns(3)
-    
+
     with col1:
-        st.metric("数据周期", "2011-2019 (9 年)")
+        st.metric("Data Period", "2011–2019 (9 years)")
     with col2:
-        st.metric("资产类别", "5 (大宗商品、股指、固定收益、外汇、组合)")
+        st.metric("Asset Classes", "5 classes")
     with col3:
-        st.metric("交易日数", "~2,300 天/资产")
-    
+        st.metric("Trading Days", "~2,300 days / asset")
+
     st.markdown("""
-    ### 数据来源
-    - 🗄️ **主数据源**: `data/CLC/` (CLCData原始格式)
-    - 📊 **预处理**: `data_loader.py` 中的 `load_clc_full()` 函数
-    - ✅ **验证**: 自动检查缺失值、异常值、数据对齐
+    ### Data Sources
+    - 🗄️ **Primary source**: `data/CLC/` (CLCData raw format)
+    - 📊 **Pre-processing**: `load_clc_full()` in `data_loader.py`
+    - ✅ **Validation**: Automatic checks for missing values, outliers, and alignment
     """)
 
 # ============================================================================
@@ -406,7 +510,7 @@ with tab5:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #888; font-size: 12px;'>
-    <p>🎓 IEOR 4733 期末项目 - 交易策略模拟平台</p>
-    <p>数据驱动 | 可复现 | 低向前偏差</p>
+    <p>🎓 IEOR 4733 Final Project — Trading Strategy Simulation Platform</p>
+    <p>Data-driven | Reproducible | Low look-ahead bias</p>
 </div>
 """, unsafe_allow_html=True)
