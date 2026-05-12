@@ -98,14 +98,12 @@ IEOR4733_Project/
 ├── reproduction_of_figures/  # Notebook + pre-computed strategy CSVs
 ├── regime_detection/         # FFT + HMM regime model (Route B)
 ├── drl_models/               # Trained DRL model weights and code
-├── rl_models/                # A2C results (legacy path)
+├── baseline/                 # Baseline strategy analysis scripts
+│   ├── long_only/            # Long-only ad-hoc analysis and bridge scripts
+│   ├── macd/                 # MACD-specific scripts
+│   └── signr/                # Sign(R)-specific scripts
 ├── docs/                     # Audit reports and analysis documents
-├── config/                   # Contract lists and roll-mapping config
-├── references/               # Literature notes and reference list
-├── tests/                    # Ad-hoc analysis and bridge scripts
-├── tests_MACD/               # MACD-specific test scripts
-├── tests_Signr/              # Sign(R)-specific test scripts
-└── final_requirement/        # Submission artefacts
+└── config/                   # Contract lists and roll-mapping config
 ```
 
 ### `src/app/`
@@ -161,13 +159,15 @@ Trained model weights and code for the deep RL strategies.
 | `drl_models/a2c/` | A2C model definition (`a2c_model.py`), pre-trained `.pt` weights (Original / Extension Reward variants), data loader, and per-asset result CSVs |
 | `drl_models/dqn/` | DQN implementation, trained weights, and figure/data output |
 
-### `rl_models/`
+### `baseline/`
 
-Legacy path retained for backward compatibility.
+Baseline strategy analysis scripts, organised by strategy.
 
-| File | Purpose |
+| Path | Contents |
 |---|---|
-| `a2c_results_wide.csv` | Wide-format A2C results across all asset classes and periods |
+| `baseline/long_only/` | Ad-hoc analysis scripts, bridge comparisons, and audit tooling for the Long Only baseline |
+| `baseline/macd/` | MACD-specific sweep and enumeration scripts |
+| `baseline/signr/` | Sign(R)-specific sweep and enumeration scripts |
 
 ### `config/`
 
@@ -182,16 +182,7 @@ Static configuration shared across scripts.
 
 Accumulated audit reports produced during development. These document metric alignment, data-source investigations, and iteration histories (e.g. `calmar_alignment_iteration.md`, `table3_sweep_report.md`). Useful for understanding why specific design choices were made.
 
-### `references/`
 
-| File | Contents |
-|---|---|
-| `ref_list.txt` | Full bibliography |
-| `DRL_journal.txt` | Reading notes on DRL literature |
-
-### `tests/`, `tests_MACD/`, `tests_Signr/`
-
-One-off analysis scripts, bridge comparisons, and strategy-specific sweep scripts. Not part of the main app but useful for reproducing specific numbers in the audit reports.
 
 ---
 
